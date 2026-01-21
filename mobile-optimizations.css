@@ -3,14 +3,24 @@
 
     /* Extra small screens (phones in portrait) */
     .main-content {
-        padding: 8px;
-        padding-bottom: 110px;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        padding-bottom: 110px !important;
+        padding-top: 85px !important;
+        width: 100% !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
     }
 
     .dashboard-grid {
-        gap: 10px;
-        padding-bottom: 110px;
+        gap: 4px !important;
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+        padding-bottom: 110px !important;
         /* Respects user's column preference */
+        width: 100% !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
     }
 
     /* Single column mode gets full width cards */
@@ -19,12 +29,26 @@
     }
 
     .card {
-        padding: 12px;
+        padding: 10px !important;
         border-radius: 12px;
+        margin: 0 !important;
+        width: 100% !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    #dashboardEventsCard {
+        grid-column: span 1 !important;
+        padding: 8px !important;
+    }
+
+    #dashboardEventsPreview>div {
+        padding: 12px 10px !important;
     }
 
     .card-title {
-        font-size: 0.8rem;
+        font-size: 0.75rem !important;
+        margin-bottom: 4px !important;
     }
 
     .card-value {
@@ -33,13 +57,30 @@
 
     /* Hero clock smaller on very small screens */
     .clock-large {
-        font-size: 2rem !important;
+        font-size: 1.8rem !important;
     }
 
     .hero-clock-card {
-        margin: -8px -8px 10px -8px !important;
-        grid-column: span 2 !important;
-        /* Hero always full width */
+        margin: -6px -6px 8px -6px !important;
+        grid-column: span 1 !important;
+        /* Full width single column */
+        min-height: 120px !important;
+        padding: 8px !important;
+    }
+
+    .card-clock-mega {
+        grid-column: span 1 !important;
+        min-height: 110px !important;
+        padding: 8px !important;
+        overflow: hidden !important;
+    }
+
+    .mega-time {
+        font-size: 1.8rem !important;
+    }
+
+    .mega-clock-footer {
+        display: none !important;
     }
 
     /* Smaller buttons on small screens */
@@ -171,6 +212,6 @@
     }
 
     .top-bar {
-        padding-top: max(0px, env(safe-area-inset-top));
+        padding-top: max(15px, env(safe-area-inset-top));
     }
 }

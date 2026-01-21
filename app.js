@@ -76,6 +76,13 @@ const app = {
             if (this.shortcuts) this.shortcuts.render();
             this.dashboard.initDragAndDrop();
             this.dashboard.applyOrder();
+
+            // Initialize card resizing
+            setTimeout(() => {
+                this.dashboard.initCardResize();
+                this.dashboard.createTodoShoppingContainer();
+            }, 500); // Delay to ensure DOM is ready
+
             this.voice.init();
 
             // Zeit-Tracker initialisieren (mit Persistenz)
@@ -178,12 +185,45 @@ const app = {
 
         // UI Default State
         if (!this.state.ui) this.state.ui = {};
-        if (!this.state.ui.hiddenCards) this.state.ui.hiddenCards = [];
+
+        // Migration: Move legacy hiddenCards to new mode-specific keys if valid
+        if (this.state.ui.hiddenCards && Array.isArray(this.state.ui.hiddenCards)) {
+            if (!this.state.ui.hiddenCardsBusiness) this.state.ui.hiddenCardsBusiness = [...this.state.ui.hiddenCards];
+            if (!this.state.ui.hiddenCardsPrivate) this.state.ui.hiddenCardsPrivate = [...this.state.ui.hiddenCards];
+            delete this.state.ui.hiddenCards;
+        }
+
+        // Initialize defaults if missing
+        if (!this.state.ui.hiddenCardsBusiness) this.state.ui.hiddenCardsBusiness = [];
+        if (!this.state.ui.hiddenCardsPrivate) this.state.ui.hiddenCardsPrivate = [];
+
         if (!this.state.ui.dashboardMode) this.state.ui.dashboardMode = 'business';
 
         // Household Migration
         if (!this.state.household) this.state.household = [];
         if (!this.state.meals) this.state.meals = new Array(7).fill('');
+
+        // Add test data if empty
+        if (this.state.contacts.length === 0) {
+            this.state.contacts = [
+                { id: 1, name: 'Max Müller', phone: '+49 123 456789', email: 'max@business.de', category: 'business' },
+                { id: 2, name: 'Lisa Schmidt', phone: '+49 987 654321', email: 'lisa@example.de', category: 'private' },
+                { id: 3, name: 'Tom Wagner', phone: '+49 555 123456', email: 'tom@company.de', category: 'business' },
+            ];
+            this.saveState();
+        }
+
+        if (this.state.events.length === 0) {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            this.state.events = [
+                { id: 1, title: 'Team Meeting', date: today.toISOString().split('T')[0], time: '10:00', category: 'business', start: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10, 0).toISOString() },
+                { id: 2, title: 'Kaffee mit Freund', date: today.toISOString().split('T')[0], time: '15:00', category: 'private', start: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 15, 0).toISOString() },
+                { id: 3, title: 'Präsentation', date: tomorrow.toISOString().split('T')[0], time: '09:00', category: 'business', start: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 9, 0).toISOString() },
+            ];
+            this.saveState();
+        }
 
         // Firebase Default Config Migration
         if (!this.state.cloud) this.state.cloud = {};
@@ -271,8 +311,20 @@ const app = {
         if (!this.state.ui) this.state.ui = {};
         if (!this.state.ui.hiddenCards) {
             this.state.ui.hiddenCards = [];
-            this.saveState();
         }
+
+        // Ensure Blink Style is initialized
+        if (!this.state.ui.blinkStyle) {
+            this.state.ui.blinkStyle = 'standard';
+        }
+
+        this.saveState();
+
+        // --- UPDATE SETTINGS INPUTS (If validation passes) ---
+        setTimeout(() => {
+            const bSelect = document.getElementById('blinkStyleSelect');
+            if (bSelect && this.state.ui.blinkStyle) bSelect.value = this.state.ui.blinkStyle;
+        }, 100);
     },
 
     saveState(skipSync = false) {
@@ -502,10 +554,18 @@ const app = {
         if (!sb) return;
 
         if (this.isSidebarOpen) {
-            sb.classList.add('open');
+            sb.classList.remove('hidden'); // Remove hidden to show
+            // Small delay to allow display:block to apply before transition
+            setTimeout(() => sb.classList.add('open'), 10);
+
             if (closeBtn) closeBtn.style.display = 'block';
         } else {
             sb.classList.remove('open');
+            // Wait for transition to finish before hiding
+            setTimeout(() => {
+                if (!this.isSidebarOpen) sb.classList.add('hidden');
+            }, 300);
+
             if (closeBtn) closeBtn.style.display = 'none';
         }
     },
@@ -584,26 +644,32 @@ const app = {
             f.sort((a, b) => (a.urgent === b.urgent) ? 0 : a.urgent ? -1 : 1);
 
             if (f.length === 0) {
-                l.innerHTML = '<div class="text-muted text-sm" style="text-align:center; padding:20px;">Keine Einträge.</div>';
+                l.innerHTML = '<div class="text-muted text-sm" style="text-align:center; padding:40px 20px; background:rgba(255,255,255,0.02); border-radius:16px; border:1px dashed rgba(255,255,255,0.05);">Keine Einträge.</div>';
             } else {
-                l.innerHTML = f.map(t => `
-                <div class="task-item ${t.urgent ? 'blink-urgent' : ''}" style="border-left: 3px solid var(--success);">
-                    <div style="display:flex;align-items:center;gap:10px; width:100%;">
-                        <div class="checkbox-circle" onclick="app.shopping.toggle(${t.id})"></div>
+                l.innerHTML = `<div style="display:flex; flex-direction:column; gap:8px; background:rgba(0,0,0,0.2); padding:10px; border-radius:16px; border:1px solid rgba(255,255,255,0.05);">
+                    ${f.map(t => `
+                    <div class="task-item" style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:rgba(34, 197, 94, 0.08); border-radius:12px; border:1px solid rgba(34, 197, 94, 0.2); transition:all 0.2s; ${t.urgent ? 'border-color:rgba(239, 68, 68, 0.5); background:rgba(239, 68, 68, 0.1);' : ''}">
+                        <div class="checkbox-circle" onclick="app.shopping.toggle(${t.id})" style="flex-shrink:0; cursor:pointer;"></div>
                         
-                        <button class="btn-toggle-urgent ${t.urgent ? 'is-urgent' : ''}" onclick="event.stopPropagation(); app.shopping.toggleUrgency(${t.id})">
-                            <i data-lucide="flame" size="14"></i>
-                        </button>
-                        
-                        <div style="display:flex; flex-direction:column; flex:1;">
-                            <span style="font-weight:600; font-size:1.1rem;">${t.title}</span>
+                        <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <span style="font-weight:600; color:white; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                    ${t.title}
+                                </span>
+                                ${t.urgent ? `<span style="display:inline-block; padding:2px 8px; background:rgba(239, 68, 68, 0.3); color:#ff6b6b; border-radius:6px; font-size:0.65rem; font-weight:700;">🔥 Dringend</span>` : ''}
+                                ${t.isShared ? `<span class="badge-${t.type || 'team'}" style="font-size:0.65rem;">${t.type === 'team' ? 'Team' : (t.type === 'public' ? 'Öffentlich' : 'Geteilt')}</span>` : ''}
+                            </div>
                         </div>
 
-                        <button class="btn" onclick="app.shopping.delete(${t.id})" style="color:var(--text-muted); opacity:0.7;">
+                        <button class="btn" onclick="event.stopPropagation(); app.shopping.toggleUrgency(${t.id}); app.shopping.render();" title="Dringend" style="flex-shrink:0; background:${t.urgent ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.05)'}; border:1px solid ${t.urgent ? 'rgba(239, 68, 68, 0.6)' : 'rgba(255,255,255,0.1)'}; color:${t.urgent ? '#ff6b6b' : 'var(--text-muted)'}; width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                            <i data-lucide="flame" size="16"></i>
+                        </button>
+
+                        <button class="btn" onclick="app.shopping.delete(${t.id})" title="Löschen" style="flex-shrink:0; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-muted); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
                             <i data-lucide="trash-2" size="16"></i>
                         </button>
-                    </div>
-                </div>`).join('');
+                    </div>`).join('')}
+                </div>`;
             }
 
             // Render active class on tabs
@@ -705,6 +771,8 @@ const app = {
     // --- CALENDAR & EVENTS ---
     calendar: {
         currentViewDate: new Date(),
+        currentFilter: 'all', // Add filter state
+        dashboardEventFilter: 'all', // Dashboard filter state
         toggleUrgency(id) {
             const e = app.state.events.find(x => x.id === id);
             if (e) {
@@ -714,10 +782,32 @@ const app = {
                 app.renderDashboard();
             }
         },
+        filterByCategory(category) {
+            this.currentFilter = category;
+            this.render();
+        },
+        dashboardFilter(category) {
+            this.dashboardEventFilter = category;
+
+            // Update button styles
+            const buttons = ['All', 'Today', 'Private', 'Business'];
+            buttons.forEach(btn => {
+                const el = document.getElementById(`dashboardFilter${btn}Btn`);
+                if (el) {
+                    if (btn.toLowerCase() === category || (btn === 'All' && category === 'all')) {
+                        el.style.background = 'var(--primary)';
+                    } else {
+                        el.style.background = '';
+                    }
+                }
+            });
+
+            app.renderDashboard();
+        },
         init() {
             this.render();
             setInterval(() => this.checkUrgency(), 30000);
-            setInterval(() => this.archiveOldEvents(), 3600000); // Check every hour
+            setInterval(() => this.archiveOldEvents(), 60000); // Check every minute
             this.checkUrgency();
             this.archiveOldEvents(); // Run on init
         },
@@ -734,6 +824,27 @@ const app = {
                 if (isNaN(start.getTime())) {
                     alert("❌ Ungültiges Datum/Zeit\n\nBitte gib ein gültiges Datum und eine gültige Uhrzeit ein.");
                     return;
+                }
+
+                // Check for conflicts (same day, same time)
+                const conflictingEvent = app.state.events.find(e => {
+                    if (e.id === app.editingId) return false; // Skip if editing
+                    const eStart = new Date(e.start);
+                    const startTime = start.getTime();
+                    const eStartTime = eStart.getTime();
+                    const timeDiffMins = Math.abs(startTime - eStartTime) / (1000 * 60);
+                    const sameDay = start.toDateString() === eStart.toDateString();
+                    return sameDay && timeDiffMins < 60; // Conflict if within 60 mins and same day
+                });
+
+                if (conflictingEvent && !app.editingId) {
+                    const confirmAdd = confirm(
+                        `⚠️ Terminkonflikt erkannt!\n\n` +
+                        `Es existiert bereits ein Termin:\n` +
+                        `"${conflictingEvent.title}"\n\n` +
+                        `Möchtest du diesen Termin trotzdem hinzufügen?`
+                    );
+                    if (!confirmAdd) return;
                 }
 
                 // Validierung: Termin in der Vergangenheit (nur für neue Termine)
@@ -762,7 +873,10 @@ const app = {
                             phone: data.phone,
                             email: data.email,
                             notes: data.notes, // Update notes
-                            urgent: data.urgent
+                            urgent: data.urgent,
+                            isShared: data.isShared,
+                            type: data.type,
+                            category: data.category || 'private' // Add category to edited events
                         };
                     }
                     app.editingId = null;
@@ -775,7 +889,10 @@ const app = {
                         phone: data.phone || '',
                         email: data.email || '',
                         notes: data.notes || '', // Add notes
-                        urgent: data.urgent || false
+                        urgent: data.urgent || false,
+                        isShared: data.isShared || false,
+                        type: data.type || 'private',
+                        category: data.category || 'private' // 'private' or 'business'
                     });
                     app.gamification.addXP(30);
                 }
@@ -798,7 +915,8 @@ const app = {
                 phone: e.phone,
                 email: e.email,
                 notes: e.notes,
-                urgent: e.urgent
+                urgent: e.urgent,
+                category: e.category || 'private'
             });
         },
         calculateDailyRoute() {
@@ -818,6 +936,7 @@ const app = {
             app.state.events.forEach(e => {
                 const start = new Date(e.start);
                 const diffMins = (start - now) / 1000 / 60;
+
                 // Blinking Logic
                 const isImminent = (diffMins > -15 && diffMins < 30) || (e.urgent && diffMins > -60 && diffMins < 120);
 
@@ -827,29 +946,91 @@ const app = {
                     if (isImminent) el.classList.add('event-imminent'); else el.classList.remove('event-imminent');
                     if (e.urgent) el.classList.add('event-urgent');
                 }
+
+                // Automatic alarm before event (user-configurable)
+                const reminderMinutes = parseInt(app.state.ui.eventReminderMinutes || 60);
+
+                // Fix: Trigger if we are within the reminder timeframe (e.g. < 60 mins) and haven't notified yet.
+                // This catches cases where the app was closed during the exact "60 minute" mark.
+                if (diffMins > 0 && diffMins <= reminderMinutes) {
+                    // Check if we already sent notification for this event
+                    if (!e.notified1Hour) {
+                        e.notified1Hour = true;
+                        app.saveState();
+
+                        // Send notification
+                        const eventTime = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+                        // Dynamic Time Text calculation
+                        let timeText = "";
+                        const hours = Math.floor(diffMins / 60);
+                        const mins = Math.round(diffMins % 60);
+
+                        if (hours > 0) {
+                            timeText = `${hours} Std. ${mins > 0 ? mins + ' Min.' : ''}`;
+                        } else {
+                            timeText = `${mins} Minuten`;
+                        }
+
+                        app.notifications.send(
+                            `⏰ Termin in ${timeText}`,
+                            `${e.title} um ${eventTime}${e.location ? ' • ' + e.location : ''}`,
+                            true
+                        );
+
+                        // Optional: Trigger alarm sound
+                        if (app.alarms && app.alarms.trigger) {
+                            app.alarms.trigger(`Termin: ${e.title}`, 'gentle');
+                        }
+                    }
+                }
+
+                // Reset notification flag if event is far enough away
+                if (diffMins > (reminderMinutes + 60) && e.notified1Hour) {
+                    e.notified1Hour = false;
+                    app.saveState();
+                }
             });
 
             // Dashboard appointments blinking
             this.updateDashboardBlinking();
         },
         updateDashboardBlinking() {
-            // Whole card blinking disabled per user request
+            // Check if ANY event is imminent/urgent
+            const now = new Date();
+            const hasUrgent = app.state.events.some(e => {
+                const diffMins = (new Date(e.start) - now) / 1000 / 60;
+                return (diffMins > -15 && diffMins < 60) || e.urgent;
+            });
+
             const dashCard = document.getElementById('dashboardEventsCard');
-            if (dashCard) dashCard.classList.remove('appointment-imminent');
+            if (dashCard) {
+                if (hasUrgent) {
+                    // Apply user's chosen blink style (default to standard)
+                    const style = app.state.ui.blinkStyle || 'standard';
+                    dashCard.classList.add('appointment-imminent');
+
+                    // Remove old animation classes first
+                    dashCard.classList.remove('blink-standard', 'blink-flash', 'blink-neon', 'blink-shake', 'blink-extreme', 'blink-rainbow');
+
+                    // Add new animation class
+                    dashCard.classList.add(`blink-${style}`);
+                } else {
+                    dashCard.classList.remove('appointment-imminent', 'blink-standard', 'blink-flash', 'blink-neon', 'blink-shake', 'blink-extreme', 'blink-rainbow');
+                }
+            }
         },
         archiveOldEvents() {
             const now = new Date();
-            // Archive events older than 2 hours
-            const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
-
-            const toArchive = app.state.events.filter(e => new Date(e.start) < twoHoursAgo);
+            // Archive all events that are in the past (started)
+            const toArchive = app.state.events.filter(e => new Date(e.start) < now);
 
             if (toArchive.length > 0) {
                 if (!app.state.archives) app.state.archives = [];
                 app.state.archives.push(...toArchive.map(e => ({ ...e, archivedAt: now.toISOString(), type: 'event' })));
 
-                // Keep recent and future events
-                app.state.events = app.state.events.filter(e => new Date(e.start) >= twoHoursAgo);
+                // Keep only future events
+                app.state.events = app.state.events.filter(e => new Date(e.start) >= now);
 
                 app.saveState();
                 console.log(`Archived ${toArchive.length} old events`);
@@ -896,6 +1077,7 @@ const app = {
             for (let d = 1; d <= dim; d++) {
                 const cell = document.createElement('div');
                 cell.className = 'calendar-day';
+                if (app.state.ui.dashboardMode === 'private') cell.classList.add('mode-private-cal');
 
                 // Highlight today
                 if (today.getDate() === d && today.getMonth() === m && today.getFullYear() === y) {
@@ -904,10 +1086,15 @@ const app = {
 
                 // Find events for this day (including archives)
                 const allPossibleEvents = [...app.state.events, ...(app.state.archives || [])];
-                const dayEvents = allPossibleEvents.filter(e => {
+                let dayEvents = allPossibleEvents.filter(e => {
                     const eventDate = new Date(e.start);
                     return eventDate.getDate() === d && eventDate.getMonth() === m && eventDate.getFullYear() === y;
                 });
+
+                // Apply category filter
+                if (this.currentFilter !== 'all') {
+                    dayEvents = dayEvents.filter(e => (e.category || 'private') === this.currentFilter);
+                }
 
                 // Build day content
                 let dayContent = `<div class="day-number">${d}</div>`;
@@ -917,7 +1104,11 @@ const app = {
                     dayContent += '<div class="event-markers">';
                     dayEvents.forEach(ev => {
                         const eventTime = new Date(ev.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-                        dayContent += `<div class="event-marker ${ev.urgent ? 'urgent' : ''}" title="${ev.title} - ${eventTime}">${ev.title}</div>`;
+                        const typeTag = ev.isShared ? `<span style="font-size:0.6rem; opacity:0.8; margin-left:4px; font-weight:800;">(${ev.type === 'team' ? 'T' : (ev.type === 'public' ? 'Ö' : 'G')})</span>` : '';
+                        const categoryIndicator = ev.category === 'business'
+                            ? `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e; margin-right:4px; margin-left:2px;"></span>`
+                            : `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#a78bfa; margin-right:4px; margin-left:2px;"></span>`;
+                        dayContent += `<div class="event-marker ${ev.urgent ? 'urgent' : ''}" style="display:flex; align-items:center;" title="${ev.title} - ${eventTime} (${ev.category === 'business' ? 'Business' : 'Privat'})">${categoryIndicator}${ev.title}${typeTag}</div>`;
                     });
                     dayContent += '</div>';
                 }
@@ -941,6 +1132,11 @@ const app = {
 
     // --- DASHBOARD & HELPERS ---
     renderDashboard() {
+        // Archive old events before rendering
+        if (this.calendar && this.calendar.archiveOldEvents) {
+            this.calendar.archiveOldEvents();
+        }
+
         // Apply Card Visibility
         if (this.dashboard && this.dashboard.applyVisibility) {
             this.dashboard.applyVisibility();
@@ -956,10 +1152,26 @@ const app = {
         if (dp) {
             const now = new Date();
             const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const up = app.state.events
+            const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+            let up = app.state.events
                 .filter(e => new Date(e.start) >= startOfToday)
                 .sort((a, b) => new Date(a.start) - new Date(b.start))
                 .slice(0, 5);
+
+            // Apply dashboard filter
+            if (app.calendar.dashboardEventFilter && app.calendar.dashboardEventFilter !== 'all') {
+                if (app.calendar.dashboardEventFilter === 'today') {
+                    // Show only today's events
+                    up = up.filter(e => {
+                        const eventDate = new Date(e.start);
+                        return eventDate >= startOfToday && eventDate <= endOfToday;
+                    });
+                } else {
+                    // Filter by category (private/business)
+                    up = up.filter(e => (e.category || 'private') === app.calendar.dashboardEventFilter);
+                }
+            }
 
             if (up.length > 0) {
                 dp.innerHTML = up.map((e, index) => {
@@ -994,26 +1206,38 @@ const app = {
                         else countdown = `vor ${Math.floor(absM / 1440)} Tg.`;
                     }
 
+                    const categoryBadge = e.category === 'business'
+                        ? `<span style="padding: 2px 6px; background: rgba(34, 197, 94, 0.15); color: #22c55e; border-radius: 4px; font-size: 0.65rem; font-weight: 700; border: 1px solid rgba(34, 197, 94, 0.2); white-space: nowrap;">Business</span>`
+                        : `<span style="padding: 2px 6px; background: rgba(139, 92, 246, 0.15); color: #a78bfa; border-radius: 4px; font-size: 0.65rem; font-weight: 700; border: 1px solid rgba(139, 92, 246, 0.2); white-space: nowrap;">Privat</span>`;
+
                     return `
-                        <div style="display: flex; align-items: center; padding: 18px 15px; margin-bottom: 12px; background: rgba(255,255,255,0.04); border-radius: 16px; border: 1px solid ${e.urgent || (diffMins > -15 && diffMins < 30) ? '#06b6d4' : 'rgba(255,255,255,0.08)'}; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.2); ${e.urgent || (diffMins > -15 && diffMins < 30) ? 'animation: pulse-turquoise 2s infinite;' : ''}" onclick="app.calendar.editEvent(${e.id})" onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='rgba(255,255,255,0.15)';" onmouseout="this.style.background='rgba(255,255,255,0.04)'; this.style.borderColor='${e.urgent || (diffMins > -15 && diffMins < 30) ? '#06b6d4' : 'rgba(255,255,255,0.08)'}';">
-                            <div style="width: 75px; display:flex; flex-direction:column; align-items:flex-start;">
-                                <div style="font-weight: 800; font-size: 1.1rem; color: #ffffff; letter-spacing: -0.5px; line-height:1;">${timeStr}</div>
-                                <div style="font-size: 0.7rem; color: var(--text-muted); text-transform:uppercase; margin-top:4px; font-weight:700;">${dateLabel}</div>
-                            </div>
-                            <div style="flex: 1; margin-left: 15px; display: flex; flex-direction: column; gap: 4px;">
-                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                    <div style="font-weight: 700; font-size: 1.05rem; color: #ffffff; line-height: 1.2;">${e.title}${e.urgent ? ' <span class="text-danger">🔥</span>' : ''}</div>
-                                    <div style="font-size: 0.75rem; color: ${diffMins > -15 && diffMins < 30 ? '#06b6d4' : 'var(--text-muted)'}; font-weight: 600;">${countdown}</div>
+                        <div style="display: flex; flex-direction: column; padding: 12px; margin-bottom: 8px; background: rgba(255,255,255,0.04); border-radius: 12px; border: 1px solid ${e.urgent || (diffMins > -15 && diffMins < 30) ? '#06b6d4' : 'rgba(255,255,255,0.08)'}; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.1); ${e.urgent || (diffMins > -15 && diffMins < 30) ? 'animation: pulse-turquoise 2s infinite;' : ''}" onclick="app.calendar.editEvent(${e.id})">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <div style="background: var(--surface); padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 0.9rem; color: #ffffff; white-space: nowrap;">${timeStr}</div>
+                                    <div style="font-size: 0.95rem; font-weight: 600; color: #ffffff; line-height: 1.2; word-break: break-word;">${e.title}${e.urgent ? ' <span class="text-danger">🔥</span>' : ''}</div>
                                 </div>
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <div style="font-size: 0.85rem; color: var(--text-muted);">${e.location || 'Kein Ort'}</div>
-                                    ${e.location ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.location)}" target="_blank" onclick="event.stopPropagation()" style="color: var(--primary); display: flex; align-items:center; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Auf Karte zeigen"><i data-lucide="map" size="14"></i></a>` : ''}
+                                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                                    ${categoryBadge}
+                                    <div style="font-size: 0.7rem; color: ${diffMins > -15 && diffMins < 30 ? '#06b6d4' : 'var(--text-muted)'}; font-weight: 600; white-space: nowrap;">${countdown}</div>
                                 </div>
                             </div>
-                            <div style="display:flex; align-items:center; margin-left:10px;">
-                                 ${e.urgent || (diffMins > -15 && diffMins < 30) ? '<div style="width:10px; height:10px; border-radius:50%; background:#06b6d4; box-shadow: 0 0 12px #06b6d4; margin-right:15px;"></div>' : ''}
-                                 <i data-lucide="chevron-right" size="18" class="text-muted" style="opacity:0.5;"></i>
+                            
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.8rem; color: var(--text-muted);">
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <div style="text-transform: uppercase; font-size: 0.7rem; font-weight: 600; opacity: 0.8;">${dateLabel}</div>
+                                    ${e.location ? `<span style="opacity: 0.5;">•</span> <div style="display: flex; align-items: center; gap: 4px; word-break: break-word; white-space: normal;">${e.location}</div>` : ''}
+                                </div>
+                                
+                                ${(e.location || e.phone || e.email) ? `<div style="flex: 1; min-width: 10px;"></div>` : ''}
+                                
+                                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                     ${e.location ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.location)}" target="_blank" onclick="event.stopPropagation()" style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 6px; color: var(--text-secondary); text-decoration: none; display: flex; align-items: center; justify-content: center;"><i data-lucide="map" size="12"></i></a>` : ''}
+                                     ${e.phone ? `<a href="tel:${e.phone}" onclick="event.stopPropagation()" style="padding: 4px 8px; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); border-radius: 6px; color: #22c55e; text-decoration: none; display: flex; align-items: center; gap: 4px;"><i data-lucide="phone" size="12"></i></a>` : ''}
+                                     ${e.email ? `<a href="mailto:${e.email}" onclick="event.stopPropagation()" style="padding: 4px 8px; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 6px; color: #3b82f6; text-decoration: none; display: flex; align-items: center; gap: 4px;"><i data-lucide="mail" size="12"></i></a>` : ''}
+                                </div>
                             </div>
+                        </div>
                         </div>
                      `;
                 }).join('');
@@ -1187,13 +1411,20 @@ const app = {
             statusText.innerHTML = `<span class="text-primary">${openTasks} Offen</span> • <span class="text-danger">${urgentTasks} Dringend</span>`;
         }
 
-        // --- DASHBOARD CARD URGENCY BLINKING ---
         // --- DASHBOARD CARD URGENCY BLINKING & STYLING ---
         const toggleCardBlink = (id, condition) => {
             const el = document.getElementById(id);
             if (el) {
-                if (condition) el.classList.add('blink-urgent');
-                else el.classList.remove('blink-urgent');
+                // Remove all styles first
+                el.classList.remove('blink-urgent', 'blink-danger', 'blink-warning', 'blink-style-standard', 'blink-style-flash', 'blink-style-neon', 'blink-style-shake', 'blink-style-extreme', 'blink-style-rainbow');
+
+                if (condition) {
+                    const style = app.state.ui.blinkStyle || 'standard';
+                    // Add specific style class
+                    el.classList.add(`blink-style-${style}`);
+                    // Also add generic danger for good measure/fallbacks if needed, though specific style handles animation
+                    el.classList.add('blink-danger');
+                }
             }
         };
 
@@ -1222,6 +1453,19 @@ const app = {
             return txt.includes('anruf') || txt.includes('call') || txt.includes('telefon') || txt.includes('wichtig');
         });
         toggleCardBlink('dashboardCommunicationCard', hasImportantCall);
+
+        // 3b. Events (Urgent or Approaching within 1h)
+        const nowMsEvents = Date.now();
+        const oneHourEvents = 60 * 60 * 1000;
+        const hasUrgentEvt = (app.state.events || []).some(e => {
+            // Urgent flag and not too old (e.g. up to 1h past start)
+            if (e.urgent && new Date(e.start).getTime() > nowMsEvents - oneHourEvents) return true;
+
+            // Approaching within 1 hour
+            const diff = new Date(e.start).getTime() - nowMsEvents;
+            return diff > 0 && diff < oneHourEvents;
+        });
+        toggleCardBlink('dashboardEventsCard', hasUrgentEvt);
 
         // 4. Finance (Colors instead of blinking)
         const finCard = document.getElementById('dashboardFinanceCard');
@@ -1320,9 +1564,9 @@ const app = {
             layoutBtnText.textContent = currentLayout === 'single' ? '1 Spalte' : '2 Spalten';
         }
 
-        if (this.shortcuts) this.shortcuts.render();
-        if (this.contacts) this.contacts.renderQuick();
-        if (this.quickNotes) this.quickNotes.render();
+        if (this.shortcuts && this.shortcuts.render) this.shortcuts.render();
+        if (this.contacts && this.contacts.renderQuick) this.contacts.renderQuick();
+        if (this.quickNotes && this.quickNotes.render) this.quickNotes.render();
         if (this.projects) this.projects.render();
         if (this.meetings) this.meetings.render();
         if (this.dashboard) {
@@ -1504,6 +1748,88 @@ const app = {
         }
     },
 
+    // --- ALARMS MODULE ---
+    alarms: {
+        currentAudio: null,
+        loopInterval: null,
+        trigger(title, type = 'melody') {
+            if (this.currentAudio) return;
+
+            console.log("ALARM TRIGGERED:", title);
+
+            // Audio Context for Sound
+            this.playAlarmSound(type);
+
+            // Visual Overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'alarmOverlay';
+            overlay.style.cssText = 'position:fixed; inset:0; background:rgba(220, 38, 38, 0.95); z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; animation: flash-urgent 1s infinite;';
+            overlay.innerHTML = `
+                <div style="margin-bottom:20px; animation: pulse-urgent 0.5s infinite;">
+                    <i data-lucide="bell-ring" size="80" style="color:white;"></i>
+                </div>
+                <h1 style="color:white; font-size:2.5rem; text-align:center; margin-bottom:10px; padding:0 20px;">${title}</h1>
+                <p style="color:white; opacity:0.8; margin-bottom:40px;">Es ist Zeit!</p>
+                <button onclick="app.alarms.stop()" style="padding:20px 60px; font-size:1.5rem; border-radius:50px; border:none; background:white; color:var(--danger); font-weight:900; cursor:pointer; box-shadow:0 10px 25px rgba(0,0,0,0.3);">STOPP</button>
+             `;
+            document.body.appendChild(overlay);
+            if (window.lucide) lucide.createIcons();
+
+            // Native Vibrate
+            if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 1000]);
+        },
+        stop() {
+            if (this.currentAudio) {
+                this.currentAudio.stop();
+                this.currentAudio = null;
+            }
+            if (this.loopInterval) {
+                clearInterval(this.loopInterval);
+                this.loopInterval = null;
+            }
+            const overlay = document.getElementById('alarmOverlay');
+            if (overlay) overlay.remove();
+            app.activeAlarm = false;
+        },
+        playAlarmSound(type) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+
+            const ctx = new AudioContext();
+
+            const playBeep = () => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.type = type === 'digital' ? 'square' : 'sine';
+                osc.frequency.setValueAtTime(type === 'digital' ? 800 : 440, ctx.currentTime);
+
+                gain.gain.setValueAtTime(0.5, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.5);
+            };
+
+            playBeep();
+
+            this.loopInterval = setInterval(() => {
+                if (ctx.state === 'suspended') ctx.resume();
+                playBeep();
+            }, 1000);
+
+            this.currentAudio = {
+                stop: () => {
+                    ctx.close();
+                }
+            };
+        }
+    },
+
+
+
     // --- NOTIFICATIONS MODULE ---
     notifications: {
         lastCheck: 0,
@@ -1576,15 +1902,42 @@ const app = {
     // --- DRIVE ASSISTANT MODULE ---
     drive: {
         currentLocation: null,
+        map: null,
+        marker: null,
 
         init() {
             this.renderRoute();
+            // Async init map to allow DOM to settle
+            setTimeout(() => this.initMap(), 500);
             this.getLocation();
         },
 
         refresh() {
             this.getLocation();
             this.renderRoute();
+            if (this.map) {
+                setTimeout(() => this.map.invalidateSize(), 200);
+            }
+        },
+
+        initMap() {
+            const mapEl = document.getElementById('driveMap');
+            if (!mapEl || this.map) return;
+
+            // Reduce map height for better readability of data below on mobile
+            mapEl.style.height = "180px";
+
+            // Init Leaflet (Default Center: Berlin)
+            this.map = L.map('driveMap').setView([52.52, 13.40], 10);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CartoDB',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(this.map);
+
+            // Force redraw
+            setTimeout(() => { this.map.invalidateSize(); }, 200);
         },
 
         getLocation() {
@@ -1594,19 +1947,46 @@ const app = {
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
-                        this.currentLocation = `${position.coords.latitude},${position.coords.longitude}`;
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        this.currentLocation = `${lat},${lon}`;
+
                         if (statusEl) statusEl.textContent = "GPS Gefunden ✅";
+                        this.updateMapPosition(lat, lon);
                     },
                     (error) => {
                         console.error("GPS Error", error);
                         if (statusEl) statusEl.textContent = "Kein GPS. Bitte eingeben.";
                         this.askLocation();
-                    }
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
                 );
             } else {
                 if (statusEl) statusEl.textContent = "GPS nicht verfügbar.";
                 this.askLocation();
             }
+        },
+
+        updateMapPosition(lat, lon) {
+            if (!this.map) this.initMap();
+            if (!this.map) return;
+
+            const latLng = [lat, lon];
+
+            if (this.marker) {
+                this.marker.setLatLng(latLng);
+            } else {
+                const carIcon = L.divIcon({
+                    html: '<div style="background:#3b82f6; width:20px; height:20px; border-radius:50%; border:3px solid white; box-shadow:0 0 15px #3b82f6;"></div>',
+                    className: 'custom-div-icon',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+                this.marker = L.marker(latLng, { icon: carIcon }).addTo(this.map);
+            }
+
+            this.map.flyTo(latLng, 15);
+            this.map.invalidateSize();
         },
 
         askLocation() {
@@ -1629,11 +2009,8 @@ const app = {
             const routeEvents = app.state.events.filter(e => {
                 const eventDate = new Date(e.start);
                 const ed = new Date(e.start).setHours(0, 0, 0, 0);
-
-                // Only show events for today that haven't started yet
-                // This excludes all past/expired events from the drive mode route
                 return ed === today &&
-                    eventDate.getTime() > nowTime && // Event is in the future
+                    eventDate.getTime() > nowTime &&
                     e.location && e.location.trim().length > 0;
             });
             routeEvents.sort((a, b) => new Date(a.start) - new Date(b.start));
@@ -1704,10 +2081,8 @@ const app = {
             const routeEvents = app.state.events.filter(e => {
                 const eventDate = new Date(e.start);
                 const ed = new Date(e.start).setHours(0, 0, 0, 0);
-
-                // Only include future events for today with a location
                 return ed === today &&
-                    eventDate.getTime() > nowTime && // Event is in the future
+                    eventDate.getTime() > nowTime &&
                     e.location && e.location.trim().length > 0;
             });
             routeEvents.sort((a, b) => new Date(a.start) - new Date(b.start));
@@ -1717,8 +2092,6 @@ const app = {
                 return;
             }
 
-            // Construct Google Maps URL
-            // Format: https://www.google.com/maps/dir/Start/Stop1/Stop2/...
             const origin = encodeURIComponent(this.currentLocation);
             const destinations = routeEvents.map(e => encodeURIComponent(e.location)).join('/');
 
@@ -2237,8 +2610,8 @@ const app = {
             }
         },
         toggleUrgency(id) { const t = app.state.tasks.find(x => x.id === id); if (t) { t.urgent = !t.urgent; app.saveState(); this.render(); app.renderDashboard(); } },
-        add(t, u, category = 'todo') {
-            app.state.tasks.push({ id: Date.now(), title: t, urgent: u, category: category, done: false });
+        add(t, u, category = 'todo', isShared = false, type = 'private') {
+            app.state.tasks.push({ id: Date.now(), title: t, urgent: u, category: category, done: false, isShared: isShared, type: type });
             app.saveState();
             this.render(); // Renders Tasks
             if (category === 'shopping' && app.shopping) app.shopping.render(); // Renders Shopping if needed
@@ -2260,49 +2633,42 @@ const app = {
         render() {
             const l = document.getElementById('taskListContainer'); if (!l) return;
 
-            let f = app.state.tasks;
+            let f = app.state.tasks.filter(t => t.category !== 'shopping');
 
             // Strict Tasks Logic (No Shopping)
             if (this.currentFilter === 'urgent') {
                 f = f.filter(t => t.urgent && !t.done);
             } else if (this.currentFilter === 'done') {
-                f = f.filter(t => t.done && t.category !== 'shopping');
+                f = f.filter(t => t.done);
             } else {
-                // Default 'todo' - Show ALL (Pending & Done) except shopping
-                f = f.filter(t => t.category !== 'shopping');
+                // Default 'todo' - Show only undone
+                f = f.filter(t => !t.done);
             }
 
-            // Sort: Urgent > Pending > Done
-            f.sort((a, b) => {
-                if (a.done !== b.done) return a.done ? 1 : -1;
-                if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
-                return 0;
-            });
+            // Sort: Urgent > Pending
+            f.sort((a, b) => (a.urgent === b.urgent) ? 0 : a.urgent ? -1 : 1);
 
             if (f.length === 0) {
-                l.innerHTML = '<div class="text-muted text-sm" style="text-align:center; padding:20px;">Keine Aufgaben.</div>';
+                l.innerHTML = '<div class="text-muted text-sm" style="text-align:center; padding:40px 20px;">Keine Aufgaben.</div>';
             } else {
-                l.innerHTML = f.map(t => `
-                <div class="task-item ${t.done ? 'opacity-50' : ''} ${t.urgent ? 'blink-urgent' : ''}">
-                    <div style="display:flex;align-items:center;gap:10px; width:100%;">
-                        <div class="checkbox-circle ${t.done ? 'checked' : ''}" onclick="app.tasks.toggle(${t.id})"></div>
+                l.innerHTML = `<div style="display:flex; flex-direction:column; gap:8px;">
+                    ${f.map(t => `
+                    <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:rgba(255,255,255,0.03); border-radius:12px; border:1px solid rgba(255,255,255,0.08);">
+                        <div class="checkbox-circle" onclick="app.tasks.toggle(${t.id})" style="flex-shrink:0; cursor:pointer;"></div>
                         
-                        <button class="btn-toggle-urgent ${t.urgent ? 'is-urgent' : ''}" onclick="event.stopPropagation(); app.tasks.toggleUrgency(${t.id})">
-                            <i data-lucide="flame" size="14"></i>
-                        </button>
-                        
-                        <div style="display:flex; flex-direction:column; flex:1;">
-                            <span style="${t.done ? 'text-decoration:line-through;color:var(--text-muted)' : ''}">
-                                ${t.title}
-                            </span>
-                             ${t.category && t.category !== 'todo' && t.category !== 'shopping' ? `<span class="text-xs text-muted">${t.category}</span>` : ''}
-                        </div>
+                        <span style="font-weight:500; color:white; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                            ${t.title}
+                        </span>
 
-                        <button class="btn" onclick="app.tasks.delete(${t.id})" title="Archivieren" style="color:var(--text-muted); opacity:0.7;">
-                            <i data-lucide="archive" size="16"></i>
+                        <button class="btn" onclick="event.stopPropagation(); app.tasks.toggleUrgency(${t.id}); app.tasks.render();" title="Dringend" style="flex-shrink:0; background:${t.urgent ? 'rgba(239, 68, 68, 0.3)' : 'rgba(255,255,255,0.05)'}; border:1px solid ${t.urgent ? 'rgba(239, 68, 68, 0.5)' : 'rgba(255,255,255,0.1)'}; color:${t.urgent ? '#ff6b6b' : 'var(--text-muted)'}; width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                            <i data-lucide="flame" size="16"></i>
                         </button>
-                    </div>
-                </div>`).join('');
+
+                        <button class="btn" onclick="app.tasks.delete(${t.id})" title="Löschen" style="flex-shrink:0; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-muted); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </div>`).join('')}
+                </div>`;
             }
 
             // Highlight active tab
@@ -2324,17 +2690,21 @@ const app = {
                 app.renderDashboard();
             }
         },
-        add(a, d, dateStr, urgent = false) {
+        add(a, d, dateStr, urgent = false, category = 'private', isShared = false, type = 'private') {
             app.state.expenses.push({
                 id: Date.now(),
                 amount: parseFloat(a),
                 desc: d,
                 date: dateStr || new Date().toISOString().split('T')[0],
-                urgent: urgent
+                urgent: urgent,
+                category: category,
+                isShared: isShared,
+                type: type
             });
             app.saveState();
             this.render();
             app.renderDashboard();
+            app.gamification.addXP(25);
         },
         edit(id) {
             const e = app.state.expenses.find(x => x.id === id);
@@ -2463,7 +2833,11 @@ const app = {
                                     <button class="btn-toggle-urgent ${e.urgent ? 'is-urgent' : ''}" onclick="app.finance.toggleUrgency(${e.id})" title="Wichtig"><i data-lucide="flame" size="14"></i></button>
                                     <div>
                                         <div style="font-weight:600;">${e.desc}</div>
-                                        <div class="text-sm text-muted">${d}</div>
+                                        <div style="display:flex; align-items:center; gap:5px; margin-top:2px;">
+                                            <div class="text-sm text-muted">${d}</div>
+                                            ${e.isShared ? `<span class="badge-${e.type || 'shared'}" style="font-size:0.65rem; padding:1px 6px;">${e.type || 'Shared'}</span>` : ''}
+                                            ${e.category && e.category !== 'private' ? `<span class="badge-business" style="font-size:0.65rem; padding:1px 6px;">${e.category}</span>` : ''}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -3573,6 +3947,197 @@ const app = {
         }
     },
 
+    // --- DRIVE MODE MODULE ---
+    drive: {
+        map: null,
+        markers: [],
+
+        init() {
+            this.updateClock();
+            this.updateLocation();
+            this.renderRoute();
+            this.initMap();
+
+            // Update clock every second
+            setInterval(() => this.updateClock(), 1000);
+        },
+
+        updateClock() {
+            const now = new Date();
+            const clockEl = document.getElementById('driveClock');
+            const dateEl = document.getElementById('driveDate');
+
+            if (clockEl) {
+                clockEl.textContent = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            }
+            if (dateEl) {
+                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                dateEl.textContent = now.toLocaleDateString('de-DE', options);
+            }
+        },
+
+        updateLocation() {
+            const locationEl = document.getElementById('currentLocationText');
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        if (locationEl) {
+                            locationEl.textContent = `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
+                        }
+                    },
+                    (error) => {
+                        if (locationEl) {
+                            locationEl.textContent = 'Standort nicht verfügbar';
+                        }
+                    }
+                );
+            }
+        },
+
+        askLocation() {
+            const newLocation = prompt('Aktuellen Standort eingeben:', 'Mein Standort');
+            if (newLocation) {
+                const locationEl = document.getElementById('currentLocationText');
+                if (locationEl) {
+                    locationEl.textContent = newLocation;
+                }
+            }
+        },
+
+        renderRoute() {
+            const routeList = document.getElementById('driveRouteList');
+            if (!routeList) return;
+
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+            // Get today's events with locations
+            const todayEvents = app.state.events
+                .filter(e => {
+                    const eventDate = new Date(e.start);
+                    return eventDate >= startOfToday && eventDate <= endOfToday && e.location && e.location.trim().length > 0;
+                })
+                .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+            if (todayEvents.length === 0) {
+                routeList.innerHTML = `
+                    <div style="text-align:center; padding:40px 20px; background:rgba(255,255,255,0.03); border-radius:16px;">
+                        <i data-lucide="map-pin-off" size="48" style="opacity:0.3; margin-bottom:15px;"></i>
+                        <div class="text-muted" style="font-size:1.1rem;">Keine Termine mit Ort für heute</div>
+                        <div class="text-muted text-sm" style="margin-top:8px; opacity:0.6;">Füge Termine mit Ortsangaben hinzu</div>
+                    </div>
+                `;
+                if (window.lucide) lucide.createIcons();
+                return;
+            }
+
+            routeList.innerHTML = todayEvents.map((event, index) => {
+                const eventTime = new Date(event.start);
+                const timeStr = eventTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                const diffMins = Math.floor((eventTime - now) / 1000 / 60);
+
+                let statusBadge = '';
+                let statusColor = 'rgba(255,255,255,0.1)';
+
+                if (diffMins < 0) {
+                    statusBadge = 'Vorbei';
+                    statusColor = 'rgba(107, 114, 128, 0.2)';
+                } else if (diffMins < 15) {
+                    statusBadge = 'Jetzt!';
+                    statusColor = 'rgba(239, 68, 68, 0.2)';
+                } else if (diffMins < 60) {
+                    statusBadge = `in ${diffMins} Min`;
+                    statusColor = 'rgba(234, 179, 8, 0.2)';
+                } else {
+                    const hours = Math.floor(diffMins / 60);
+                    statusBadge = `in ${hours}h`;
+                    statusColor = 'rgba(59, 130, 246, 0.2)';
+                }
+
+                const categoryBadge = event.category === 'business'
+                    ? '<span style="padding:2px 6px; background:rgba(34,197,94,0.15); color:#22c55e; border-radius:4px; font-size:0.65rem; font-weight:700;">Business</span>'
+                    : '<span style="padding:2px 6px; background:rgba(139,92,246,0.15); color:#a78bfa; border-radius:4px; font-size:0.65rem; font-weight:700;">Privat</span>';
+
+                return `
+                    <div style="position:relative; padding:16px; background:${statusColor}; border-left:4px solid ${diffMins < 15 ? '#ef4444' : (diffMins < 60 ? '#eab308' : '#3b82f6')}; border-radius:12px; margin-bottom:12px; transition:all 0.3s;" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}', '_blank')">
+                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                            <div style="background:rgba(255,255,255,0.1); width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.2rem;">
+                                ${index + 1}
+                            </div>
+                            <div style="flex:1;">
+                                <div style="font-weight:700; font-size:1.1rem; margin-bottom:4px;">${event.title}</div>
+                                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                    <span style="padding:4px 8px; background:rgba(0,0,0,0.3); border-radius:6px; font-weight:600; font-size:0.9rem;">${timeStr}</span>
+                                    <span style="padding:4px 8px; background:rgba(0,0,0,0.3); border-radius:6px; font-size:0.85rem; color:#06b6d4;">${statusBadge}</span>
+                                    ${categoryBadge}
+                                    ${event.urgent ? '<span style="padding:4px 8px; background:rgba(239,68,68,0.3); color:#ff6b6b; border-radius:6px; font-size:0.75rem; font-weight:700;">🔥 Dringend</span>' : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(0,0,0,0.2); border-radius:8px;">
+                            <i data-lucide="map-pin" size="16" class="text-primary"></i>
+                            <span style="font-size:0.95rem; font-weight:500;">${event.location}</span>
+                        </div>
+                        ${event.phone || event.email ? `
+                            <div style="display:flex; gap:8px; margin-top:8px;">
+                                ${event.phone ? `<a href="tel:${event.phone}" onclick="event.stopPropagation()" style="padding:6px 12px; background:rgba(34,197,94,0.2); border:1px solid rgba(34,197,94,0.3); border-radius:8px; color:#22c55e; text-decoration:none; display:flex; align-items:center; gap:6px; font-size:0.85rem;"><i data-lucide="phone" size="14"></i> Anrufen</a>` : ''}
+                                ${event.email ? `<a href="mailto:${event.email}" onclick="event.stopPropagation()" style="padding:6px 12px; background:rgba(59,130,246,0.2); border:1px solid rgba(59,130,246,0.3); border-radius:8px; color:#3b82f6; text-decoration:none; display:flex; align-items:center; gap:6px; font-size:0.85rem;"><i data-lucide="mail" size="14"></i> E-Mail</a>` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            if (window.lucide) lucide.createIcons();
+        },
+
+        initMap() {
+            const mapEl = document.getElementById('driveMap');
+            if (!mapEl || !window.L) return;
+
+            // Clear existing map
+            if (this.map) {
+                this.map.remove();
+            }
+
+            // Initialize map
+            this.map = L.map('driveMap').setView([51.1657, 10.4515], 6); // Germany center
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(this.map);
+        },
+
+        openNavigation() {
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+            const todayEvents = app.state.events
+                .filter(e => {
+                    const eventDate = new Date(e.start);
+                    return eventDate >= startOfToday && eventDate <= endOfToday && e.location && e.location.trim().length > 0;
+                })
+                .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+            if (todayEvents.length === 0) {
+                alert('Keine Termine mit Ort für heute gefunden.');
+                return;
+            }
+
+            // Build Google Maps route
+            const destinations = todayEvents.map(e => encodeURIComponent(e.location)).join('/');
+            window.open(`https://www.google.com/maps/dir/Current+Location/${destinations}`, '_blank');
+        },
+
+        refresh() {
+            this.renderRoute();
+            this.updateLocation();
+            this.initMap();
+        }
+    },
+
     // --- CLOUD SYNC MODULE (Firebase) ---
     cloud: {
         db: null,
@@ -3836,6 +4401,15 @@ const app = {
             const voiceIconSelect = document.getElementById('voiceIconModeSelect');
             if (voiceIconSelect) voiceIconSelect.value = app.state.voiceIconMode || 'logo';
 
+
+            // Render Blink Style Preference
+            const blinkSelect = document.getElementById('blinkStyleSelect');
+            if (blinkSelect) blinkSelect.value = app.state.ui.blinkStyle || 'standard';
+
+            // Render Event Reminder Preference
+            const reminderSelect = document.getElementById('eventReminderSelect');
+            if (reminderSelect) reminderSelect.value = app.state.ui.eventReminderMinutes || 60;
+
             // Render Cloud Config
             if (app.state.cloud) {
                 const confInput = document.getElementById('firebaseConfigInput');
@@ -3905,6 +4479,12 @@ const app = {
                     g.classList.remove('single-column-mode');
                 }
             });
+
+            // Update button text
+            const btnText = document.getElementById('layoutToggleText');
+            if (btnText) {
+                btnText.textContent = app.state.dashboardLayout === 'single' ? '1 Spalte' : '2 Spalten';
+            }
         },
         initPayPal() {
             if (app.state.user.isPro) return;
@@ -3940,6 +4520,23 @@ const app = {
             app.state.voiceIconMode = val;
             app.saveState();
             this.applyVoiceIconPreference();
+        },
+        saveBlinkStyle() {
+            const sel = document.getElementById('blinkStyleSelect');
+            if (sel) {
+                app.state.ui.blinkStyle = sel.value;
+                app.saveState();
+                app.renderDashboard(); // Re-render to apply new blinking style
+                alert(`Blinking-Stil auf "${sel.options[sel.selectedIndex].text}" gesetzt!`);
+            }
+        },
+        saveEventReminder() {
+            const sel = document.getElementById('eventReminderSelect');
+            if (sel) {
+                app.state.ui.eventReminderMinutes = parseInt(sel.value);
+                app.saveState();
+                alert(`Termin-Voralarm auf ${sel.options[sel.selectedIndex].text} gesetzt!`);
+            }
         },
         toggleLayoutQuick() {
             // Toggle between single and double column
@@ -4041,30 +4638,41 @@ const app = {
             window.history.pushState({ modal: true, page: app.state.currentPage }, '', '');
 
             if (type === 'addContact') {
+                const isEditing = data && data.id;
+                const title = isEditing ? 'Kontakt bearbeiten' : 'Neuer Kontakt';
+                const icon = isEditing ? 'edit-2' : 'user-plus';
+
                 c.innerHTML = `
                     <div style="padding:24px;">
-                        <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:10px;"><i data-lucide="user-plus" class="text-primary"></i> Business Kontakt</h3>
+                        <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:10px;"><i data-lucide="${icon}" class="text-primary"></i> ${title}</h3>
+                        <div class="form-group">
+                            <label class="form-label">Kategorie</label>
+                            <select id="newContactCategory" class="form-input">
+                                <option value="private" ${data.category === 'private' || !data.category ? 'selected' : ''}>Privat</option>
+                                <option value="business" ${data.category === 'business' ? 'selected' : ''}>Business</option>
+                            </select>
+                        </div>
                         <div class="form-group">
                             <label class="form-label">Name / Firma</label>
-                            <input id="newContactName" class="form-input" placeholder="Nachname, Vorname oder Firmenname">
+                            <input id="newContactName" class="form-input" placeholder="Nachname, Vorname oder Firmenname" value="${data.name || ''}">
                         </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                             <div class="form-group">
                                 <label class="form-label">Telefon</label>
-                                <input id="newContactPhone" class="form-input" placeholder="+49 123 456789">
+                                <input id="newContactPhone" class="form-input" placeholder="+49 123 456789" value="${data.phone || ''}">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">E-Mail</label>
-                                <input id="newContactEmail" class="form-input" type="email" placeholder="email@firma.de">
+                                <input id="newContactEmail" class="form-input" type="email" placeholder="email@firma.de" value="${data.email || ''}">
                             </div>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Adresse / Standort</label>
-                            <input id="newContactAddress" class="form-input" placeholder="Straße 1, 12345 Stadt">
+                            <input id="newContactAddress" class="form-input" placeholder="Straße 1, 12345 Stadt" value="${data.address || ''}">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Homepage (URL)</label>
-                            <input id="newContactHomepage" class="form-input" placeholder="https://www.beispiel.de">
+                            <input id="newContactHomepage" class="form-input" placeholder="https://www.beispiel.de" value="${data.homepage || ''}">
                         </div>
                         <div style="display:flex;justify-content:end;gap:12px;margin-top:24px; padding-top:20px; border-top:1px solid rgba(255,255,255,0.05);">
                             <button class="btn" onclick="app.modals.close()">Abbrechen</button>
@@ -4088,6 +4696,25 @@ const app = {
                                 <input id="newTaskTitle" class="form-input" value="${title}" placeholder="Was einkaufen? (z.B. Milch)">
                                 <button class="btn-secondary" onclick="app.voice.listenTo('newTaskTitle')"><i data-lucide="mic"></i></button>
                             </div>
+                            
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+                                <div class="form-group">
+                                    <label class="form-label" style="font-size:0.75rem;">Kategorie</label>
+                                    <select id="taskCategorySelect" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                        <option value="private">Privat / Familie</option>
+                                        <option value="business">Business</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="font-size:0.75rem;">Sichtbarkeit</label>
+                                    <select id="taskVisibility" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                        <option value="private">Nur ich</option>
+                                        <option value="team">Team Sichtbarkeit</option>
+                                        <option value="public">Öffentlich</option>
+                                    </select>
+                                </div>
+                            </div>
+
                             <!-- Hidden Category Input -->
                             <input type="hidden" name="taskCategory" value="shopping">
 
@@ -4109,8 +4736,26 @@ const app = {
                                 <button class="btn-secondary" onclick="app.voice.listenTo('newTaskTitle')"><i data-lucide="mic"></i></button>
                             </div>
                             
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+                                <div class="form-group">
+                                    <label class="form-label" style="font-size:0.75rem;">Kategorie</label>
+                                    <select id="taskCategorySelect" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                        <option value="private">Privat / Familie</option>
+                                        <option value="business">Business</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" style="font-size:0.75rem;">Sichtbarkeit</label>
+                                    <select id="taskVisibility" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                        <option value="private">Nur ich</option>
+                                        <option value="team">Team Sichtbarkeit</option>
+                                        <option value="public">Öffentlich</option>
+                                    </select>
+                                </div>
+                            </div>
+
                             <div class="form-group">
-                                <label class="form-label">Liste</label>
+                                <label class="form-label" style="font-size:0.75rem;">Liste</label>
                                 <div style="display:flex; gap:10px;">
                                     <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
                                         <input type="radio" name="taskCategory" value="todo" checked> To-Do
@@ -4234,6 +4879,7 @@ const app = {
                 const ph = data.phone || '';
                 const em = data.email || '';
                 const no = data.notes || ''; // New Notes Field
+                const cat = data.category || 'private'; // Category Field
 
                 c.innerHTML = `
                 <div style="padding:20px;max-height:80vh;overflow-y:auto;">
@@ -4247,6 +4893,24 @@ const app = {
                     <div class="form-group" style="display:flex;gap:5px;">
                         <input id="evtTitle" class="form-input" value="${t}" placeholder="Titel (z.B. Zahnarzt)">
                         <button class="btn-secondary" onclick="app.voice.listenTo('evtTitle')"><i data-lucide="mic"></i></button>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:0.75rem;">Kategorie</label>
+                            <select id="evtCategory" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                <option value="private" ${cat === 'private' ? 'selected' : ''}>Privat / Familie</option>
+                                <option value="business" ${cat === 'business' ? 'selected' : ''}>Business</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:0.75rem;">Sichtbarkeit</label>
+                            <select id="evtVisibility" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                <option value="private">Nur ich</option>
+                                <option value="team">Team Sichtbarkeit</option>
+                                <option value="public">Öffentlich</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -4338,6 +5002,24 @@ const app = {
                             <button class="btn-secondary" onclick="app.voice.listenTo('expDesc')" title="Spracheingabe"><i data-lucide="mic"></i></button>
                         </div>
                     </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:0.75rem;">Kategorie</label>
+                            <select id="expCategory" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                <option value="private">Privat / Familie</option>
+                                <option value="business">Business</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:0.75rem;">Sichtbarkeit</label>
+                            <select id="expVisibility" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                <option value="private">Nur ich</option>
+                                <option value="team">Team Sichtbarkeit</option>
+                                <option value="public">Öffentlich</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="form-group">
                             <label class="form-label">Betrag (€)</label>
@@ -4710,6 +5392,24 @@ const app = {
                         <label class="form-label">Name</label>
                         <input id="habitName" class="form-input" placeholder="z.B. Hund laufen">
                     </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:0.75rem;">Kategorie</label>
+                            <select id="habitCategory" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                <option value="private">Privat / Familie</option>
+                                <option value="business">Business</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:0.75rem;">Sichtbarkeit</label>
+                            <select id="habitVisibility" class="form-input" style="font-size:0.85rem; padding:8px;">
+                                <option value="private">Nur ich</option>
+                                <option value="team">Team Sichtbarkeit</option>
+                                <option value="public">Öffentlich</option>
+                            </select>
+                        </div>
+                    </div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <div class="form-group">
                             <label class="form-label">Uhrzeit (Optional)</label>
@@ -4735,6 +5435,54 @@ const app = {
                     </div>
                     <button class="btn btn-primary" onclick="app.modals.submitHabit()" style="margin-top:10px;width:100%;">Speichern</button>
                 </div>`;
+            } else if (type === 'editContact') {
+                const con = data;
+                c.innerHTML = `
+                <div style="padding:20px; max-height:80vh; overflow-y:auto;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                        <h3><i data-lucide="edit-2" class="text-primary"></i> Kontakt bearbeiten</h3>
+                        <button onclick="app.modals.close()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.5rem;"><i data-lucide="x"></i></button>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input id="editContactName" class="form-input" value="${con.name}" placeholder="Name">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div class="form-group">
+                            <label class="form-label">Telefon</label>
+                            <input id="editContactPhone" class="form-input" value="${con.phone || ''}" placeholder="Telefon" style="font-size:1rem; padding:12px;">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">E-Mail</label>
+                            <input id="editContactEmail" class="form-input" type="email" value="${con.email || ''}" placeholder="Email" style="font-size:1rem; padding:12px;">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Adresse / Standort</label>
+                        <textarea id="editContactAddress" class="form-input" placeholder="Straße und Hausnummer&#10;Postleitzahl Stadt" style="font-size:1rem; padding:12px; min-height:80px; resize:vertical;">${con.address || ''}</textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Website / Homepage</label>
+                        <input id="editContactHomepage" class="form-input" value="${con.homepage || ''}" placeholder="https://www.beispiel.de" style="font-size:1rem; padding:12px;">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Kategorie</label>
+                        <select id="editContactCategory" class="form-input" style="font-size:0.85rem; padding:8px;">
+                            <option value="private" ${(con.category || 'private') === 'private' ? 'selected' : ''}>Privat / Familie</option>
+                            <option value="business" ${(con.category || 'private') === 'business' ? 'selected' : ''}>Business</option>
+                        </select>
+                    </div>
+
+                    <div style="display:flex; gap:10px; margin-top:20px;">
+                        <button class="btn" style="flex:1;" onclick="app.modals.close()">Abbrechen</button>
+                        <button class="btn btn-primary" style="flex:1;" onclick="app.contacts.saveEdit(${con.id})"><i data-lucide="save"></i> Speichern</button>
+                    </div>
+                </div>`;
             } else if (type === 'viewContactCard') {
                 const con = data;
                 c.innerHTML = `
@@ -4743,7 +5491,9 @@ const app = {
                         <button onclick="app.modals.close()" style="position:absolute; top:15px; right:15px; background:rgba(0,0,0,0.2); border:none; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;"><i data-lucide="x" size="16"></i></button>
                         <div style="width:70px; height:70px; background:rgba(255,255,255,0.2); border-radius:20px; display:flex; align-items:center; justify-content:center; margin:0 auto 12px auto; font-size:2rem; font-weight:bold; color:white; backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.3);">${con.name.charAt(0).toUpperCase()}</div>
                         <h2 style="margin:0; font-size:1.5rem; letter-spacing:-0.5px;">${con.name}</h2>
-                        <div style="font-size:0.7rem; opacity:0.8; text-transform:uppercase; margin-top:4px; font-weight:700; letter-spacing:1px;">Business Partner</div>
+                        <div style="font-size:0.7rem; opacity:0.8; text-transform:uppercase; margin-top:4px; font-weight:700; letter-spacing:1px;">
+                            ${con.category === 'business' ? '🏢 Business Partner' : '👤 Kontakt'}
+                        </div>
                     </div>
 
                     <div style="padding:20px; display:flex; flex-direction:column; gap:12px;">
@@ -4774,6 +5524,14 @@ const app = {
                                 <i data-lucide="map-pin" size="16" style="opacity:0.6;"></i>
                                 <span style="font-size:0.8rem; line-height:1.4;">${con.address}</span>
                             </div>
+                            <iframe 
+                                width="100%" 
+                                height="150" 
+                                style="border:0; border-radius:12px; margin-bottom:10px; opacity: 0.8;" 
+                                loading="lazy" 
+                                allowfullscreen 
+                                src="https://maps.google.com/maps?q=${encodeURIComponent(con.address)}&t=&z=15&ie=UTF8&iwloc=&output=embed">
+                            </iframe>
                             <button class="btn btn-primary" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(con.address)}', '_blank')" style="width:100%; height:36px; border-radius:10px; font-size:0.85rem;">
                                 <i data-lucide="navigation" size="14"></i> Navigation starten
                             </button>
@@ -4784,34 +5542,65 @@ const app = {
                             <i data-lucide="globe"></i> Website öffnen
                         </button>` : ''}
 
-                        <div style="display:flex; gap:8px; margin-top:8px;">
-                            <button class="btn" style="flex:1; background:rgba(255,255,255,0.02); height:32px; font-size:0.7rem;" onclick="window.open('https://www.google.com/search?q=${encodeURIComponent(con.name)}', '_blank')"><i data-lucide="search" size="12"></i> Google</button>
+                        <div style="display:flex; gap:10px; margin-top:12px; padding:0 10px;">
+                            <button class="btn" style="flex:1; background:rgba(59, 130, 246, 0.3); border:1px solid rgba(59, 130, 246, 0.6); height:44px; font-size:0.8rem; font-weight:600; color:var(--primary); border-radius:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="app.contacts.editContact(${con.id})"><i data-lucide="edit" size="18"></i> Bearbeiten</button>
+                            <button class="btn" style="flex:1; background:rgba(239, 68, 68, 0.3); border:1px solid rgba(239, 68, 68, 0.5); height:44px; font-size:0.8rem; font-weight:600; color:#ff6b6b; border-radius:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="if(confirm('Kontakt wirklich löschen?')) { app.contacts.delete(${con.id}); app.modals.close(); }"><i data-lucide="trash-2" size="18"></i> Löschen</button>
+                        </div>
                             <button class="btn" style="flex:1; background:rgba(239, 68, 68, 0.05); height:32px; font-size:0.7rem; color:var(--danger);" onclick="if(confirm('Entfernen?')) { app.contacts.delete(${con.id}); app.modals.close(); }"><i data-lucide="trash-2" size="12"></i> Löschen</button>
                         </div>
                     </div>
                 </div>`;
             } else if (type === 'configureWidgets') {
-                const hidden = app.state.ui && app.state.ui.hiddenCards ? app.state.ui.hiddenCards : [];
-                const cards = [
+                const mode = app.state.ui && app.state.ui.dashboardMode ? app.state.ui.dashboardMode : 'business';
+                const modeKey = 'hiddenCards' + (mode.charAt(0).toUpperCase() + mode.slice(1));
+
+                // Migration: If old global array exists, distribute it
+                if (app.state.ui && app.state.ui.hiddenCards && Array.isArray(app.state.ui.hiddenCards)) {
+                    app.state.ui.hiddenCardsBusiness = [...app.state.ui.hiddenCards];
+                    app.state.ui.hiddenCardsPrivate = [...app.state.ui.hiddenCards];
+                    delete app.state.ui.hiddenCards;
+                    app.saveState();
+                }
+
+                const hidden = (app.state.ui && app.state.ui[modeKey]) ? app.state.ui[modeKey] : [];
+                let cards = [
                     { id: 'dashboardAiCard', name: 'AI Assistant', icon: 'sparkles' },
                     { id: 'dashboardCommunicationCard', name: 'Kommunikation', icon: 'message-square' },
                     { id: 'dashboardStatusCard', name: 'Tages-Check', icon: 'clipboard-check' },
                     { id: 'dashboardEventsCard', name: 'Zeitplan / Termine', icon: 'calendar' },
                     { id: 'dashboardTasksCard', name: 'Aufgaben (To-Do)', icon: 'check-square' },
                     { id: 'dashboardShoppingCard', name: 'Einkaufsliste', icon: 'shopping-cart' },
+                    { id: 'dashboardContactsCard', name: 'Kontakte (Favoriten)', icon: 'users' },
                     { id: 'dashboardHealthCard', name: 'Gesundheits-Tracker', icon: 'heart' },
                     { id: 'dashboardHabitsCard', name: 'Gewohnheiten', icon: 'flame' },
                     { id: 'dashboardFinanceCard', name: 'Finanzen', icon: 'pie-chart' },
                     { id: 'dashboardAlarmsCard', name: 'Wecker', icon: 'alarm-clock' },
                     { id: 'dashboardDriveCard', name: 'Drive / Fahrt-Modus', icon: 'navigation' },
                     { id: 'dashboardShortcutsCard', name: 'Apps & Links', icon: 'layers' },
-                    { id: 'dashboardSearchCard', name: 'Business Suche', icon: 'search' }
+                    { id: 'dashboardSearchCard', name: 'Business Suche', icon: 'search' },
+                    { id: 'dashboardTimeTrackerCard', name: 'Zeit-Tracker', icon: 'clock' },
+                    { id: 'dashboardNotesCard', name: 'Notizen', icon: 'sticky-note' },
+                    { id: 'dashboardProjectsCard', name: 'Projekt-Management', icon: 'briefcase' },
+                    { id: 'dashboardMeetingsCard', name: 'Meeting-Protokolle', icon: 'users-2' },
+                    { id: 'dashboardHouseholdCard', name: 'Haushalt', icon: 'home' },
+                    { id: 'dashboardMealPlanCard', name: 'Wochenmenü', icon: 'utensils' },
+                    { id: 'dashboardPrivateDriveCard', name: 'Privater Drive Mode', icon: 'car' }
                 ];
+
+                // Strict Mode Filtering for Configuration
+                const businessOnly = ['dashboardProjectsCard', 'dashboardMeetingsCard', 'dashboardSearchCard', 'dashboardTimeTrackerCard', 'dashboardDriveCard'];
+                const privateOnly = ['dashboardHouseholdCard', 'dashboardMealPlanCard', 'dashboardPrivateDriveCard', 'dashboardHabitsCard', 'dashboardHealthCard', 'dashboardShoppingCard', 'dashboardAlarmsCard'];
+
+                if (mode === 'business') {
+                    cards = cards.filter(c => !privateOnly.includes(c.id));
+                } else {
+                    cards = cards.filter(c => !businessOnly.includes(c.id));
+                }
 
                 c.innerHTML = `
                 <div style="padding:20px; max-height:80vh; overflow-y:auto;">
-                    <h3><i data-lucide="layout" class="text-primary"></i> Dashboard Widgets</h3>
-                    <p class="text-muted text-sm mb-4">Wähle aus, welche Karten angezeigt werden sollen.</p>
+                    <h3><i data-lucide="layout" class="text-primary"></i> Dashboard Widgets (${mode === 'business' ? 'Business' : 'Privat'})</h3>
+                    <p class="text-muted text-sm mb-4">Wähle aus, welche Karten im <strong>${mode === 'business' ? 'Business' : 'Privat'}</strong> Modus angezeigt werden sollen.</p>
                     <div style="display:flex; flex-direction:column; gap:10px;">
                         ${cards.map(card => {
                     const isVisible = !hidden.includes(card.id);
@@ -4835,6 +5624,44 @@ const app = {
                     <button style="position:absolute; top:15px; right:15px; background:none; border:none; color:var(--text-muted);" onclick="app.modals.close()"><i data-lucide="x"></i></button>
                     ${data.html}
                     <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:12px;" onclick="app.modals.close(); window.speechSynthesis.cancel();">Danke, Verstanden</button>
+                </div>`;
+            } else if (type === 'householdAdd') {
+                c.innerHTML = `
+                <div style="padding:20px;">
+                    <h3><i data-lucide="home" class="text-success"></i> Haushaltsaufgabe</h3>
+                    <div class="form-group">
+                        <label class="form-label">Aufgabe</label>
+                        <input id="householdTask" class="form-input" placeholder="z.B. Wäsche waschen">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Kategorie</label>
+                        <select id="householdCategory" class="form-input">
+                            <option value="cleaning">Putzen</option>
+                            <option value="laundry">Wäsche</option>
+                            <option value="cooking">Kochen</option>
+                            <option value="shopping">Einkaufen</option>
+                            <option value="maintenance">Reparatur</option>
+                            <option value="garden">Garten</option>
+                            <option value="other">Sonstiges</option>
+                        </select>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div class="form-group">
+                            <label class="form-label">Datum (Optional)</label>
+                            <input type="date" id="householdDate" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Uhrzeit (Optional)</label>
+                            <input type="time" id="householdTime" class="form-input">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="householdUrgent"> 🔥 Dringend?</label>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-top:20px;">
+                        <button class="btn" style="flex:1" onclick="app.modals.close()">Abbrechen</button>
+                        <button class="btn btn-primary" style="flex:1" onclick="app.modals.submitHousehold()">Speichern</button>
+                    </div>
                 </div>`;
             } else if (type === 'importBusiness') {
                 c.innerHTML = `
@@ -4935,7 +5762,17 @@ const app = {
                     if (hidden) cat = hidden.value;
                 }
 
-                app.tasks.add(t, document.getElementById('newTaskUrgent').checked, cat);
+                const category = document.getElementById('taskCategorySelect')?.value || 'private';
+                const visibility = document.getElementById('taskVisibility')?.value || 'private';
+                const isShared = visibility !== 'private';
+                const shareType = visibility === 'private' ? 'private' : visibility;
+
+                if (isShared) {
+                    const confirmed = confirm(`Diesen ${cat === 'shopping' ? 'Einkauf' : 'Eintrag'} wirklich unter "${visibility}" TEILEN?`);
+                    if (!confirmed) return;
+                }
+
+                app.tasks.add(t, document.getElementById('newTaskUrgent').checked, cat, isShared, shareType);
                 this.close();
 
                 // Smart Navigation
@@ -4970,11 +5807,45 @@ const app = {
             const a = document.getElementById('expAmount').value;
             const date = document.getElementById('expDate').value;
             const u = document.getElementById('expUrgent').checked;
+            const category = document.getElementById('expCategory')?.value || 'private';
+            const visibility = document.getElementById('expVisibility')?.value || 'private';
+            const isShared = visibility !== 'private';
+
             if (d && a && date) {
-                app.finance.add(a, d, date, u);
+                if (isShared) {
+                    if (!confirm(`Diese Ausgabe wirklich unter "${visibility}" TEILEN?`)) return;
+                }
+                app.finance.add(a, d, date, u, category, isShared, visibility);
                 this.close();
                 app.navigateTo('dashboard');
                 app.dashboard.scrollToCard('dashboardFinanceCard');
+            }
+        },
+        submitHousehold() {
+            const task = document.getElementById('householdTask').value;
+            const category = document.getElementById('householdCategory').value;
+            const date = document.getElementById('householdDate').value;
+            const time = document.getElementById('householdTime').value;
+            const urgent = document.getElementById('householdUrgent').checked;
+
+            if (task) {
+                if (!app.state.household) app.state.household = [];
+                app.state.household.push({
+                    id: Date.now(),
+                    task: task,
+                    category: category,
+                    date: date || null,
+                    time: time || null,
+                    urgent: urgent,
+                    done: false,
+                    createdAt: new Date().toISOString()
+                });
+                app.saveState();
+                this.close();
+                app.renderDashboard();
+                app.navigateTo('dashboard');
+            } else {
+                alert("Bitte Aufgabe eingeben.");
             }
         },
         submitTeamMember() { const n = document.getElementById('teamMemberName').value; if (n) { app.team.addMember(n); this.close(); app.navigateTo('dashboard'); } },
@@ -5040,8 +5911,23 @@ const app = {
                 const time = document.getElementById('habitTime').value;
                 const urgent = document.getElementById('habitUrgent').checked;
                 const days = Array.from(document.querySelectorAll('input[name="habitDays"]:checked')).map(cb => parseInt(cb.value));
+                const category = document.getElementById('habitCategory')?.value || 'private';
+                const visibility = document.getElementById('habitVisibility')?.value || 'private';
+
                 if (!app.state.habits) app.state.habits = [];
-                app.state.habits.push({ id: Date.now(), name, streak: 0, goal, time, days, urgent, history: [] });
+                app.state.habits.push({
+                    id: Date.now(),
+                    name,
+                    streak: 0,
+                    goal,
+                    time,
+                    days,
+                    urgent,
+                    history: [],
+                    category: category,
+                    isShared: visibility !== 'private',
+                    type: visibility
+                });
                 app.saveState();
                 app.habits.render();
                 app.renderDashboard();
@@ -5059,9 +5945,17 @@ const app = {
                 phone: document.getElementById('evtPhone').value,
                 email: document.getElementById('evtEmail').value,
                 notes: document.getElementById('evtNotes').value,
-                urgent: document.getElementById('evtUrgent').checked
+                urgent: document.getElementById('evtUrgent').checked,
+                category: document.getElementById('evtCategory')?.value || 'private',
+                visibility: document.getElementById('evtVisibility')?.value || 'private',
+                isShared: document.getElementById('evtVisibility')?.value !== 'private',
+                type: document.getElementById('evtVisibility')?.value || 'private'
             };
             if (data.title && data.date && data.time) {
+                if (data.isShared) {
+                    const confirmed = confirm(`Diesen Termin wirklich unter "${data.visibility}" TEILEN?`);
+                    if (!confirmed) return;
+                }
                 app.calendar.addEvent(data);
                 this.close();
                 app.navigateTo('dashboard');
@@ -5070,14 +5964,28 @@ const app = {
         }
     },
     contacts: {
+        currentFilter: 'all', // Filter state for contacts
         add(n, p, e, a, h = '') {
             if (!app.state.contacts) app.state.contacts = [];
-            app.state.contacts.push({ id: Date.now(), name: n, phone: p, email: e, address: a, homepage: h });
+            app.state.contacts.push({ id: Date.now(), name: n, phone: p, email: e, address: a, homepage: h, category: 'private' });
             app.saveState();
             this.render();
             app.renderDashboard();
             app.modals.close(); // Close if open
             app.navigateTo('dashboard');
+        },
+        filterContacts(category) {
+            this.currentFilter = category;
+            // Update button styles
+            const allBtn = document.getElementById('contactTabAll');
+            const privBtn = document.getElementById('contactTabPrivate');
+            const bizBtn = document.getElementById('contactTabBusiness');
+
+            if (allBtn) allBtn.style.background = category === 'all' ? 'var(--primary)' : '';
+            if (privBtn) privBtn.style.background = category === 'private' ? 'var(--primary)' : '';
+            if (bizBtn) bizBtn.style.background = category === 'business' ? 'var(--primary)' : '';
+
+            this.render();
         },
         delete(id) {
             app.state.contacts = app.state.contacts.filter(c => c.id !== id);
@@ -5111,11 +6019,15 @@ const app = {
         search(q) {
             const list = document.getElementById('contactsList');
             if (!list) return;
-            const contacts = (app.state.contacts || []).filter(c =>
+            let contacts = (app.state.contacts || []).filter(c =>
                 c.name.toLowerCase().includes(q.toLowerCase()) ||
                 (c.phone && c.phone.includes(q)) ||
                 (c.email && c.email.toLowerCase().includes(q.toLowerCase()))
             );
+            // Apply category filter
+            if (this.currentFilter !== 'all') {
+                contacts = contacts.filter(c => (c.category || 'private') === this.currentFilter);
+            }
             this.renderFiltered(contacts);
         },
         renderFiltered(contacts) {
@@ -5124,21 +6036,69 @@ const app = {
             if (contacts.length === 0) {
                 list.innerHTML = `<div class="text-muted" style="text-align:center; padding:20px;">Keine Kontakte gefunden.</div>`;
             } else {
+                list.style.display = 'flex';
+                list.style.flexDirection = 'column';
+                list.style.gap = '12px';
+                list.style.background = 'rgba(0,0,0,0.2)';
+                list.style.padding = '15px';
+                list.style.borderRadius = '20px';
+                list.style.border = '1px solid rgba(255,255,255,0.05)';
+
                 list.innerHTML = contacts.map(c => `
-                    <div class="contact-list-item" onclick="app.contacts.openCard(${c.id})" style="display:flex; align-items:center; gap:15px; padding:12px 20px; background:rgba(255,255,255,0.03); border-radius:14px; cursor:pointer; transition:all 0.2s ease; border:1px solid transparent;">
-                        <div style="width:40px; height:40px; background:linear-gradient(135deg, var(--primary), var(--accent)); border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:1.1rem; flex-shrink:0;">
-                            ${c.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div style="flex:1; min-width:0;">
-                            <div style="font-weight:700; font-size:1.1rem; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.name}</div>
-                            <div style="font-size:0.8rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                ${c.phone || c.email || 'Business Kontakt'}
+                    <div class="contact-list-item" style="display:flex; flex-direction:column; gap:12px; padding:16px 20px; background:rgba(255,255,255,0.05); border-radius:14px; transition:all 0.2s ease; border:1px solid rgba(255,255,255,0.08);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:15px;">
+                            <div onclick="app.contacts.openCard(${c.id})" style="flex:1; display:flex; align-items:center; gap:15px; cursor:pointer;">
+                                <div style="width:50px; height:50px; background:linear-gradient(135deg, var(--primary), var(--accent)); border-radius:12px; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:1.3rem; flex-shrink:0;">
+                                    ${c.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div style="flex:1; min-width:0;">
+                                    <div style="font-weight:700; font-size:1.2rem; color:white; margin-bottom:4px;">${c.name}</div>
+                                    <div style="font-size:0.85rem; color:var(--text-muted);">
+                                        ${c.phone || c.email || c.address || 'Kontakt'}
+                                    </div>
+                                </div>
                             </div>
+                            <button onclick="event.stopPropagation(); app.contacts.editContact(${c.id})" style="background:rgba(59, 130, 246, 0.2); border:1px solid rgba(59, 130, 246, 0.4); color:var(--primary); padding:10px 16px; border-radius:10px; cursor:pointer; font-size:0.8rem; font-weight:600; transition:all 0.2s; display:flex; align-items:center; gap:6px; white-space:nowrap;" onmouseover="this.style.background='rgba(59, 130, 246, 0.4)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.2)'">
+                                <i data-lucide="edit-2" size="14"></i>Bearbeiten
+                            </button>
                         </div>
-                        <div style="display:flex; gap:10px; align-items:center;">
-                             ${c.phone ? `<i data-lucide="phone" size="14" class="text-primary" style="opacity:0.6;"></i>` : ''}
-                             ${c.email ? `<i data-lucide="mail" size="14" class="text-accent" style="opacity:0.6;"></i>` : ''}
-                             <i data-lucide="chevron-right" size="18" style="opacity:0.3;"></i>
+                        
+                        <!-- Action Buttons -->
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            ${c.phone ? `
+                                <button onclick="window.location.href='tel:${c.phone}'" style="flex:1; min-width:120px; padding:12px 16px; background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.3); border-radius:10px; color:#22c55e; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; font-size:0.9rem; font-weight:600; transition:all 0.2s;" onmouseover="this.style.background='rgba(34,197,94,0.25)'" onmouseout="this.style.background='rgba(34,197,94,0.15)'">
+                                    <i data-lucide="phone" size="16"></i>
+                                    <span>Anrufen</span>
+                                </button>
+                            ` : ''}
+                            ${c.email ? `
+                                <button onclick="window.location.href='mailto:${c.email}'" style="flex:1; min-width:120px; padding:12px 16px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); border-radius:10px; color:#3b82f6; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; font-size:0.9rem; font-weight:600; transition:all 0.2s;" onmouseover="this.style.background='rgba(59,130,246,0.25)'" onmouseout="this.style.background='rgba(59,130,246,0.15)'">
+                                    <i data-lucide="mail" size="16"></i>
+                                    <span>E-Mail</span>
+                                </button>
+                            ` : ''}
+                            ${c.address ? `
+                                <div style="width:100%; margin-top: 8px;">
+                                    <iframe 
+                                        width="100%" 
+                                        height="120" 
+                                        style="border:0; border-radius:12px; margin-bottom:8px; opacity: 0.9;" 
+                                        loading="lazy" 
+                                        allowfullscreen 
+                                        src="https://maps.google.com/maps?q=${encodeURIComponent(c.address)}&t=&z=15&ie=UTF8&iwloc=&output=embed">
+                                    </iframe>
+                                    <button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}', '_blank')" style="width:100%; padding:10px 16px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:10px; color:#ef4444; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; font-size:0.9rem; font-weight:600; transition:all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.25)'" onmouseout="this.style.background='rgba(239,68,68,0.15)'">
+                                        <i data-lucide="map-pin" size="16"></i>
+                                        <span>Maps Navigation</span>
+                                    </button>
+                                </div>
+                            ` : ''}
+                            ${c.phone ? `
+                                <button onclick="window.open('https://wa.me/${c.phone.replace(/\\D/g, '')}', '_blank')" style="flex:1; min-width:120px; padding:12px 16px; background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.3); border-radius:10px; color:#22c55e; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; font-size:0.9rem; font-weight:600; transition:all 0.2s;" onmouseover="this.style.background='rgba(34,197,94,0.25)'" onmouseout="this.style.background='rgba(34,197,94,0.15)'">
+                                    <i data-lucide="message-circle" size="16"></i>
+                                    <span>WhatsApp</span>
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                 `).join('');
@@ -5149,7 +6109,20 @@ const app = {
             const list = document.getElementById('contactsList');
             if (!list) return;
 
-            const contacts = app.state.contacts || [];
+            let contacts = app.state.contacts || [];
+
+            // Apply category filter
+            if (this.currentFilter !== 'all') {
+                contacts = contacts.filter(c => (c.category || 'private') === this.currentFilter);
+            }
+
+            // Update filter button styles
+            const allBtn = document.getElementById('contactTabAll');
+            const privBtn = document.getElementById('contactTabPrivate');
+            const bizBtn = document.getElementById('contactTabBusiness');
+            if (allBtn) allBtn.style.background = this.currentFilter === 'all' ? 'var(--primary)' : '';
+            if (privBtn) privBtn.style.background = this.currentFilter === 'private' ? 'var(--primary)' : '';
+            if (bizBtn) bizBtn.style.background = this.currentFilter === 'business' ? 'var(--primary)' : '';
 
             if (contacts.length === 0) {
                 list.innerHTML = `
@@ -5157,8 +6130,8 @@ const app = {
                         <div style="width: 80px; height: 80px; background: rgba(59, 130, 246, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto;">
                             <i data-lucide="contact-2" size="40" class="text-primary"></i>
                         </div>
-                        <h3 style="margin-bottom: 10px;">Adressbuch noch leer</h3>
-                        <p class="text-muted">Füge deinen ersten Business-Partner hinzu.</p>
+                        <h3 style="margin-bottom: 10px;">Keine Kontakte gefunden</h3>
+                        <p class="text-muted">${this.currentFilter === 'all' ? 'Füge deinen ersten Kontakt hinzu.' : `Keine ${this.currentFilter === 'business' ? 'Business' : 'privaten'} Kontakte vorhanden.`}</p>
                         <button class="btn btn-primary" style="margin-top: 20px;" onclick="app.modals.open('addContact')">
                             <i data-lucide="plus"></i> Kontakt hinzufügen
                         </button>
@@ -5174,20 +6147,27 @@ const app = {
                 list.style.border = '1px solid rgba(255,255,255,0.05)';
 
                 list.innerHTML = contacts.map(c => `
-                    <div class="contact-list-item" onclick="app.contacts.openCard(${c.id})" style="display:flex; align-items:center; gap:15px; padding:12px 20px; background:rgba(255,255,255,0.03); border-radius:14px; cursor:pointer; transition:all 0.2s ease; border:1px solid transparent;">
-                        <div style="width:40px; height:40px; background:linear-gradient(135deg, var(--primary), var(--accent)); border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:1.1rem; flex-shrink:0;">
-                            ${c.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div style="flex:1; min-width:0;">
-                            <div style="font-weight:700; font-size:1.1rem; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.name}</div>
-                            <div style="font-size:0.8rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                ${c.phone || c.email || 'Business Kontakt'}
+                    <div class="contact-list-item" style="display:flex; align-items:center; justify-content:space-between; gap:15px; padding:12px 20px; background:rgba(255,255,255,0.03); border-radius:14px; cursor:pointer; transition:all 0.2s ease; border:1px solid transparent;">
+                        <div onclick="app.contacts.openCard(${c.id})" style="flex:1; display:flex; align-items:center; gap:15px; cursor:pointer;">
+                            <div style="width:40px; height:40px; background:linear-gradient(135deg, var(--primary), var(--accent)); border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:1.1rem; flex-shrink:0;">
+                                ${c.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div style="flex:1; min-width:0;">
+                                <div style="font-weight:700; font-size:1.1rem; color:white; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.name}</div>
+                                <div style="font-size:0.8rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    ${c.phone || c.email || 'Kontakt'}
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                 ${c.phone ? `<i data-lucide="phone" size="14" class="text-primary" style="opacity:0.6;"></i>` : ''}
+                                 ${c.email ? `<i data-lucide="mail" size="14" class="text-accent" style="opacity:0.6;"></i>` : ''}
+                                 <i data-lucide="chevron-right" size="18" style="opacity:0.3;"></i>
                             </div>
                         </div>
-                        <div style="display:flex; gap:10px; align-items:center;">
-                             ${c.phone ? `<i data-lucide="phone" size="14" class="text-primary" style="opacity:0.6;"></i>` : ''}
-                             ${c.email ? `<i data-lucide="mail" size="14" class="text-accent" style="opacity:0.6;"></i>` : ''}
-                             <i data-lucide="chevron-right" size="18" style="opacity:0.3;"></i>
+                        <div style="flex-shrink:0;">
+                            <button onclick="event.stopPropagation(); app.contacts.editContact(${c.id})" style="background:rgba(59, 130, 246, 0.3); border:1px solid rgba(59, 130, 246, 0.5); color:var(--primary); padding:8px 14px; border-radius:8px; cursor:pointer; font-size:0.75rem; font-weight:600; transition:all 0.2s; display:flex; align-items:center; gap:6px; white-space:nowrap;" onmouseover="this.style.background='rgba(59, 130, 246, 0.5)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.3)'">
+                                <i data-lucide="edit-2" size="14"></i>Bearbeiten
+                            </button>
                         </div>
                     </div>
                 `).join('');
@@ -5197,9 +6177,10 @@ const app = {
             if (!document.getElementById('contactListStyles')) {
                 const style = document.createElement('style');
                 style.id = 'contactListStyles';
-                style.innerHTML = `.contact-list-item:hover { background: rgba(255,255,255,0.08) !important; transform: translateX(5px); border-color: rgba(59, 130, 246, 0.3) !important; }`;
+                style.innerHTML = `.contact-list-item:hover { background: rgba(255,255,255,0.08) !important; border-color: rgba(59, 130, 246, 0.3) !important; }`;
                 document.head.appendChild(style);
             }
+
 
             const importBtn = document.getElementById('importContactsBtn');
             if (importBtn) {
@@ -5237,6 +6218,34 @@ const app = {
             const contact = app.state.contacts.find(c => c.id === id);
             if (!contact) return;
             app.modals.open('viewContactCard', contact);
+        },
+        editContact(id) {
+            const contact = app.state.contacts.find(c => c.id === id);
+            if (!contact) return;
+            app.modals.open('editContact', contact);
+        },
+        saveEdit(id) {
+            const contact = app.state.contacts.find(c => c.id === id);
+            if (!contact) return;
+
+            const name = document.getElementById('editContactName').value.trim();
+            if (!name) {
+                alert('Bitte mindestens einen Namen eingeben.');
+                return;
+            }
+
+            contact.name = name;
+            contact.phone = document.getElementById('editContactPhone').value.trim();
+            contact.email = document.getElementById('editContactEmail').value.trim();
+            contact.address = document.getElementById('editContactAddress').value.trim();
+            contact.homepage = document.getElementById('editContactHomepage').value.trim();
+            contact.category = document.getElementById('editContactCategory')?.value || 'private';
+
+            app.saveState();
+            this.render();
+            app.renderDashboard();
+            app.modals.close();
+            alert('✅ Kontakt erfolgreich aktualisiert!');
         },
         submit() {
             const n = document.getElementById('newContactName').value;
@@ -5459,6 +6468,9 @@ const app = {
             app.saveState();
             this.applyMode();
             app.renderDashboard();
+            if (app.state.currentPage === 'calendar') app.calendar.render();
+            if (app.state.currentPage === 'tasks') app.tasks.render();
+            if (app.state.currentPage === 'shopping') app.shopping.render();
         },
         applyMode() {
             const mode = app.state.ui.dashboardMode || 'business';
@@ -5492,15 +6504,9 @@ const app = {
             document.body.classList.remove('mode-business', 'mode-private');
             document.body.classList.add(`mode-${mode}`);
 
-            // Define which cards belong to which mode
+            // Define which sidebar items belong to which mode
+            // Note: Dashboard cards are now handled exclusively by applyVisibility() based on user config
             const businessItems = [
-                'dashboardProjectsCard',
-                'dashboardCommunicationCard',
-                'dashboardFinanceCard',
-                'dashboardMeetingsCard',
-                'dashboardDriveCard',
-                'dashboardTimeTrackerCard',
-                'dashboardSearchCard',
                 // Sidebar items
                 'cat-business',
                 'nav-projects',
@@ -5512,15 +6518,6 @@ const app = {
             ];
 
             const privateItems = [
-                'dashboardTasksCard',
-                'dashboardShoppingCard',
-                'dashboardHabitsCard',
-                'dashboardHealthCard',
-                'dashboardMealPlanCard',
-                'dashboardHouseholdCard',
-                'dashboardShortcutsCard',
-                'dashboardNotesCard',
-                'dashboardAlarmsCard',
                 // Sidebar items
                 'cat-private',
                 'nav-tasks',
@@ -5532,11 +6529,8 @@ const app = {
                 'nav-tools'
             ];
 
-            // Always visible
+            // Always visible sidebar items
             const sharedItems = [
-                'dashboardEventsCard',
-                'dashboardStatusCard',
-                'dashboardAiCard',
                 'cat-general',
                 'nav-dashboard',
                 'nav-calendar'
@@ -5622,36 +6616,60 @@ const app = {
             }
         },
         applyVisibility() {
-            const hidden = app.state.ui && app.state.ui.hiddenCards ? app.state.ui.hiddenCards : [];
+            const mode = app.state.ui.dashboardMode || 'business';
+            const modeKey = 'hiddenCards' + (mode.charAt(0).toUpperCase() + mode.slice(1));
+
+            const hidden = (app.state.ui && app.state.ui[modeKey]) ? app.state.ui[modeKey] : [];
             const allCards = [
                 'dashboardAiCard', 'dashboardCommunicationCard', 'dashboardStatusCard', 'dashboardEventsCard',
                 'dashboardTasksCard', 'dashboardShoppingCard', 'dashboardHealthCard',
-                'dashboardHabitsCard', 'dashboardFinanceCard', 'dashboardAlarmsCard',
+                'dashboardContactsCard', 'dashboardHabitsCard', 'dashboardFinanceCard', 'dashboardAlarmsCard',
                 'dashboardDriveCard', 'dashboardShortcutsCard', 'dashboardSearchCard',
-                'dashboardTimeTrackerCard', 'dashboardNotesCard', 'dashboardProjectsCard', 'dashboardMeetingsCard'
+                'dashboardTimeTrackerCard', 'dashboardNotesCard', 'dashboardProjectsCard', 'dashboardMeetingsCard',
+                'dashboardHouseholdCard', 'dashboardMealPlanCard', 'dashboardPrivateDriveCard'
             ];
+
+            // Strict Mode Filtering Lists
+            const businessOnly = ['dashboardProjectsCard', 'dashboardMeetingsCard', 'dashboardSearchCard', 'dashboardTimeTrackerCard', 'dashboardDriveCard'];
+            const privateOnly = ['dashboardHouseholdCard', 'dashboardMealPlanCard', 'dashboardPrivateDriveCard', 'dashboardHabitsCard', 'dashboardHealthCard', 'dashboardShoppingCard', 'dashboardAlarmsCard'];
 
             allCards.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
-                    if (hidden.includes(id)) el.classList.add('hidden');
-                    else el.classList.remove('hidden');
+                    let isStrictlyHidden = false;
+
+                    // Strict Mode Logic (Overrides User Preference)
+                    if (mode === 'business' && privateOnly.includes(id)) isStrictlyHidden = true;
+                    if (mode === 'private' && businessOnly.includes(id)) isStrictlyHidden = true;
+
+                    // Apply Visibility
+                    if (isStrictlyHidden || hidden.includes(id)) {
+                        el.style.display = 'none'; // Force hide
+                        el.classList.add('hidden');
+                    } else {
+                        el.style.display = 'flex'; // Force show (restores from display:none)
+                        el.classList.remove('hidden');
+                    }
                 }
             });
         },
         toggleCardVisibility(id) {
             if (!app.state.ui) app.state.ui = {};
-            if (!app.state.ui.hiddenCards) app.state.ui.hiddenCards = [];
+            const mode = app.state.ui.dashboardMode || 'business';
+            const modeKey = 'hiddenCards' + (mode.charAt(0).toUpperCase() + mode.slice(1));
 
-            const index = app.state.ui.hiddenCards.indexOf(id);
+            if (!app.state.ui[modeKey]) app.state.ui[modeKey] = [];
+
+            const index = app.state.ui[modeKey].indexOf(id);
             if (index > -1) {
-                app.state.ui.hiddenCards.splice(index, 1); // Remove from hidden (Show it)
+                app.state.ui[modeKey].splice(index, 1); // Remove from hidden (Show it)
             } else {
-                app.state.ui.hiddenCards.push(id); // Add to hidden
+                app.state.ui[modeKey].push(id); // Add to hidden
             }
             app.saveState();
-            this.applyVisibility();
-            // Re-render modal to update switch state
+            this.applyVisibility(); // Apply immediately
+
+            // Sync with modal if open
             app.modals.open('configureWidgets');
         },
         scrollToCard(id) {
@@ -5674,6 +6692,160 @@ const app = {
                     }, 2000);
                 }
             }, 300);
+        },
+
+        // --- CARD RESIZE FUNCTIONALITY ---
+        initCardResize() {
+            const cards = document.querySelectorAll('.dashboard-grid .card');
+
+            cards.forEach(card => {
+                // Skip if already initialized
+                if (card.querySelector('.card-resize-handle')) return;
+
+                // Create corner resize handle (both width & height)
+                const handleCorner = document.createElement('div');
+                handleCorner.className = 'card-resize-handle';
+                handleCorner.title = 'Größe anpassen (Breite & Höhe)';
+                card.appendChild(handleCorner);
+
+                // Create right edge resize handle (width only)
+                const handleRight = document.createElement('div');
+                handleRight.className = 'card-resize-handle-right';
+                handleRight.title = 'Breite anpassen';
+                card.appendChild(handleRight);
+
+                // Create bottom edge resize handle (height only)
+                const handleBottom = document.createElement('div');
+                handleBottom.className = 'card-resize-handle-bottom';
+                handleBottom.title = 'Höhe anpassen';
+                card.appendChild(handleBottom);
+
+                // Create reset button
+                const resetBtn = document.createElement('div');
+                resetBtn.className = 'card-reset-size';
+                resetBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>';
+                resetBtn.title = 'Größe zurücksetzen';
+                resetBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.resetCardSize(card.id);
+                };
+                card.appendChild(resetBtn);
+
+                // Add resize events
+                handleCorner.addEventListener('mousedown', (e) => this.startResize(e, card, 'both'));
+                handleRight.addEventListener('mousedown', (e) => this.startResize(e, card, 'width'));
+                handleBottom.addEventListener('mousedown', (e) => this.startResize(e, card, 'height'));
+            });
+
+            // Load saved sizes
+            this.loadCardSizes();
+        },
+
+        startResize(e, card, direction = 'both') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startWidth = card.offsetWidth;
+            const startHeight = card.offsetHeight;
+
+            card.classList.add('is-resizing');
+            document.body.classList.add('is-resizing-card');
+
+            const onMouseMove = (e) => {
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+
+                // Calculate new dimensions based on direction
+                if (direction === 'both' || direction === 'width') {
+                    const newWidth = Math.max(200, startWidth + deltaX);
+                    card.style.width = newWidth + 'px';
+                    card.setAttribute('data-custom-width', newWidth);
+                }
+
+                if (direction === 'both' || direction === 'height') {
+                    const newHeight = Math.max(150, startHeight + deltaY);
+                    card.style.height = newHeight + 'px';
+                    card.setAttribute('data-custom-height', newHeight);
+                }
+            };
+
+            const onMouseUp = () => {
+                card.classList.remove('is-resizing');
+                document.body.classList.remove('is-resizing-card');
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+
+                // Save the new size
+                this.saveCardSize(card.id, card.offsetWidth, card.offsetHeight);
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        },
+
+        saveCardSize(cardId, width, height) {
+            if (!app.state.ui) app.state.ui = {};
+            if (!app.state.ui.cardSizes) app.state.ui.cardSizes = {};
+
+            app.state.ui.cardSizes[cardId] = { width, height };
+            app.saveState();
+        },
+
+        loadCardSizes() {
+            if (!app.state.ui || !app.state.ui.cardSizes) return;
+
+            Object.entries(app.state.ui.cardSizes).forEach(([cardId, size]) => {
+                const card = document.getElementById(cardId);
+                if (card && size.width && size.height) {
+                    card.style.width = size.width + 'px';
+                    card.style.height = size.height + 'px';
+                    card.setAttribute('data-custom-width', size.width);
+                    card.setAttribute('data-custom-height', size.height);
+                }
+            });
+        },
+
+        resetCardSize(cardId) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+
+            card.style.width = '';
+            card.style.height = '';
+            card.removeAttribute('data-custom-width');
+            card.removeAttribute('data-custom-height');
+
+            // Remove from saved sizes
+            if (app.state.ui && app.state.ui.cardSizes) {
+                delete app.state.ui.cardSizes[cardId];
+                app.saveState();
+            }
+        },
+
+        // Create side-by-side container for To-Do and Shopping cards
+        createTodoShoppingContainer() {
+            const todoCard = document.getElementById('dashboardTasksCard');
+            const shoppingCard = document.getElementById('dashboardShoppingCard');
+
+            if (!todoCard || !shoppingCard) return;
+
+            // Check if container already exists
+            let container = document.querySelector('.dashboard-grid-row-todos-shopping');
+
+            if (!container) {
+                // Create container
+                container = document.createElement('div');
+                container.className = 'dashboard-grid-row-todos-shopping';
+
+                // Insert container before the first card
+                const parent = todoCard.parentElement;
+                parent.insertBefore(container, todoCard);
+
+                // Move cards into container
+                container.appendChild(todoCard);
+                container.appendChild(shoppingCard);
+            }
         }
     },
 
@@ -6013,6 +7185,265 @@ const app = {
                         onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">
                         <i data-lucide="trash-2" size="14"></i>
                     </button>
+                </div>
+            `).join('');
+
+            if (window.lucide) lucide.createIcons();
+        }
+    },
+
+    // --- CONTACTS MODULE ---
+    contacts: {
+        currentFilter: 'all',
+        widgetFilter: 'all',
+
+        filterContactsWidget(category) {
+            this.widgetFilter = category;
+            this.renderQuick();
+        },
+
+        renderQuick() {
+            const container = document.getElementById('dashboardContactsPreview');
+            if (!container) return;
+
+            const contacts = app.state.contacts || [];
+            if (contacts.length === 0) {
+                container.innerHTML = '<div class="text-muted text-xs" style="grid-column:span 2; text-align:center;">Keine Kontakte.</div>';
+                return;
+            }
+
+            let filtered = contacts;
+            if (this.widgetFilter !== 'all') {
+                filtered = contacts.filter(c => (c.category || 'private') === this.widgetFilter);
+            }
+
+            // Always respect dashboard mode if widget is "all" or matching?
+            // Actually, let's keep the widget filter independent but default it to match dashboard mode on init if we wanted.
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="text-muted text-xs" style="grid-column:span 2; text-align:center;">Keine Kontakte in dieser Kategorie.</div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(c => `
+                <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.05); border-radius:10px; padding:10px; cursor:pointer; transition:all 0.2s;"
+                    onclick="app.contacts.edit(${c.id})"
+                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                    <div style="font-weight:600; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${c.name}</div>
+                    <div style="display:flex; gap:5px; margin-top:5px;">
+                        ${c.phone ? `<a href="tel:${c.phone}" onclick="event.stopPropagation()" style="color:var(--success);"><i data-lucide="phone" size="14"></i></a>` : ''}
+                        ${c.email ? `<a href="mailto:${c.email}" onclick="event.stopPropagation()" style="color:var(--primary);"><i data-lucide="mail" size="14"></i></a>` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            if (window.lucide) lucide.createIcons();
+        },
+        async importFromPhone() {
+            try {
+                // Check if Contact Picker API is supported
+                if (!('contacts' in navigator)) {
+                    alert('❌ Telefonbuch-Import wird von diesem Browser nicht unterstützt.\n\nBitte nutze Chrome oder Edge auf Android.');
+                    return;
+                }
+
+                // Request contacts with specific properties
+                const props = ['name', 'tel', 'email', 'address'];
+                const opts = { multiple: true };
+
+                const contacts = await navigator.contacts.select(props, opts);
+
+                if (!contacts || contacts.length === 0) {
+                    alert('Keine Kontakte ausgewählt.');
+                    return;
+                }
+
+                // Import contacts
+                let imported = 0;
+                if (!app.state.contacts) app.state.contacts = [];
+
+                contacts.forEach(contact => {
+                    const name = contact.name?.[0] || 'Unbekannt';
+                    const phone = contact.tel?.[0] || '';
+                    const email = contact.email?.[0] || '';
+                    const address = contact.address?.[0]?.formatted || '';
+
+                    // Check if contact already exists
+                    const exists = app.state.contacts.find(c =>
+                        c.name === name || (phone && c.phone === phone)
+                    );
+
+                    if (!exists) {
+                        app.state.contacts.push({
+                            id: Date.now() + imported,
+                            name: name,
+                            phone: phone,
+                            email: email,
+                            address: address,
+                            homepage: '',
+                            category: 'private', // Default to private
+                            createdAt: new Date().toISOString()
+                        });
+                        imported++;
+                    }
+                });
+
+                app.saveState();
+                this.render();
+                alert(`✅ ${imported} Kontakte erfolgreich importiert!`);
+                app.gamification.addXP(imported * 5);
+            } catch (error) {
+                console.error('Contact import error:', error);
+                if (error.name === 'AbortError') {
+                    // User cancelled
+                    return;
+                }
+                alert('❌ Fehler beim Importieren der Kontakte:\n' + error.message);
+            }
+        },
+
+        submit() {
+            const name = document.getElementById('newContactName').value.trim();
+            const phone = document.getElementById('newContactPhone').value.trim();
+            const email = document.getElementById('newContactEmail').value.trim();
+            const address = document.getElementById('newContactAddress').value.trim();
+            const homepage = document.getElementById('newContactHomepage').value.trim();
+            const category = document.getElementById('newContactCategory')?.value || 'private';
+
+            if (!name) {
+                alert('Bitte mindestens einen Namen eingeben.');
+                return;
+            }
+
+            if (!app.state.contacts) app.state.contacts = [];
+
+            // Check if editing existing contact
+            if (app.editingId) {
+                const contact = app.state.contacts.find(c => c.id === app.editingId);
+                if (contact) {
+                    contact.name = name;
+                    contact.phone = phone;
+                    contact.email = email;
+                    contact.address = address;
+                    contact.homepage = homepage;
+                    contact.category = category;
+                }
+                app.editingId = null;
+            } else {
+                app.state.contacts.push({
+                    id: Date.now(),
+                    name: name,
+                    phone: phone,
+                    email: email,
+                    address: address,
+                    homepage: homepage,
+                    category: category,
+                    createdAt: new Date().toISOString()
+                });
+            }
+
+            app.saveState();
+            app.modals.close();
+            this.render();
+            app.gamification.addXP(10);
+        },
+
+        edit(id) {
+            const contact = app.state.contacts.find(c => c.id === id);
+            if (!contact) return;
+
+            app.editingId = id;
+            app.modals.open('addContact', contact);
+        },
+
+        delete(id) {
+            if (confirm('Kontakt wirklich löschen?')) {
+                app.state.contacts = app.state.contacts.filter(c => c.id !== id);
+                app.saveState();
+                this.render();
+            }
+        },
+
+        search(query) {
+            this.render(query);
+        },
+
+        filterContacts(category) {
+            this.currentFilter = category;
+            this.render();
+        },
+
+        render(searchQuery = '') {
+            const container = document.getElementById('contactsList');
+            if (!container) return;
+
+            if (!app.state.contacts || app.state.contacts.length === 0) {
+                container.innerHTML = '<div class="text-muted text-sm" style="padding: 20px; text-align: center;">Noch keine Kontakte vorhanden.<br>Importiere Kontakte oder füge manuell hinzu.</div>';
+                return;
+            }
+
+            let contacts = app.state.contacts;
+
+            // Filter by category
+            if (this.currentFilter && this.currentFilter !== 'all') {
+                contacts = contacts.filter(c => (c.category || 'private') === this.currentFilter);
+            }
+
+            // Filter by search query
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                contacts = contacts.filter(c =>
+                    c.name.toLowerCase().includes(q) ||
+                    (c.phone && c.phone.includes(q)) ||
+                    (c.email && c.email.toLowerCase().includes(q)) ||
+                    (c.address && c.address.toLowerCase().includes(q))
+                );
+            }
+
+            if (contacts.length === 0) {
+                container.innerHTML = '<div class="text-muted text-sm" style="padding: 20px; text-align: center;">Keine Kontakte gefunden.</div>';
+                return;
+            }
+
+            // Sort alphabetically
+            contacts.sort((a, b) => a.name.localeCompare(b.name));
+
+            container.innerHTML = contacts.map(contact => `
+                <div style="padding: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: all 0.2s;" 
+                     onclick="app.contacts.edit(${contact.id})"
+                     onmouseover="this.style.background='rgba(255,255,255,0.06)'; this.style.borderColor='rgba(255,255,255,0.1)'"
+                     onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.05)'">
+                    <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <div style="font-weight: 700; font-size: 1.1rem;">${contact.name}</div>
+                                ${contact.category === 'business' ? '<span style="background: rgba(59,130,246,0.2); color: #3b82f6; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Business</span>' : '<span style="background: rgba(34,197,94,0.2); color: #22c55e; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Privat</span>'}
+                            </div>
+                            ${contact.phone ? `<div class="text-sm" style="margin-bottom: 4px;"><i data-lucide="phone" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.phone}</div>` : ''}
+                            ${contact.email ? `<div class="text-sm" style="margin-bottom: 4px;"><i data-lucide="mail" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.email}</div>` : ''}
+                            ${contact.address ? `<div class="text-sm text-muted"><i data-lucide="map-pin" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.address}</div>` : ''}
+                            
+                            <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;" onclick="event.stopPropagation()">
+                                ${contact.phone ? `<a href="tel:${contact.phone}" style="display:flex; align-items:center; gap:4px; padding:6px 12px; background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.3); border-radius:8px; color:#22c55e; font-size:0.85rem; font-weight:600; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.background='rgba(34,197,94,0.25)'" onmouseout="this.style.background='rgba(34,197,94,0.15)'" title="Anrufen"><i data-lucide="phone" size="14"></i> Anrufen</a>` : ''}
+                                ${contact.email ? `<a href="mailto:${contact.email}" style="display:flex; align-items:center; gap:4px; padding:6px 12px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); border-radius:8px; color:#3b82f6; font-size:0.85rem; font-weight:600; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.background='rgba(59,130,246,0.25)'" onmouseout="this.style.background='rgba(59,130,246,0.15)'" title="E-Mail schreiben"><i data-lucide="mail" size="14"></i> E-Mail</a>` : ''}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px; flex-shrink: 0;" onclick="event.stopPropagation()">
+                            <button onclick="app.contacts.edit(${contact.id})" 
+                                style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #3b82f6; padding: 8px; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+                                onmouseover="this.style.background='rgba(59,130,246,0.2)'" onmouseout="this.style.background='rgba(59,130,246,0.1)'"
+                                title="Bearbeiten">
+                                <i data-lucide="edit-2" size="16"></i>
+                            </button>
+                            <button onclick="app.contacts.delete(${contact.id})" 
+                                style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); padding: 8px; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+                                onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'"
+                                title="Löschen">
+                                <i data-lucide="trash-2" size="16"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             `).join('');
 
