@@ -1614,6 +1614,14 @@ const app = {
         if (this.dashboard) {
             this.dashboard.applyOrder();
             this.dashboard.applyMode(); // Ensure mode visibility is applied
+
+            // RE-INIT CARD RESIZING & LAYOUT (Persistence Fix)
+            if (this.dashboard.initCardResize) {
+                setTimeout(() => {
+                    this.dashboard.initCardResize();
+                    this.dashboard.createTodoShoppingContainer();
+                }, 100);
+            }
         }
         if (window.lucide) lucide.createIcons();
     },
@@ -3494,41 +3502,69 @@ const app = {
                 }
             }
         },
-        processCommand(text) {
+        async processCommand(text) {
             if (this.targetInput) {
                 const el = document.getElementById(this.targetInput);
                 if (el) { el.value = text; el.classList.remove('voice-listening'); }
                 return;
             }
 
-            // Intelligent voice processing
-            const handled = this.intelligentProcess(text);
-            if (handled) return;
+            // Show global processing state
+            const processingToast = app.notifications ? app.notifications.send("🧠 Analysiere...", "Spracheingabe wird verarbeitet", false) : null;
 
-            // Fallback to simple navigation
-            const t = text.toLowerCase();
-            if (t.includes('kalender')) app.navigateTo('calendar');
-            else if (t.includes('aufgabe')) app.navigateTo('tasks');
-            else if (t.includes('fahrt')) app.navigateTo('drive');
-            else if (t.includes('dashboard')) app.navigateTo('dashboard');
-            else if (t.includes('kontakt')) app.navigateTo('contacts');
+            // Intelligent voice processing (Async)
+            const handled = await this.intelligentProcess(text);
+
+            if (!handled) {
+                // Fallback to simple navigation
+                const t = text.toLowerCase();
+                if (t.includes('kalender')) app.navigateTo('calendar');
+                else if (t.includes('aufgabe')) app.navigateTo('tasks');
+                else if (t.includes('fahrt')) app.navigateTo('drive');
+                else if (t.includes('dashboard')) app.navigateTo('dashboard');
+                else if (t.includes('kontakt')) app.navigateTo('contacts');
+                else alert("Konnte den Befehl nicht verstehen: " + text);
+            }
         },
 
-        intelligentProcess(text) {
+        async intelligentProcess(text) {
             const lower = text.toLowerCase();
 
-            // Extract information from speech
+            // 1. Try AI Analysis if configured (Smart Parsing)
+            if (app.state.aiConfig && (app.state.aiConfig.openaiKey || app.state.aiConfig.geminiKey)) {
+                try {
+                    const aiResult = await this.analyzeWithAI(text);
+                    if (aiResult) {
+                        if (aiResult.intent === 'event') {
+                            app.modals.open('addEvent', aiResult);
+                            return true;
+                        } else if (aiResult.intent === 'task' || aiResult.intent === 'shopping') {
+                            app.tasks.add(aiResult.title, false, aiResult.intent);
+                            app.navigateTo('dashboard');
+                            return true;
+                        } else if (aiResult.intent === 'contact') {
+                            app.modals.open('addContact', aiResult);
+                            return true;
+                        } else if (aiResult.intent === 'expense') {
+                            app.finance.add(aiResult.amount || 0, aiResult.title, aiResult.date || new Date().toISOString().split('T')[0], false);
+                            return true;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("AI Voice Analysis failed, falling back to regex", e);
+                }
+            }
+
+            // 2. Fallback to Regex extraction
             const info = this.extractInfo(text);
 
             // Determine intent
             if (this.isContactAction(lower)) {
                 return this.processContactAction(text, lower, info);
             } else if (this.isEventIntent(lower)) {
-                // Open modal to allow review of all extracted details and see the transcript
                 app.modals.open('addEvent', info);
                 return true;
             } else if (this.isExpenseIntent(lower)) {
-                // Direct add if possible
                 if (info.amount && info.title) {
                     app.finance.add(info.amount, info.title, info.date || new Date().toISOString().split('T')[0], false);
                     app.navigateTo('dashboard');
@@ -3538,14 +3574,53 @@ const app = {
                 return true;
             } else if (this.isTaskIntent(lower)) {
                 const category = lower.includes('kaufen') || lower.includes('einkauf') || lower.includes('shop') ? 'shopping' : 'todo';
-                // Tasks are safe to add directly usually
                 app.tasks.add(info.title || text, false, category);
                 app.navigateTo('dashboard');
                 return true;
             }
 
-            // Try smartCommand as fallback
             return app.smartCommand(text);
+        },
+
+        async analyzeWithAI(text) {
+            const config = app.state.aiConfig;
+            let apiKey = config.openaiKey || config.grokKey || config.geminiKey;
+
+            const prompt = `Analysiere diesen Text und erstelle ein JSON Objekt.
+            Text: "${text}"
+            
+            Formate:
+            1. Für Termine: {"intent": "event", "title": "...", "date": "YYYY-MM-DD", "time": "HH:MM", "location": "...", "phone": "...", "description": "...", "category": "business|private"}
+            2. Für Aufgaben: {"intent": "task", "title": "...", "category": "todo|shopping"}
+            3. Für Kontakte: {"intent": "contact", "name": "...", "phone": "...", "email": "...", "address": "...", "category": "business|private"}
+            4. Für Ausgaben: {"intent": "expense", "title": "...", "amount": 0.0, "date": "YYYY-MM-DD"}
+            
+            Antworte NUR mit dem JSON.`;
+
+            let resultJson = null;
+
+            if (config.provider === 'openai') {
+                const res = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                    body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: 'You are a JSON assistant.' }, { role: 'user', content: prompt }] })
+                });
+                const data = await res.json();
+                resultJson = data.choices[0].message.content;
+            } else if (config.provider === 'gemini') {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const data = await res.json();
+                resultJson = data.candidates[0].content.parts[0].text;
+            }
+
+            if (resultJson) {
+                return JSON.parse(resultJson.replace(/```json|```/g, '').trim());
+            }
+            return null;
         },
 
         extractInfo(text) {
@@ -3598,7 +3673,8 @@ const app = {
             }
 
             // Extract location
-            const locationRegex = /(in|straße|platz|weg|allee|dorf|stadt|bahnhof|flughafen)\s+([A-ZÄÖÜ][a-zäöüß\s]+(?:straße|platz|weg|allee|dorf|stadt)?)/i;
+            // Improved Regex to catch "in [Ort]" or "nach [Ort]"
+            const locationRegex = /(in|nach|bei|straße|platz|weg|allee|dorf|stadt|bahnhof|flughafen)\s+([A-ZÄÖÜ][a-zäöüß\s\d\.]+)/i;
             const locationMatch = text.match(locationRegex);
             if (locationMatch) info.location = locationMatch[2].trim();
 
@@ -3608,7 +3684,7 @@ const app = {
             if (info.email) title = title.replace(info.email, '');
             if (info.amount) title = title.replace(/(\d+[,.]?\d*)\s*(euro|€)/i, '');
             if (info.time) title = title.replace(/(\d{1,2}):(\d{2})|um\s+(\d{1,2})\s*(uhr)?/i, '');
-            if (info.location) title = title.replace(new RegExp(`(in|straße|platz|weg|allee|dorf|stadt|bahnhof|flughafen)\\s+${info.location}`, 'i'), '');
+            if (info.location) title = title.replace(new RegExp(`(in|nach|bei|straße|platz|weg|allee|dorf|stadt|bahnhof|flughafen)\\s+${info.location}`, 'i'), '');
 
             // Remove extracted date keywords from title
             if (info.date) {
