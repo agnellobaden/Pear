@@ -37,6 +37,7 @@ const app = {
         try {
             this.loadState();
             this.runMigrations(); // Fix state if needed
+            if (!this.state.archives) this.state.archives = []; // Initialize archives if missing
 
             // Check Login Status & Enforce Protection
             if (!this.state.user.isLoggedIn) {
@@ -110,6 +111,9 @@ const app = {
 
             // Apply Pro status to UI
             this.user.applyProStatus();
+
+            // Auto-archive past events on startup
+            if (this.calendar) this.calendar.archiveOldEvents();
 
             // Create Icons safely
             if (window.lucide) lucide.createIcons();
@@ -456,6 +460,14 @@ const app = {
             if (n) n.textContent = app.state.user.name || 'Gast';
             const ava = document.getElementById('headerUserAvatar');
             if (ava && app.state.user.name) ava.innerHTML = `<img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${app.state.user.name}" alt="User">`;
+
+            // Update Sidebar Team Info (Team Key next to Logo)
+            const teamLabel = document.getElementById('sidebarTeamKeyLabel');
+            if (teamLabel) {
+                // Show Team Name (Sync Key) or "Solo"
+                const teamName = app.state.user.teamName || 'Solo';
+                teamLabel.textContent = teamName;
+            }
         },
         upgradeToPro() {
             app.state.user.isPro = true;
@@ -611,14 +623,15 @@ const app = {
         currentFilter: 'shopping',
         toggleUrgency(id) { const t = app.state.tasks.find(x => x.id === id); if (t) { t.urgent = !t.urgent; app.saveState(); this.render(); app.renderDashboard(); } },
         toggle(id) { const t = app.state.tasks.find(x => x.id === id); if (t) { t.done = !t.done; app.saveState(); this.render(); app.renderDashboard(); if (t.done) app.gamification.addXP(50); } },
-        delete(id) {
-            if (confirm("Artikel löschen?")) {
-                const t = app.state.tasks.find(x => x.id === id);
-                if (t) {
-                    if (!app.state.archives) app.state.archives = [];
-                    app.state.archives.push({ ...t, archivedAt: new Date().toISOString(), type: 'shopping' });
-                }
+        async delete(id) {
+            const t = app.state.tasks.find(x => x.id === id);
+            if (t) {
+                if (!app.state.archives) app.state.archives = [];
+                // Archive with specific type
+                app.state.archives.push({ ...t, archivedAt: new Date().toISOString(), type: 'shopping_deleted' });
+
                 app.state.tasks = app.state.tasks.filter(x => x.id !== id);
+                await app.cloud.sync();
                 app.saveState();
                 this.render();
                 app.renderDashboard();
@@ -627,40 +640,50 @@ const app = {
         filter(t) { this.currentFilter = t; this.render(); },
         render() {
             const l = document.getElementById('shoppingListContainer'); if (!l) return;
-            let f = app.state.tasks.filter(t => t.category === 'shopping' && !t.done);
+            // SHOW ALL items (do not filter !t.done), only filter by category
+            let f = app.state.tasks.filter(t => t.category === 'shopping');
 
-            // Additional Filter
+            // Additional Filter (Urgent)
             if (this.currentFilter === 'urgent') {
                 f = f.filter(t => t.urgent);
             }
 
-            f.sort((a, b) => (a.urgent === b.urgent) ? 0 : a.urgent ? -1 : 1);
+            // Sort: Urgent first, then Done last
+            f.sort((a, b) => {
+                if (a.done !== b.done) return a.done ? 1 : -1; // Done at bottom
+                if (a.urgent !== b.urgent) return a.urgent ? -1 : 1; // Urgent at top
+                return 0;
+            });
 
             if (f.length === 0) {
                 l.innerHTML = '<div class="text-muted text-sm" style="text-align:center; padding:40px 20px; background:rgba(255,255,255,0.02); border-radius:16px; border:1px dashed rgba(255,255,255,0.05);">Keine Einträge.</div>';
             } else {
                 l.innerHTML = `<div style="display:flex; flex-direction:column; gap:8px; background:rgba(0,0,0,0.2); padding:10px; border-radius:16px; border:1px solid rgba(255,255,255,0.05);">
                     ${f.map(t => `
-                    <div class="task-item" style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:rgba(34, 197, 94, 0.08); border-radius:12px; border:1px solid rgba(34, 197, 94, 0.2); transition:all 0.2s; ${t.urgent ? 'border-color:rgba(239, 68, 68, 0.5); background:rgba(239, 68, 68, 0.1);' : ''}">
-                        <div class="checkbox-circle" onclick="app.shopping.toggle(${t.id})" style="flex-shrink:0; cursor:pointer;"></div>
+                    <div class="task-item" style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:${t.done ? 'rgba(255,255,255,0.02)' : 'rgba(34, 197, 94, 0.08)'}; border-radius:12px; border:1px solid ${t.done ? 'rgba(255,255,255,0.05)' : 'rgba(34, 197, 94, 0.2)'}; transition:all 0.2s; ${t.urgent && !t.done ? 'border-color:rgba(239, 68, 68, 0.5); background:rgba(239, 68, 68, 0.1);' : ''} ${t.done ? 'opacity:0.6;' : ''}">
+                        <div class="checkbox-circle" onclick="app.shopping.toggle(${t.id})" style="flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; background:${t.done ? 'var(--success)' : 'rgba(255,255,255,0.1)'}; border-color:${t.done ? 'var(--success)' : 'rgba(255,255,255,0.3)'};">
+                            ${t.done ? '<i data-lucide="check" size="14" style="color:white;"></i>' : ''}
+                        </div>
                         
                         <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
                             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                <span style="font-weight:600; color:white; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                <span style="font-weight:600; color:white; flex:1; overflow:hidden; white-space:normal; word-break:break-word; padding-right:4px; ${t.done ? 'text-decoration:line-through; color:var(--text-muted);' : ''}">
                                     ${t.title}
                                 </span>
-                                ${t.urgent ? `<span style="display:inline-block; padding:2px 8px; background:rgba(239, 68, 68, 0.3); color:#ff6b6b; border-radius:6px; font-size:0.65rem; font-weight:700;">🔥 Dringend</span>` : ''}
+                                ${t.urgent && !t.done ? `<span style="display:inline-block; padding:2px 8px; background:rgba(239, 68, 68, 0.3); color:#ff6b6b; border-radius:6px; font-size:0.65rem; font-weight:700;">🔥 Dringend</span>` : ''}
                                 ${t.isShared ? `<span class="badge-${t.type || 'team'}" style="font-size:0.65rem;">${t.type === 'team' ? 'Team' : (t.type === 'public' ? 'Öffentlich' : 'Geteilt')}</span>` : ''}
                             </div>
                         </div>
 
-                        <button class="btn" onclick="event.stopPropagation(); app.shopping.toggleUrgency(${t.id}); app.shopping.render();" title="Dringend" style="flex-shrink:0; background:${t.urgent ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.05)'}; border:1px solid ${t.urgent ? 'rgba(239, 68, 68, 0.6)' : 'rgba(255,255,255,0.1)'}; color:${t.urgent ? '#ff6b6b' : 'var(--text-muted)'}; width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                            <i data-lucide="flame" size="16"></i>
-                        </button>
+                        <div style="flex-shrink:0; display:flex; gap:6px; margin-left:auto; opacity:1;">
+                            <button onclick="event.stopPropagation(); app.shopping.toggleUrgency(${t.id}); app.shopping.render();" title="Dringend" style="flex-shrink:0; background:${t.urgent ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.08)'}; border:1px solid ${t.urgent ? 'rgba(239, 68, 68, 0.6)' : 'rgba(255,255,255,0.2)'}; color:${t.urgent ? '#ff6b6b' : 'white'}; width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;">
+                                <i data-lucide="flame" size="16"></i>
+                            </button>
 
-                        <button class="btn" onclick="app.shopping.delete(${t.id})" title="Löschen" style="flex-shrink:0; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-muted); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                            <i data-lucide="trash-2" size="16"></i>
-                        </button>
+                            <button onclick="app.shopping.delete(${t.id})" title="Löschen" style="flex-shrink:0; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.3); color:#fca5a5; width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;">
+                                <i data-lucide="trash-2" size="16"></i>
+                            </button>
+                        </div>
                     </div>`).join('')}
                 </div>`;
             }
@@ -1015,34 +1038,40 @@ const app = {
         },
         archiveOldEvents() {
             const now = new Date();
-            // Archive all events that are in the past (started)
-            const toArchive = app.state.events.filter(e => new Date(e.start) < now);
+            // User requested ALL past events -> Buffer reduced to 0 or even negative to be strict?
+            // "Vergangen" means end time is passed. If we don't track duration, assumes start time.
+            // Let's set it to 60 Minutes (1 hour) to be safe for running meetings, or 0 if they want it GONE.
+            // User request: "alle vergangen termine" -> Let's use 30 minutes past start as a compromise for "finished" short meetings.
+            const archiveThreshold = new Date(now.getTime() - (30 * 60 * 1000)); // 30 Minutes ago
+
+            // Archive all events that started MORE than 30 mins ago
+            const toArchive = app.state.events.filter(e => new Date(e.start) < archiveThreshold);
 
             if (toArchive.length > 0) {
                 if (!app.state.archives) app.state.archives = [];
-                app.state.archives.push(...toArchive.map(e => ({ ...e, archivedAt: now.toISOString(), type: 'event' })));
+                // Ensure we don't duplicate if for some reason they exist (unlikely with filter)
+                app.state.archives.push(...toArchive.map(e => ({ ...e, archivedAt: now.toISOString(), type: 'event_expired' })));
 
-                // Keep only future events
-                app.state.events = app.state.events.filter(e => new Date(e.start) >= now);
+                // Keep events that are NEWER
+                app.state.events = app.state.events.filter(e => new Date(e.start) >= archiveThreshold);
 
                 app.saveState();
                 console.log(`Archived ${toArchive.length} old events`);
                 this.render();
-                app.renderDashboard();
+                // app.renderDashboard() called recursively? No, this is inside calendar.
+                // But avoid infinite loop if called from Dashboard. 
             }
         },
         deleteEvent(id) {
-            if (confirm("Termin wirklich löschen?")) {
-                const e = app.state.events.find(x => x.id === id);
-                if (e) {
-                    if (!app.state.archives) app.state.archives = [];
-                    app.state.archives.push({ ...e, archivedAt: new Date().toISOString(), type: 'event_deleted' });
-                }
-                app.state.events = app.state.events.filter(e => e.id !== id);
-                app.saveState();
-                this.render();
-                app.renderDashboard();
+            const e = app.state.events.find(x => x.id === id);
+            if (e) {
+                if (!app.state.archives) app.state.archives = [];
+                app.state.archives.push({ ...e, archivedAt: new Date().toISOString(), type: 'event_deleted' });
             }
+            app.state.events = app.state.events.filter(e => e.id !== id);
+            app.saveState();
+            this.render();
+            app.renderDashboard();
         },
         render() {
             const grid = document.getElementById('calendarGrid');
@@ -1077,9 +1106,16 @@ const app = {
                     cell.classList.add('today');
                 }
 
-                // Find events for this day (including archives)
-                const allPossibleEvents = [...app.state.events, ...(app.state.archives || [])];
-                let dayEvents = allPossibleEvents.filter(e => {
+                // Find events for this day (EXCLUDING archives/expired)
+                const allEvents = app.state.events.filter(e => {
+                    // Filter out events that are technically expired but still in the events array for some reason
+                    // or ensure we only show active events.
+                    // The main filter is relying on archiveOldEvents() to move them out.
+                    // But let's be safe: don't show if it's already in archive (shouldn't happen if moved) or explicitly expired.
+                    return true;
+                });
+
+                let dayEvents = allEvents.filter(e => {
                     const eventDate = new Date(e.start);
                     return eventDate.getDate() === d && eventDate.getMonth() === m && eventDate.getFullYear() === y;
                 });
@@ -1118,12 +1154,51 @@ const app = {
                 grid.appendChild(cell);
             }
 
+            // --- Render Calendar List Below Grid ---
+            const listContainer = document.getElementById('calendarEventsList');
+            if (listContainer) {
+                const monthEvents = app.state.events.filter(e => {
+                    const d = new Date(e.start);
+                    return d.getMonth() === m && d.getFullYear() === y && e.type !== 'event_expired';
+                });
+
+                monthEvents.sort((a, b) => new Date(a.start) - new Date(b.start));
+
+                if (monthEvents.length === 0) {
+                    listContainer.innerHTML = '<div class="text-muted text-sm text-center" style="padding:20px;">Keine Termine in diesem Monat.</div>';
+                } else {
+                    listContainer.innerHTML = monthEvents.map(e => {
+                        const start = new Date(e.start);
+                        const day = start.getDate();
+                        const time = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                        const isPast = start < new Date();
+
+                        return `
+                        <div style="display:flex; align-items:center; gap:12px; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; border-left:3px solid ${e.category === 'business' ? '#22c55e' : '#a78bfa'}; ${isPast ? 'opacity:0.6;' : ''}; cursor:pointer;" onclick="app.calendar.editEvent(${e.id})">
+                            <div style="display:flex; flex-direction:column; align-items:center; min-width:40px;">
+                                <span style="font-weight:700; font-size:1.1rem;">${day}.</span>
+                                <span style="font-size:0.75rem; color:var(--text-muted);">${start.toLocaleDateString('de-DE', { weekday: 'short' })}</span>
+                            </div>
+                            <div style="flex:1;">
+                                <div style="font-weight:600;">${e.title}</div>
+                                <div style="font-size:0.8rem; color:var(--text-muted); display:flex; gap:10px;">
+                                    <span><i data-lucide="clock" size="12" style="vertical-align:middle"></i> ${time}</span>
+                                    ${e.location ? `<span><i data-lucide="map-pin" size="12" style="vertical-align:middle"></i> ${e.location}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        `;
+                    }).join('');
+                }
+            }
+
             this.checkUrgency();
             if (window.lucide) lucide.createIcons();
         }
     },
 
     // --- DASHBOARD & HELPERS ---
+
     renderDashboard() {
         // Archive old events before rendering
         if (this.calendar && this.calendar.archiveOldEvents) {
@@ -2611,16 +2686,19 @@ const app = {
             app.renderDashboard();
         },
         toggle(id) { const t = app.state.tasks.find(x => x.id === id); if (t) { t.done = !t.done; app.saveState(); this.render(); app.renderDashboard(); if (t.done) app.gamification.addXP(50); } },
-        delete(id) {
+        async delete(id) {
             const t = app.state.tasks.find(x => x.id === id);
             if (t) {
                 if (!app.state.archives) app.state.archives = [];
-                app.state.archives.push({ ...t, archivedAt: new Date().toISOString(), type: 'task' });
+                // Archive with specific type
+                app.state.archives.push({ ...t, archivedAt: new Date().toISOString(), type: 'task_deleted' });
+
+                app.state.tasks = app.state.tasks.filter(x => x.id !== id);
+                await app.cloud.sync();
+                app.saveState();
+                this.render();
+                app.renderDashboard();
             }
-            app.state.tasks = app.state.tasks.filter(x => x.id !== id);
-            app.saveState();
-            this.render();
-            app.renderDashboard();
         },
         filter(t) { this.currentFilter = t; this.render(); }, currentFilter: 'todo',
         render() {
@@ -2628,38 +2706,36 @@ const app = {
 
             let f = app.state.tasks.filter(t => t.category !== 'shopping');
 
-            // Strict Tasks Logic (No Shopping)
-            if (this.currentFilter === 'urgent') {
-                f = f.filter(t => t.urgent && !t.done);
-            } else if (this.currentFilter === 'done') {
-                f = f.filter(t => t.done);
-            } else {
-                // Default 'todo' - Show only undone
-                f = f.filter(t => !t.done);
-            }
-
-            // Sort: Urgent > Pending
-            f.sort((a, b) => (a.urgent === b.urgent) ? 0 : a.urgent ? -1 : 1);
+            // Sort: Urgent > Pending > Done
+            f.sort((a, b) => {
+                if (a.done !== b.done) return a.done ? 1 : -1; // Done at bottom
+                if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+                return 0;
+            });
 
             if (f.length === 0) {
                 l.innerHTML = '<div class="text-muted text-sm" style="text-align:center; padding:40px 20px;">Keine Aufgaben.</div>';
             } else {
                 l.innerHTML = `<div style="display:flex; flex-direction:column; gap:8px;">
                     ${f.map(t => `
-                    <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:rgba(255,255,255,0.03); border-radius:12px; border:1px solid rgba(255,255,255,0.08);">
-                        <div class="checkbox-circle" onclick="app.tasks.toggle(${t.id})" style="flex-shrink:0; cursor:pointer;"></div>
+                    <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:${t.done ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.03)'}; border-radius:12px; border:1px solid ${t.done ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.08)'}; ${t.done ? 'opacity:0.6;' : ''}">
+                        <div class="checkbox-circle" onclick="app.tasks.toggle(${t.id})" style="flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; background:${t.done ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}; border-color:${t.done ? 'var(--primary)' : 'rgba(255,255,255,0.3)'};">
+                             ${t.done ? '<i data-lucide="check" size="14" style="color:white;"></i>' : ''}
+                        </div>
                         
-                        <span style="font-weight:500; color:white; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        <span style="font-weight:500; color:white; flex:1; overflow:hidden; white-space:normal; word-break:break-word; padding-right:4px; ${t.done ? 'text-decoration:line-through; color:var(--text-muted);' : ''}">
                             ${t.title}
                         </span>
 
-                        <button class="btn" onclick="event.stopPropagation(); app.tasks.toggleUrgency(${t.id}); app.tasks.render();" title="Dringend" style="flex-shrink:0; background:${t.urgent ? 'rgba(239, 68, 68, 0.3)' : 'rgba(255,255,255,0.05)'}; border:1px solid ${t.urgent ? 'rgba(239, 68, 68, 0.5)' : 'rgba(255,255,255,0.1)'}; color:${t.urgent ? '#ff6b6b' : 'var(--text-muted)'}; width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                            <i data-lucide="flame" size="16"></i>
-                        </button>
+                        <div style="flex-shrink:0; display:flex; gap:6px; margin-left:auto; opacity:1;">
+                            <button onclick="event.stopPropagation(); app.tasks.toggleUrgency(${t.id}); app.tasks.render();" title="Dringend" style="flex-shrink:0; background:${t.urgent ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.08)'}; border:1px solid ${t.urgent ? 'rgba(239, 68, 68, 0.6)' : 'rgba(255,255,255,0.2)'}; color:${t.urgent ? '#ff6b6b' : 'white'}; width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;">
+                                <i data-lucide="flame" size="16"></i>
+                            </button>
 
-                        <button class="btn" onclick="app.tasks.delete(${t.id})" title="Löschen" style="flex-shrink:0; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-muted); width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                            <i data-lucide="trash-2" size="16"></i>
-                        </button>
+                            <button onclick="app.tasks.delete(${t.id})" title="Löschen" style="flex-shrink:0; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.3); color:#fca5a5; width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;">
+                                <i data-lucide="trash-2" size="16"></i>
+                            </button>
+                        </div>
                     </div>`).join('')}
                 </div>`;
             }
@@ -7029,6 +7105,18 @@ const app = {
     contacts: {
         currentFilter: 'all',
         widgetFilter: 'all',
+        viewMode: 'table',
+
+        toggleViewMode() {
+            this.viewMode = this.viewMode === 'table' ? 'card' : 'table';
+            const icon = document.getElementById('contactsViewToggleIcon');
+            if (icon) {
+                // Update icon
+                icon.setAttribute('data-lucide', this.viewMode === 'table' ? 'layout-grid' : 'table');
+            }
+            this.render();
+            if (window.lucide) lucide.createIcons();
+        },
 
         filterContactsWidget(category) {
             this.widgetFilter = category;
@@ -7242,45 +7330,164 @@ const app = {
             // Sort alphabetically
             contacts.sort((a, b) => a.name.localeCompare(b.name));
 
-            container.innerHTML = contacts.map(contact => `
-                <div style="padding: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: all 0.2s;" 
-                     onclick="app.contacts.edit(${contact.id})"
-                     onmouseover="this.style.background='rgba(255,255,255,0.06)'; this.style.borderColor='rgba(255,255,255,0.1)'"
-                     onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.05)'">
-                    <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">
-                        <div style="flex: 1;">
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                <div style="font-weight: 700; font-size: 1.1rem;">${contact.name}</div>
-                                ${contact.category === 'business' ? '<span style="background: rgba(59,130,246,0.2); color: #3b82f6; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Business</span>' : '<span style="background: rgba(34,197,94,0.2); color: #22c55e; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Privat</span>'}
+            // Render Logic (Card vs Table)
+            const iconEl = document.getElementById('contactsViewToggleIcon');
+            if (iconEl) iconEl.setAttribute('data-lucide', this.viewMode === 'table' ? 'layout-grid' : 'table');
+
+            if (this.viewMode === 'table') {
+                // Table View
+                const isMobile = window.innerWidth < 768; // Simple check
+
+                container.innerHTML = `
+                <div style="overflow-x:auto;">
+                    <table style="width:100%; border-collapse:collapse; min-width:${isMobile ? '100%' : '600px'};">
+                        <thead>
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.1); text-align:left;">
+                                <th style="padding:10px; color:var(--text-muted); font-size:0.85rem;">Name</th>
+                                ${!isMobile ? `
+                                <th style="padding:10px; color:var(--text-muted); font-size:0.85rem;">Telefon</th>
+                                <th style="padding:10px; color:var(--text-muted); font-size:0.85rem;">Email</th>
+                                <th style="padding:10px; color:var(--text-muted); font-size:0.85rem;">Kategorie</th>
+                                ` : ''}
+                                <th style="padding:10px; color:var(--text-muted); font-size:0.85rem; text-align:right;">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${contacts.map(c => `
+                                <tr style="border-bottom:1px solid rgba(255,255,255,0.03); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                                    <td style="padding:12px 10px; font-weight:600;">
+                                        ${c.name}
+                                        ${isMobile ? `
+                                            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px; display:flex; gap:6px;">
+                                                ${c.phone ? `<a href="tel:${c.phone}" style="color:var(--text-muted);"><i data-lucide="phone" size="12"></i></a>` : ''}
+                                                ${c.email ? `<a href="mailto:${c.email}" style="color:var(--text-muted);"><i data-lucide="mail" size="12"></i></a>` : ''}
+                                                ${c.category === 'business' ? '<span style="color:#3b82f6;">(Bus)</span>' : ''}
+                                            </div>
+                                        ` : ''}
+                                    </td>
+                                    ${!isMobile ? `
+                                    <td style="padding:12px 10px;">${c.phone ? `<a href="tel:${c.phone}" style="color:var(--text-secondary); text-decoration:none;">${c.phone}</a>` : '<span class="text-muted">-</span>'}</td>
+                                    <td style="padding:12px 10px;">${c.email ? `<a href="mailto:${c.email}" style="color:var(--text-secondary); text-decoration:none;">${c.email}</a>` : '<span class="text-muted">-</span>'}</td>
+                                    <td style="padding:12px 10px;">
+                                        ${c.category === 'business'
+                            ? '<span style="background:rgba(59,130,246,0.15); color:#3b82f6; padding:2px 8px; border-radius:10px; font-size:0.75rem;">Business</span>'
+                            : '<span style="background:rgba(34,197,94,0.15); color:#22c55e; padding:2px 8px; border-radius:10px; font-size:0.75rem;">Privat</span>'}
+                                    </td>
+                                    ` : ''}
+                                    <td style="padding:12px 10px; text-align:right;">
+                                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                                            <button onclick="app.contacts.edit(${c.id})" class="btn-small"><i data-lucide="edit-2" size="14"></i></button>
+                                            <button onclick="app.contacts.delete(${c.id})" class="btn-small" style="color:var(--danger); border-color:var(--danger);"><i data-lucide="trash-2" size="14"></i></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                `;
+            } else {
+                // Card View (Original)
+                container.innerHTML = contacts.map(contact => `
+                    <div style="padding: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: all 0.2s;" 
+                        onclick="app.contacts.edit(${contact.id})"
+                        onmouseover="this.style.background='rgba(255,255,255,0.06)'; this.style.borderColor='rgba(255,255,255,0.1)'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.05)'">
+                        <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <div style="font-weight: 700; font-size: 1.1rem;">${contact.name}</div>
+                                    ${contact.category === 'business' ? '<span style="background: rgba(59,130,246,0.2); color: #3b82f6; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Business</span>' : '<span style="background: rgba(34,197,94,0.2); color: #22c55e; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">Privat</span>'}
+                                </div>
+                                ${contact.phone ? `<div class="text-sm" style="margin-bottom: 4px;"><i data-lucide="phone" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.phone}</div>` : ''}
+                                ${contact.email ? `<div class="text-sm" style="margin-bottom: 4px;"><i data-lucide="mail" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.email}</div>` : ''}
+                                ${contact.address ? `<div class="text-sm text-muted"><i data-lucide="map-pin" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.address}</div>` : ''}
+                                
+                                <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;" onclick="event.stopPropagation()">
+                                    ${contact.phone ? `<a href="tel:${contact.phone}" style="display:flex; align-items:center; gap:4px; padding:6px 12px; background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.3); border-radius:8px; color:#22c55e; font-size:0.85rem; font-weight:600; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.background='rgba(34,197,94,0.25)'" onmouseout="this.style.background='rgba(34,197,94,0.15)'" title="Anrufen"><i data-lucide="phone" size="14"></i> Anrufen</a>` : ''}
+                                    ${contact.email ? `<a href="mailto:${contact.email}" style="display:flex; align-items:center; gap:4px; padding:6px 12px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); border-radius:8px; color:#3b82f6; font-size:0.85rem; font-weight:600; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.background='rgba(59,130,246,0.25)'" onmouseout="this.style.background='rgba(59,130,246,0.15)'" title="E-Mail schreiben"><i data-lucide="mail" size="14"></i> E-Mail</a>` : ''}
+                                </div>
                             </div>
-                            ${contact.phone ? `<div class="text-sm" style="margin-bottom: 4px;"><i data-lucide="phone" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.phone}</div>` : ''}
-                            ${contact.email ? `<div class="text-sm" style="margin-bottom: 4px;"><i data-lucide="mail" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.email}</div>` : ''}
-                            ${contact.address ? `<div class="text-sm text-muted"><i data-lucide="map-pin" size="12" style="display: inline; opacity: 0.6;"></i> ${contact.address}</div>` : ''}
-                            
-                            <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;" onclick="event.stopPropagation()">
-                                ${contact.phone ? `<a href="tel:${contact.phone}" style="display:flex; align-items:center; gap:4px; padding:6px 12px; background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.3); border-radius:8px; color:#22c55e; font-size:0.85rem; font-weight:600; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.background='rgba(34,197,94,0.25)'" onmouseout="this.style.background='rgba(34,197,94,0.15)'" title="Anrufen"><i data-lucide="phone" size="14"></i> Anrufen</a>` : ''}
-                                ${contact.email ? `<a href="mailto:${contact.email}" style="display:flex; align-items:center; gap:4px; padding:6px 12px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); border-radius:8px; color:#3b82f6; font-size:0.85rem; font-weight:600; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.background='rgba(59,130,246,0.25)'" onmouseout="this.style.background='rgba(59,130,246,0.15)'" title="E-Mail schreiben"><i data-lucide="mail" size="14"></i> E-Mail</a>` : ''}
+                            <div style="display: flex; gap: 6px; flex-shrink: 0;" onclick="event.stopPropagation()">
+                                <button onclick="app.contacts.edit(${contact.id})" 
+                                    style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #3b82f6; padding: 8px; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+                                    title="Bearbeiten">
+                                    <i data-lucide="edit-2" size="16"></i>
+                                </button>
+                                <button onclick="app.contacts.delete(${contact.id})" 
+                                    style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); padding: 8px; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+                                    title="Löschen">
+                                    <i data-lucide="trash-2" size="16"></i>
+                                </button>
                             </div>
                         </div>
-                        <div style="display: flex; gap: 6px; flex-shrink: 0;" onclick="event.stopPropagation()">
-                            <button onclick="app.contacts.edit(${contact.id})" 
-                                style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #3b82f6; padding: 8px; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
-                                onmouseover="this.style.background='rgba(59,130,246,0.2)'" onmouseout="this.style.background='rgba(59,130,246,0.1)'"
-                                title="Bearbeiten">
-                                <i data-lucide="edit-2" size="16"></i>
-                            </button>
-                            <button onclick="app.contacts.delete(${contact.id})" 
-                                style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); padding: 8px; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
-                                onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'"
-                                title="Löschen">
-                                <i data-lucide="trash-2" size="16"></i>
-                            </button>
+                    </div>
+                `).join('');
+            }
+
+            if (window.lucide) lucide.createIcons();
+        }
+    },
+
+    // --- ARCHIVE MODULE ---
+    archive: {
+        render() {
+            const container = document.getElementById('archiveListContainer');
+            if (!container) return;
+
+            const archives = app.state.archives || [];
+
+            if (archives.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding:40px 20px; color:var(--text-muted);">
+                        <i data-lucide="archive" size="48" style="opacity:0.2; margin-bottom:10px;"></i>
+                        <div>Das Archiv ist leer.</div>
+                    </div>
+                `;
+                if (window.lucide) lucide.createIcons();
+                return;
+            }
+
+            // Descending Date
+            archives.sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
+
+            container.innerHTML = archives.map(item => {
+                let icon = 'archive';
+                let color = 'var(--text-muted)';
+                let typeLabel = 'Eintrag';
+
+                if (item.type === 'event_expired') { icon = 'calendar-clock'; color = '#8b5cf6'; typeLabel = 'Termin (Abgelaufen)'; }
+                if (item.type === 'event_deleted') { icon = 'calendar-x'; color = 'var(--danger)'; typeLabel = 'Termin (Gelöscht)'; }
+                if (item.type === 'task_deleted') { icon = 'check-square'; color = 'var(--primary)'; typeLabel = 'Aufgabe (Gelöscht)'; }
+                if (item.type === 'shopping_deleted') { icon = 'shopping-cart'; color = 'var(--success)'; typeLabel = 'Einkauf (Gelöscht)'; }
+
+                return `
+                <div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:10px; border:1px solid rgba(255,255,255,0.05); display:flex; gap:12px;">
+                    <div style="margin-top:2px;">
+                        <i data-lucide="${icon}" size="16" style="color:${color};"></i>
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-weight:600; font-size:0.9rem; color:var(--text-secondary); margin-bottom:2px;">${item.title || item.name || 'Unbenannt'}</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); display:flex; flex-direction:column; gap:2px;">
+                            <div style="display:flex; justify-content:space-between;">
+                                <span>${typeLabel}</span>
+                                <span>${new Date(item.archivedAt).toLocaleString('de-DE')}</span>
+                            </div>
+                            ${item.location ? `<div style="color:var(--text-muted); display:flex; gap:4px; align-items:center; margin-top:4px;"><i data-lucide="map-pin" size="12"></i> ${item.location} (Steuer-relevant)</div>` : ''}
                         </div>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
 
             if (window.lucide) lucide.createIcons();
+        },
+        clearAll() {
+            if (confirm('Wirklich das gesamte Archiv endgültig löschen?')) {
+                app.state.archives = [];
+                app.saveState();
+                this.render();
+            }
         }
     }
 };
