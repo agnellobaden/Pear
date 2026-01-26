@@ -31,12 +31,40 @@ const app = {
     wakeLock: null,
     isSidebarOpen: false,
 
+    // --- UTILS ---
+    utils: {
+        fixEncoding(str) {
+            if (!str || typeof str !== 'string') return str;
+            return str
+                .replace(/Ã¤/g, 'ä').replace(/Ã¶/g, 'ö').replace(/Ã¼/g, 'ü').replace(/ÃŸ/g, 'ß')
+                .replace(/Ã„/g, 'Ä').replace(/Ã–/g, 'Ö').replace(/Ãœ/g, 'Ü')
+                .replace(/â‚¬/g, '€').replace(/â€“/g, '–').replace(/â€¦/g, '…')
+                .replace(/Ã /g, 'à').replace(/Ã¡/g, 'á').replace(/Ã¢/g, 'â').replace(/Ã£/g, 'ã')
+                .replace(/Ã¨/g, 'è').replace(/Ã©/g, 'é').replace(/Ãª/g, 'ê').replace(/Ã«/g, 'ë')
+                .replace(/Ã¬/g, 'ì').replace(/Ã/g, 'í').replace(/Ã®/g, 'î').replace(/Ã¯/g, 'ï')
+                .replace(/Ã±/g, 'ñ').replace(/Ã²/g, 'ò').replace(/Ã³/g, 'ó').replace(/Ã´/g, 'ô').replace(/Ãµ/g, 'õ')
+                .replace(/Ã¹/g, 'ù').replace(/Ãº/g, 'ú').replace(/Ã»/g, 'û').replace(/Ã½/g, 'ý')
+                .replace(/âœ…/g, '✅').replace(/âœ¨/g, '✨').replace(/ðŸš€/g, '🚀').replace(/ðŸ”’/g, '🔒')
+                .replace(/ðŸ‘‘/g, '👑').replace(/ðŸ”¥/g, '🔥').replace(/ðŸ›’/g, '🛒').replace(/ðŸ”🔴/g, '🔴')
+                .replace(/ðŸŸ🟢/g, '🟢').replace(/â¬†ï¸/g, '⬆️').replace(/âš¡/g, '⚡').replace(/â Œ/g, '❌')
+                .replace(/ðŸ“/g, '📍').replace(/ðŸ””/g, '🔔').replace(/📍…/g, '📍').replace(/â€¢/g, '•');
+        }
+    },
+
     // --- CORE INITIALIZATION ---
     init() {
         console.log("TaskForce Initializing...");
         try {
             this.loadState();
             this.runMigrations(); // Fix state if needed
+
+            // Register Service Worker for Notifications
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW Registered', reg))
+                    .catch(err => console.error('SW Registration Failed', err));
+            }
+
             if (!this.state.archives) this.state.archives = []; // Initialize archives if missing
 
             // Check Login Status & Enforce Protection
@@ -113,7 +141,9 @@ const app = {
             this.setupBackButton();
 
             // Background & Alert Setup
-            this.notifications.requestPermission();
+            if (this.notifications && this.notifications.requestPermission) {
+                this.notifications.requestPermission();
+            }
             this.requestWakeLock();
 
             // Apply Pro status to UI
@@ -121,6 +151,11 @@ const app = {
 
             // Auto-archive past events on startup
             if (this.calendar) this.calendar.archiveOldEvents();
+
+            // Start notification reminder checks
+            if (this.notifications && this.notifications.startReminderCheck) {
+                this.notifications.startReminderCheck();
+            }
 
             // Create Icons safely
             if (window.lucide) lucide.createIcons();
@@ -163,12 +198,49 @@ const app = {
                 const parsed = JSON.parse(s);
                 // Deep merge or fallback to avoid nulls
                 this.state = { ...this.state, ...parsed };
+
+                // Clean all stored data from encoding issues
+                this.cleanStoredData();
             }
         } catch (e) {
             console.error("State Load Error", e);
             // If error, we keep default state
         }
     },
+
+    cleanStoredData() {
+        // Helper function to recursively clean all string values in an object/array
+        const cleanValue = (val) => {
+            if (typeof val === 'string') {
+                return this.utils.fixEncoding(val);
+            } else if (Array.isArray(val)) {
+                return val.map(item => cleanValue(item));
+            } else if (val && typeof val === 'object') {
+                const cleaned = {};
+                for (const key in val) {
+                    cleaned[key] = cleanValue(val[key]);
+                }
+                return cleaned;
+            }
+            return val;
+        };
+
+        // Clean all data arrays
+        if (this.state.events) this.state.events = cleanValue(this.state.events);
+        if (this.state.tasks) this.state.tasks = cleanValue(this.state.tasks);
+        if (this.state.contacts) this.state.contacts = cleanValue(this.state.contacts);
+        if (this.state.expenses) this.state.expenses = cleanValue(this.state.expenses);
+        if (this.state.habits) this.state.habits = cleanValue(this.state.habits);
+        if (this.state.alarms) this.state.alarms = cleanValue(this.state.alarms);
+        if (this.state.projects) this.state.projects = cleanValue(this.state.projects);
+        if (this.state.meetings) this.state.meetings = cleanValue(this.state.meetings);
+        if (this.state.archives) this.state.archives = cleanValue(this.state.archives);
+        if (this.state.user) this.state.user = cleanValue(this.state.user);
+
+        // Save cleaned state
+        this.saveState(true); // true = skip sync to avoid infinite loop
+    },
+
 
     runMigrations() {
         // Ensure critical objects exist
@@ -640,6 +712,119 @@ const app = {
                 }
             }
             if (window.lucide) lucide.createIcons();
+        }
+    },
+
+    // --- NOTIFICATIONS MODULE ---
+    notifications: {
+        permission: 'default',
+
+        async requestPermission() {
+            if (!('Notification' in window)) {
+                console.warn('Benachrichtigungen werden von diesem Browser nicht unterstützt');
+                return false;
+            }
+
+            if (Notification.permission === 'granted') {
+                this.permission = 'granted';
+                return true;
+            }
+
+            if (Notification.permission !== 'denied') {
+                const permission = await Notification.requestPermission();
+                this.permission = permission;
+                return permission === 'granted';
+            }
+
+            return false;
+        },
+
+        async show(title, options = {}) {
+            // Ensure permission is granted
+            if (Notification.permission !== 'granted') {
+                await this.requestPermission();
+            }
+
+            if (Notification.permission === 'granted') {
+                // Fix encoding for title and body
+                const fixedTitle = app.utils.fixEncoding(title);
+                const fixedOptions = { ...options };
+                if (fixedOptions.body) {
+                    fixedOptions.body = app.utils.fixEncoding(fixedOptions.body);
+                }
+
+                const notification = new Notification(fixedTitle, {
+                    icon: './icon.png',
+                    badge: './icon.png',
+                    vibrate: [200, 100, 200],
+                    ...fixedOptions
+                });
+
+                // Auto-close after 10 seconds
+                setTimeout(() => notification.close(), 10000);
+
+                return notification;
+            }
+
+            return null;
+        },
+
+        // Show notification for upcoming event
+        notifyEvent(event) {
+            const title = app.utils.fixEncoding(event.title);
+            const time = event.time || 'bald';
+            const location = event.location ? ` bei ${app.utils.fixEncoding(event.location)}` : '';
+
+            this.show(`Termin: ${title}`, {
+                body: `Um ${time} Uhr${location}`,
+                tag: `event-${event.id}`,
+                requireInteraction: true
+            });
+        },
+
+        // Show notification for habit reminder
+        notifyHabit(habit) {
+            const name = app.utils.fixEncoding(habit.name);
+            const time = habit.time || 'jetzt';
+
+            this.show(`Gewohnheit: ${name}`, {
+                body: `Zeit für deine Gewohnheit (${time} Uhr)`,
+                tag: `habit-${habit.id}`,
+                requireInteraction: false
+            });
+        },
+
+        // Check for upcoming events and send notifications
+        checkEventReminders() {
+            if (!app.state.events) return;
+
+            const now = new Date();
+            const in15mins = new Date(now.getTime() + 15 * 60 * 1000);
+
+            app.state.events.forEach(event => {
+                if (!event.start || event.notified) return;
+
+                const eventTime = new Date(event.start);
+                if (isNaN(eventTime.getTime())) return;
+
+                // Notify 15 minutes before event
+                if (eventTime > now && eventTime <= in15mins) {
+                    this.notifyEvent(event);
+                    event.notified = true;
+                    app.saveState();
+                }
+            });
+        },
+
+        // Start checking for reminders every minute
+        startReminderCheck() {
+            // Check immediately
+            this.checkEventReminders();
+
+            // Then check every minute
+            setInterval(() => {
+                this.checkEventReminders();
+            }, 60 * 1000);
         }
     },
 
@@ -1167,8 +1352,8 @@ const app = {
                         }
 
                         app.notifications.send(
-                            `â° Termin in ${timeText}`,
-                            `${e.title} um ${eventTime}${e.location ? ' â€¢ ' + e.location : ''}`,
+                            app.utils.fixEncoding(`⏰ Termin in ${timeText}`),
+                            app.utils.fixEncoding(`${e.title} um ${eventTime}${e.location ? ' • ' + e.location : ''}`),
                             true
                         );
 
@@ -1886,7 +2071,7 @@ const app = {
                             // Existing UI enforces days selection usually (Täglich check).
                             // Let's stick to existing logic: must start with days.
                             if (alarmDays.length === 0 || alarmDays.includes(currentDay)) {
-                                console.log(`â° WECKER: ${alarm.title}`);
+                                console.log(`⏰ WECKER: ${alarm.title}`);
                                 app.alarms.trigger(alarm.title || 'Wecker', alarm.sound);
                             }
                         }
@@ -1902,10 +2087,10 @@ const app = {
                         const nowDayStr = now.toLocaleDateString('de-DE');
 
                         if (evtTimeStr === t && evtDateStr === nowDayStr) {
-                            console.log(`📍… TERMIN ALARM: ${e.title}`);
+                            console.log(`📍 TERMIN ALARM: ${e.title}`);
                             // Digital sound is louder/more distinct
                             const sound = e.urgent ? 'digital' : 'melody';
-                            app.alarms.trigger(`${e.urgent ? '🔥 DRINGEND: ' : '📍… '}${e.title}`, sound);
+                            app.alarms.trigger(app.utils.fixEncoding(`${e.urgent ? '🔥 DRINGEND: ' : '📍 '}${e.title}`), sound);
                         }
                     });
                 }
@@ -2007,6 +2192,9 @@ const app = {
         trigger(title, type = 'melody') {
             if (this.currentAudio) return;
 
+            // Sanitize title for UI
+            title = app.utils.fixEncoding(title);
+
             console.log("ALARM TRIGGERED:", title);
 
             // Audio Context for Sound
@@ -2095,6 +2283,15 @@ const app = {
             }
         },
         async send(title, body, isUrgent = false) {
+            // Sanitize input text
+            title = app.utils.fixEncoding(title);
+            body = app.utils.fixEncoding(body);
+
+            // Always show an in-app toast for visibility
+            if (typeof showToast === "function") {
+                showToast(`${title}: ${body}`, isUrgent ? 'danger' : 'info');
+            }
+
             if (Notification.permission === 'granted') {
                 // Background capable notification via Service Worker
                 if ('serviceWorker' in navigator) {
@@ -2118,6 +2315,8 @@ const app = {
                 }
                 // Fallback
                 new Notification(title, { body: body, icon: "./icon-192.png" });
+            } else if (Notification.permission !== 'denied' && !this.permissionAsked) {
+                this.requestPermission();
             }
         },
         check() {
@@ -2129,10 +2328,10 @@ const app = {
                 const diffMins = (start - now) / 1000 / 60;
 
                 if (e.urgent && diffMins >= 14 && diffMins <= 15) {
-                    this.send("🔥 Wichtiger Termin in 15 Min!", `${e.title} um ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, true);
+                    this.send("Wichtiger Termin in 15 Min!", `${e.title} um ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, true);
                 }
                 if (diffMins >= -1 && diffMins <= 0) {
-                    this.send("ðŸ”” Termin Jetzt!", `${e.title} beginnt jetzt.`, true);
+                    this.send("Termin Jetzt!", `${e.title} beginnt jetzt.`, true);
                 }
             });
 
@@ -2863,11 +3062,35 @@ const app = {
         },
         toggleUrgency(id) { const t = app.state.tasks.find(x => x.id === id); if (t) { t.urgent = !t.urgent; app.saveState(); this.render(); app.renderDashboard(); } },
         add(t, u, category = 'todo', isShared = false, type = 'private') {
-            app.state.tasks.push({ id: Date.now(), title: t, urgent: u, category: category, done: false, isShared: isShared, type: type });
+            if (!app.state.tasks) app.state.tasks = [];
+            app.state.tasks.push({
+                id: Date.now(),
+                title: t,
+                urgent: u,
+                category: category,
+                done: false,
+                isShared: isShared,
+                type: type
+            });
             app.saveState();
-            this.render(); // Renders Tasks
-            if (category === 'shopping' && app.shopping) app.shopping.render(); // Renders Shopping if needed
+
+            // SOFORT Cloud-Sync auslösen
+            if (app.cloud && app.cloud.sync) {
+                app.cloud.sync(true); // force = true
+            }
+
+            // Render appropriate view
+            if (category === 'shopping') {
+                if (app.shopping) app.shopping.render();
+            } else {
+                this.render();
+            }
+
+            // Always update dashboard
             app.renderDashboard();
+
+            // Add XP for creating task
+            if (app.gamification) app.gamification.addXP(10);
         },
         toggle(id) { const t = app.state.tasks.find(x => x.id === id); if (t) { t.done = !t.done; app.saveState(); this.render(); app.renderDashboard(); if (t.done) app.gamification.addXP(50); } },
         async delete(id) {
@@ -4014,7 +4237,7 @@ const app = {
             if (app.activeAlarm) return; // Already ringing
 
             // --- SYSTEM NOTIFICATION (For background/closed app) ---
-            app.notifications.send(`â° ${title}`, "Es ist Zeit! Tippe hier zum Stoppen.", true);
+            app.notifications.send(`⏰ ${title}`, "Es ist Zeit! Tippe hier zum Stoppen.", true);
 
             // 1. Sounds
             const sounds = {
@@ -4073,7 +4296,7 @@ const app = {
             overlay.style.backdropFilter = 'blur(10px)';
 
             overlay.innerHTML = `
-                <div style="font-size: 4rem; margin-bottom: 20px;">â°</div>
+                <div style="font-size: 4rem; margin-bottom: 20px;">⏰</div>
                 <h1 style="color:white; margin-bottom: 10px; font-size: 2rem; text-align:center;">${title}</h1>
                 <p style="color:var(--text-muted); margin-bottom: 40px;">Es ist Zeit!</p>
                 
@@ -4560,6 +4783,9 @@ const app = {
             };
 
             if (JSON.stringify(localCompare) !== JSON.stringify(cloudCompare)) {
+                // DETECT NEW ITEMS FOR NOTIFICATION
+                this.notifyNewChanges(localCompare, cloudCompare);
+
                 app.state.tasks = cloudCompare.tasks;
                 app.state.events = cloudCompare.events;
                 app.state.expenses = cloudCompare.expenses;
@@ -4584,6 +4810,71 @@ const app = {
                 this.updateIndicator(true);
             }
         },
+
+        notifyNewChanges(oldState, newState) {
+            if (!oldState || !newState) return;
+
+            // 1. Check for New Tasks / Shopping Items
+            const oldTaskIds = new Set(oldState.tasks.map(t => t.id));
+            const newTasks = newState.tasks.filter(t => !oldTaskIds.has(t.id));
+
+            newTasks.forEach(t => {
+                const icon = t.category === 'shopping' ? '🛒' : '📋';
+                const label = t.category === 'shopping' ? 'Neuer Einkauf' : 'Neue Aufgabe';
+                const msg = `${icon} ${t.title}`;
+
+                app.notifications.send(label, t.title);
+                if (typeof showToast === 'function') showToast(msg, 'info');
+            });
+
+            // 2. Check for New Events
+            const oldEventIds = new Set(oldState.events.map(e => e.id));
+            const newEvents = newState.events.filter(e => !oldEventIds.has(e.id));
+
+            newEvents.forEach(e => {
+                const msg = `📅 ${e.title} (${e.date}, ${e.time})`;
+                app.notifications.send("Neuer Termin", `${e.title} am ${e.date}`);
+                if (typeof showToast === 'function') showToast(msg, 'info');
+            });
+
+            // 3. Check for New Expenses
+            const oldExpenseIds = new Set(oldState.expenses.map(ex => ex.id));
+            const newExpenses = newState.expenses.filter(ex => !oldExpenseIds.has(ex.id));
+
+            newExpenses.forEach(ex => {
+                const msg = `💸 Neue Ausgabe: ${ex.title} (${ex.amount}€)`;
+                app.notifications.send("Neue Ausgabe", `${ex.title}: ${ex.amount}€`);
+                if (typeof showToast === 'function') showToast(msg, 'info');
+            });
+
+            // 4. Check for New Contacts
+            const oldContactIds = new Set(oldState.contacts.map(c => c.id));
+            const newContacts = newState.contacts.filter(c => !oldContactIds.has(c.id));
+            newContacts.forEach(c => {
+                const msg = `👤 Neuer Kontakt: ${c.name}`;
+                app.notifications.send("Neuer Kontakt", c.name);
+                if (typeof showToast === 'function') showToast(msg, 'info');
+            });
+
+            // 5. Check for New Projects
+            const oldProjectIds = new Set((oldState.projects || []).map(p => p.id));
+            const newProjects = (newState.projects || []).filter(p => !oldProjectIds.has(p.id));
+            newProjects.forEach(p => {
+                const msg = `🚀 Neues Projekt: ${p.name}`;
+                app.notifications.send("Neues Projekt", p.name);
+                if (typeof showToast === 'function') showToast(msg, 'info');
+            });
+
+            // 6. Check for New Meetings
+            const oldMeetingIds = new Set((oldState.meetings || []).map(m => m.id));
+            const newMeetings = (newState.meetings || []).filter(m => !oldMeetingIds.has(m.id));
+            newMeetings.forEach(m => {
+                const msg = `🤝 Neues Meeting: ${m.title}`;
+                app.notifications.send("Neues Meeting", m.title);
+                if (typeof showToast === 'function') showToast(msg, 'info');
+            });
+        },
+
         updateIndicator(active) {
             const el = document.getElementById('headerSyncIndicator');
             const teamName = app.state.user.teamName;
@@ -6024,7 +6315,7 @@ const app = {
             }
         },
         // Old saveAlarm removed - now handled by app.alarms.save
-        submitTask() {
+        async submitTask() {
             const t = document.getElementById('newTaskTitle').value;
             if (t) {
                 let cat = 'todo';
@@ -6047,6 +6338,13 @@ const app = {
                 }
 
                 app.tasks.add(t, document.getElementById('newTaskUrgent').checked, cat, isShared, shareType);
+
+                // Ensure data is saved and synced
+                app.saveState();
+                if (app.cloud && app.cloud.sync) {
+                    await app.cloud.sync();
+                }
+
                 this.close();
 
                 // Smart Navigation
@@ -6058,6 +6356,11 @@ const app = {
                 } else {
                     app.navigateTo('dashboard');
                     app.dashboard.scrollToCard(cat === 'shopping' ? 'dashboardShoppingCard' : 'dashboardTasksCard');
+                }
+
+                // Force re-render of shopping list if category is shopping
+                if (cat === 'shopping' && app.shopping) {
+                    app.shopping.render();
                 }
             }
         },
@@ -8178,17 +8481,19 @@ app.updateDashboardBlinking = function () {
                 // Popup
                 if (app.state.ui.enableAlarmPopup) {
                     setTimeout(() => {
+                        const eventTitle = app.utils.fixEncoding(urgentEvent.title);
+                        const eventTime = urgentEvent.time || 'Demnächst';
                         if (app.modals) {
                             app.modals.open('alarmPopup', {
                                 html: `<div style="text-align:center; padding:20px;">
                                     <div style="font-size:3rem; margin-bottom:10px;">🔔</div>
-                                    <h2 style="color:var(--danger); margin-bottom:10px;">${urgentEvent.title}</h2>
-                                    <p style="margin-bottom:20px;">Dieser Termin steht jetzt an (${urgentEvent.time || 'Demnächst'} Uhr).</p>
+                                    <h2 style="color:var(--danger); margin-bottom:10px;">${eventTitle}</h2>
+                                    <p style="margin-bottom:20px;">Dieser Termin steht jetzt an (${eventTime} Uhr).</p>
                                     <button onclick="app.modals.close()" class="btn btn-primary" style="width:100%;">Verstanden</button>
                                 </div>`
                             });
                         } else {
-                            alert(`🔔 Wichtiger Termin: ${urgentEvent.title}`);
+                            alert(`🔔 Wichtiger Termin: ${eventTitle}`);
                         }
                     }, 500);
                 }
@@ -8204,26 +8509,97 @@ app.updateDashboardBlinking = function () {
 app.actions.updateDashboardBlinking = app.updateDashboardBlinking;
 
 // --- GLOBALS & UTILS ---
-window.showToast = function (message, type = 'info') {
+window.showToast = function (message, type = 'info', persistent = false) {
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'toast-container';
-        container.style.cssText = 'position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:10000; pointer-events:none; display:flex; flex-direction:column; gap:10px; align-items:center;';
+        container.style.cssText = 'position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:10000; pointer-events:none; display:flex; flex-direction:column; gap:10px; align-items:center; max-width:90%; width:auto;';
         document.body.appendChild(container);
     }
 
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.style.cssText = `padding: 12px 24px; border-radius: 20px; background: ${type === 'success' ? '#10b981' : (type === 'danger' ? '#ef4444' : '#3b82f6')}; color: white; font-weight: 600; font-size: 0.9rem; box-shadow: 0 10px 25px rgba(0,0,0,0.3); animation: toastIn 0.3s ease-out forwards; pointer-events: all;`;
-    toast.innerHTML = message;
+
+    // Color scheme based on type
+    const colors = {
+        'success': { bg: '#10b981', border: '#059669' },
+        'danger': { bg: '#ef4444', border: '#dc2626' },
+        'warning': { bg: '#f59e0b', border: '#d97706' },
+        'info': { bg: '#3b82f6', border: '#2563eb' }
+    };
+    const color = colors[type] || colors['info'];
+
+    toast.style.cssText = `
+        padding: 16px 20px; 
+        border-radius: 12px; 
+        background: ${color.bg}; 
+        border: 2px solid ${color.border};
+        color: white; 
+        font-weight: 600; 
+        font-size: 0.95rem; 
+        box-shadow: 0 10px 25px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1) inset; 
+        animation: toastIn 0.3s ease-out forwards; 
+        pointer-events: all;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 300px;
+        max-width: 500px;
+        position: relative;
+        transition: all 0.2s;
+    `;
+
+    // Icon based on type
+    const icons = {
+        'success': '✅',
+        'danger': '❌',
+        'warning': '⚠️',
+        'info': '📥'
+    };
+    const icon = icons[type] || icons['info'];
+
+    toast.innerHTML = `
+        <div style="font-size: 1.5rem; flex-shrink: 0;">${icon}</div>
+        <div style="flex: 1; line-height: 1.4;">${message}</div>
+        <button onclick="this.parentElement.remove()" style="
+            background: rgba(255,255,255,0.2); 
+            border: 1px solid rgba(255,255,255,0.3); 
+            color: white; 
+            width: 28px; 
+            height: 28px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            cursor: pointer; 
+            font-size: 1.2rem;
+            font-weight: bold;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">×</button>
+    `;
+
+    // Hover effect
+    toast.onmouseover = function () {
+        this.style.transform = 'scale(1.02)';
+        this.style.boxShadow = '0 15px 35px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.2) inset';
+    };
+    toast.onmouseout = function () {
+        this.style.transform = 'scale(1)';
+        this.style.boxShadow = '0 10px 25px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1) inset';
+    };
 
     container.appendChild(toast);
 
-    setTimeout(() => {
-        toast.style.animation = 'toastOut 0.3s ease-in forwards';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    // Auto-remove only if not persistent
+    if (!persistent) {
+        setTimeout(() => {
+            toast.style.animation = 'toastOut 0.3s ease-in forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, 5000); // Increased from 3s to 5s
+    }
 };
 
 // Add standard animations to document
