@@ -1368,26 +1368,81 @@ const app = {
         return html;
     },
 
+    toggleMonthLayout() {
+        this.state.monthViewMode = this.state.monthViewMode === 'grid' ? 'list' : 'grid';
+        this.render();
+    },
+
     renderMonthView(grid, year, month, filteredEvents) {
+        const mode = this.state.monthViewMode || 'list';
+
+        // Show/Hide Toggle Button
+        const toggleBtn = document.getElementById('monthLayoutToggle');
+        if (toggleBtn) {
+            toggleBtn.style.display = 'inline-flex';
+            toggleBtn.innerHTML = mode === 'grid' ? '<i data-lucide="list"></i>' : '<i data-lucide="grid"></i>';
+            toggleBtn.title = mode === 'grid' ? 'Listenansicht' : 'Kalenderansicht';
+        }
+
+        if (mode === 'grid') {
+            this.renderMonthGridView(grid, year, month, filteredEvents);
+        } else {
+            this.renderMonthListView(grid, year, month, filteredEvents);
+        }
+    },
+
+    renderMonthListView(grid, year, month, filteredEvents) {
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        grid.className = 'calendar-list-view';
+
+        let html = '<div class="agenda-view-container">';
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const date = new Date(year, month, d);
+            // FIX: Manual date string to match local time, avoiding UTC rollback
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+            const isToday = date.toDateString() === new Date().toDateString();
+
+            html += this.renderDayListRow(date, dayEvents, isToday, dateStr);
+        }
+        html += '</div>';
+        grid.innerHTML = html;
+        if (window.lucide) lucide.createIcons();
+    },
+
+    renderMonthGridView(grid, year, month, filteredEvents) {
         const firstDay = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+        // Grid Class
+        grid.className = 'calendar-grid-large view-month';
+
         let html = '';
-        let emptyCells = firstDay === 0 ? 6 : firstDay - 1;
+        // Adjust for German week start (Monday=1)
+        let emptyCells = (firstDay + 6) % 7;
+
         for (let i = 0; i < emptyCells; i++) html += '<div class="calendar-cell-large empty"></div>';
 
         for (let d = 1; d <= daysInMonth; d++) {
-            const currentCellDate = new Date(year, month, d);
+            const date = new Date(year, month, d);
+            // FIX: Manual date string here too
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, currentCellDate));
+            const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
             const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+
+            // Compact event indicators for Grid View
+            const indicators = dayEvents.slice(0, 3).map(e =>
+                `<div class="event-dot ${e.category || 'work'}" title="${e.title}"></div>`
+            ).join('');
 
             html += `
                 <div class="calendar-cell-large ${isToday ? 'today-full' : ''}" onclick="app.openCreateAt('${dateStr}')">
                     <div class="cell-header">
                         <span class="day-num">${d}</span>
+                        ${dayEvents.length > 0 ? `<div class="event-dots">${indicators}</div>` : ''}
                     </div>
-                    <div class="day-events">
+                    <div class="day-events mobile-hidden">
                         ${dayEvents.map(e => this.renderEventActions(e)).join('')}
                     </div>
                 </div>
@@ -1398,13 +1453,57 @@ const app = {
     },
 
     renderWeekView(grid, startOfWeek, filteredEvents) {
-        const days = [];
+        let html = '<div class="agenda-view-container">';
         for (let i = 0; i < 7; i++) {
-            const d = new Date(startOfWeek);
-            d.setDate(startOfWeek.getDate() + i);
-            days.push(d);
+            const date = new Date(startOfWeek);
+            date.setDate(startOfWeek.getDate() + i);
+            const dateStr = date.toISOString().split('T')[0];
+            const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+            const isToday = date.toDateString() === new Date().toDateString();
+
+            html += this.renderDayListRow(date, dayEvents, isToday, dateStr);
         }
-        this.renderTimeGrid(grid, days, filteredEvents, 'week');
+        html += '</div>';
+        grid.innerHTML = html;
+        grid.className = 'calendar-list-view';
+        if (window.lucide) lucide.createIcons();
+    },
+
+    renderDayListRow(date, events, isToday, dateStr) {
+        const dayName = date.toLocaleDateString('de-DE', { weekday: 'long' });
+        const dayDate = date.toLocaleDateString('de-DE', { day: '2-digit', month: 'long' });
+
+        let eventsHtml = '';
+        if (events.length === 0) {
+            eventsHtml = `<div class="text-muted" style="padding:10px; font-size:0.9rem;">Keine Termine</div>`;
+        } else {
+            // Sort by time
+            const sorted = [...events].sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+            eventsHtml = sorted.map(e => {
+                const colorStyle = e.color ? `border-left: 3px solid ${e.color};` : '';
+                return `
+                <div class="agenda-event-item" onclick="app.editEvent('${e.id}')" style="${colorStyle}">
+                    <div class="agenda-time">${e.time || 'Ganztägig'}</div>
+                    <div class="agenda-details">
+                        <div class="agenda-title">${e.title}</div>
+                        ${e.location ? `<div class="agenda-loc"><i data-lucide="map-pin" size="12"></i> ${e.location}</div>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        return `
+            <div class="agenda-day-card ${isToday ? 'today-highlight' : ''}">
+                <div class="agenda-day-header" onclick="app.openCreateAt('${dateStr}')">
+                    <span class="agenda-day-name">${dayName}</span>
+                    <span class="agenda-day-date">${dayDate}</span>
+                    <button class="btn-icon-small"><i data-lucide="plus"></i></button>
+                </div>
+                <div class="agenda-day-body">
+                    ${eventsHtml}
+                </div>
+            </div>
+        `;
     },
 
     renderDayView(grid, date, filteredEvents) {

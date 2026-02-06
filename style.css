@@ -744,7 +744,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 3000;
+    z-index: 9999;
+    /* Ensure it is above everything including voice dock */
     transition: var(--transition);
 }
 
@@ -1257,7 +1258,7 @@ body {
 /* YEAR VIEW REDESIGN */
 .calendar-grid-large.view-year {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: 1fr;
     gap: 30px;
     padding: 30px;
     background: radial-gradient(circle at center, rgba(99, 102, 241, 0.1), transparent);
@@ -1270,6 +1271,9 @@ body {
     border-radius: 20px;
     padding: 20px;
     transition: var(--transition);
+    max-width: 400px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .year-month-card:hover {
@@ -1399,27 +1403,129 @@ body {
     color: var(--text-main);
 }
 
-.event-link-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: rgba(255, 255, 255, 0.15);
-    border: none;
-    color: var(--text-main);
-    padding: 4px;
-    border-radius: 6px;
-    width: 24px;
-    height: 24px;
-    justify-content: center;
-    cursor: pointer;
-    text-decoration: none;
+/* --- AGENDA / VERTICAL LIST VIEW (New Standard) --- */
+.calendar-list-view {
+    display: block;
+    /* Override Grid */
+    overflow-y: auto;
+    height: 100%;
+    padding: 20px;
+}
+
+.agenda-view-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.agenda-day-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    overflow: hidden;
     transition: var(--transition);
 }
 
-.event-link-btn:hover {
-    background: white;
-    color: var(--bg-dark);
-    transform: scale(1.1);
+.agenda-day-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.agenda-day-card.today-highlight {
+    border-color: var(--primary);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
+}
+
+.agenda-day-header {
+    padding: 12px 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    cursor: pointer;
+}
+
+.agenda-day-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text-main);
+    width: 100px;
+}
+
+.agenda-day-date {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.btn-icon-small {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.agenda-day-header:hover .btn-icon-small {
+    opacity: 1;
+}
+
+.agenda-day-header:hover .btn-icon-small:hover {
+    color: var(--primary);
+}
+
+.agenda-day-body {
+    padding: 5px 0;
+}
+
+.agenda-event-item {
+    display: flex;
+    padding: 12px 20px;
+    gap: 20px;
+    cursor: pointer;
+    transition: var(--transition);
+    border-left: 3px solid transparent;
+    /* Default border */
+}
+
+.agenda-event-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    padding-left: 25px;
+}
+
+.agenda-time {
+    width: 60px;
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+}
+
+.agenda-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.agenda-title {
+    font-weight: 500;
+    font-size: 1rem;
+    color: var(--text-main);
+}
+
+.agenda-loc {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
 }
 
 
@@ -2568,7 +2674,7 @@ body {
 
     /* --- General UI Adjustments --- */
     .content {
-        padding-bottom: 40px !important;
+        padding-bottom: 120px !important;
     }
 
     /* removed dock padding */
@@ -2632,36 +2738,156 @@ body {
     /* Calendar Grid for Mobile */
     .calendar-header-pro {
         flex-direction: column;
-        gap: 15px;
+        gap: 10px;
+        padding: 10px;
+        /* Reduced padding */
+    }
+
+    .header-left {
+        width: 100%;
+        justify-content: space-between;
+        gap: 5px;
+        /* Reduced gap */
+    }
+
+    .header-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .calendar-header-pro h2 {
+        font-size: 1rem !important;
+        /* Smaller title */
+        min-width: auto !important;
+        /* Remove fixed width */
+        text-align: center;
+        flex: 1;
+        white-space: nowrap;
+    }
+
+    /* Smaller buttons on mobile */
+    .btn-outline {
+        padding: 4px 10px;
+        font-size: 0.8rem;
+    }
+
+    .icon-btn {
+        width: 30px;
+        height: 30px;
     }
 
     .view-selector {
         width: 100%;
         overflow-x: auto;
         display: flex;
-        gap: 8px;
-        padding-bottom: 5px;
-        scrollbar-width: none;
+        gap: 4px;
+        padding-bottom: 2px;
+        justify-content: center;
+        /* Center views */
+    }
+
+    .view-selector button {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        flex: 1;
+        /* evenly distribute */
     }
 
     .view-selector::-webkit-scrollbar {
         display: none;
     }
 
+    .page-view {
+        padding: 0 0 100px !important;
+        /* Remove side padding, ensure bottom space */
+        width: 100vw;
+        overflow-x: hidden;
+    }
+
+    .calendar-main {
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        width: 100%;
+    }
+
     .calendar-grid-large.view-month {
+        font-size: 0.75rem;
+        gap: 1px;
+        background: rgba(255, 255, 255, 0.05);
+        /* Grid separator lines */
+        border: none;
+        width: 100%;
+        box-sizing: border-box;
         grid-template-columns: repeat(7, 1fr) !important;
-        font-size: 0.7rem;
+        /* Strict 7 cols */
     }
 
     .calendar-cell-large {
-        padding: 6px;
-        min-height: 90px;
-        border-radius: 8px;
+        padding: 2px !important;
+        min-height: 45px !important;
+        /* Balanced height */
+        min-width: 0 !important;
+        /* Allow shrinking */
+        border: none !important;
+        background: var(--bg-card);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        overflow: hidden;
+        /* Prevent internal spill */
+    }
+
+    .weekday-header {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        text-align: center;
+        font-size: 0.75rem;
+        padding: 5px 0;
+        background: rgba(10, 12, 16, 0.8);
+    }
+
+    .weekday-header div {
+        padding: 5px 0;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .calendar-cell-large:hover {
+        background: var(--bg-hover);
+    }
+
+    .cell-header {
+        justify-content: center;
+        /* Center content */
+        margin-bottom: 2px;
+        width: 100%;
+    }
+
+    .day-num {
+        width: 24px;
+        height: 24px;
+        font-size: 0.8rem;
+    }
+
+    /* Event dots for grid */
+    .event-dots {
+        position: absolute;
+        bottom: 2px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 2px;
+    }
+
+    .event-dot {
+        width: 4px;
+        height: 4px;
     }
 
     .event-pill {
-        font-size: 0.6rem;
-        padding: 3px 6px;
+        display: none;
+        /* Hide pills in grid on mobile, rely on dots/click */
     }
 
     /* Finance & Settings */
@@ -3002,5 +3228,198 @@ body {
     .voice-btn {
         width: 55px;
         height: 55px;
+    }
+}
+
+/* --- TIME GRID LAYOUT (24h Day View) --- */
+.time-grid-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-card);
+    border-radius: 12px;
+}
+
+.time-grid-header {
+    display: flex;
+    border-bottom: 2px solid var(--glass-border);
+    background: rgba(10, 12, 16, 0.9);
+    flex-shrink: 0;
+}
+
+.time-gutter-header {
+    width: 60px;
+    border-right: 2px solid var(--glass-border);
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.header-day-col {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    border-right: 1px solid var(--glass-border);
+}
+
+.header-day-col.today {
+    background: rgba(99, 102, 241, 0.15);
+}
+
+.header-day-name {
+    font-size: 0.9rem;
+    color: var(--text-main);
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.header-day-num {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--primary);
+}
+
+.time-grid-scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+    scroll-behavior: smooth;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.time-grid-content {
+    position: relative;
+    height: 1440px;
+    /* 24 hours * 60px */
+    min-width: 100%;
+}
+
+.grid-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+.grid-row {
+    height: 60px;
+    /* 1 hour */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    /* Much more visible */
+    display: flex;
+    position: relative;
+    background: linear-gradient(to bottom, transparent 95%, rgba(255, 255, 255, 0.02) 100%);
+}
+
+.time-label {
+    width: 60px;
+    text-align: right;
+    padding-right: 8px;
+    color: var(--text-main);
+    /* Brighter */
+    font-size: 0.9rem;
+    font-weight: 600;
+    transform: translateY(-50%);
+    border-right: 2px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    background: rgba(10, 12, 16, 0.6);
+    /* Contrast bg */
+}
+
+.grid-cell {
+    flex: 1;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    /* Visible vertical lines */
+}
+
+.events-layer,
+.click-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.events-layer {
+    z-index: 2;
+    pointer-events: none;
+}
+
+.click-layer {
+    z-index: 3;
+}
+
+.click-cell {
+    position: absolute;
+    cursor: pointer;
+}
+
+.event-card-absolute {
+    position: absolute;
+    background: rgba(99, 102, 241, 0.2);
+    border-left: 3px solid var(--primary);
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 0.75rem;
+    overflow: hidden;
+    color: var(--text-main);
+    z-index: 10;
+    pointer-events: auto;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.current-time-marker {
+    position: absolute;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.current-time-dot {
+    width: 12px;
+    height: 12px;
+    background: var(--danger);
+    border-radius: 50%;
+    position: absolute;
+    left: -6px;
+    top: -6px;
+}
+
+.current-time-line {
+    width: 100%;
+    height: 2px;
+    background: var(--danger);
+}
+
+/* Fix Modal Overlap on Mobile */
+@media (max-width: 600px) {
+    .modal {
+        max-height: 85vh;
+        /* Ensure modal fits within screen safely */
+        overflow-y: auto;
+        /* Allow scrolling if content is long */
+        margin-bottom: 50px;
+        /* Extra clearance from bottom */
+        width: 95%;
+        /* Use more width on mobile */
+    }
+
+    .modal-content {
+        padding-bottom: 40px;
+        /* Pad content bottom */
+    }
+
+    .voice-dock {
+        /* Optional: hide dock when modal is open? 
+           Hard to detect via CSS without a parent class on body. 
+           But z-index fix handles the layering. 
+        */
+        z-index: 2500 !important;
+        /* Force lower than modal (9999) */
     }
 }
