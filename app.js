@@ -155,12 +155,20 @@ const app = {
     },
 
     confirmExit() {
-        // Attempt to close the app (best for PWAs/Standalone)
+        // Attempt to close the window using various methods
         window.close();
-        // Fallback for browsers that don't allow window.close()
+
+        // This trick works in some browsers to allow window.close() 
+        // even if not opened by a script
+        try {
+            window.open('', '_self', '');
+            window.close();
+        } catch (e) { }
+
+        // Fallback for browsers that block closing
         setTimeout(() => {
-            window.location.href = "about:blank";
-        }, 200);
+            window.location.replace("about:blank");
+        }, 300);
     },
 
     resetVisuals() {
