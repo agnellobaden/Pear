@@ -300,7 +300,7 @@ body {
 }
 
 .search-bar {
-    background: rgba(255, 255, 255, 0.05);
+    background: #ffffff;
     border: 1px solid var(--glass-border);
     border-radius: 12px;
     display: flex;
@@ -312,13 +312,13 @@ body {
 
 .search-bar:focus-within {
     border-color: var(--primary);
-    background: rgba(var(--primary-rgb), 0.08);
+    background: #ffffff;
 }
 
 .search-bar input {
     background: transparent;
     border: none;
-    color: var(--text-main);
+    color: #000000;
     padding: 12px;
     width: 100%;
     outline: none;
@@ -713,12 +713,12 @@ body {
 }
 
 .input-group input {
-    background: var(--bg-solid-2, #27272a) !important;
+    background: #ffffff !important;
     /* Solid background */
     border: 1px solid var(--glass-border);
     border-radius: 12px;
     padding: 16px;
-    color: var(--text-main);
+    color: #000000;
     font-size: 1.1rem;
     outline: none;
     transition: var(--transition);
@@ -844,12 +844,12 @@ body {
 .form-group select,
 .form-group textarea {
     width: 100%;
-    background: var(--bg-solid-2, #27272a) !important;
+    background: #ffffff !important;
     /* Solid background */
     border: 1px solid var(--glass-border);
     border-radius: 8px;
     padding: 12px;
-    color: white;
+    color: #000000;
     outline: none;
 }
 

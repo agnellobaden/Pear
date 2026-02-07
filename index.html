@@ -442,7 +442,7 @@
                         <input type="text" id="teamInput" placeholder="Z.B. Familie_Müller_2026">
                         <label>Privat-PIN (4-stellig)</label>
                         <input type="password" id="teamPin" maxlength="4" placeholder="****"
-                            style="letter-spacing: 5px; text-align: center;">
+                            style="letter-spacing: 5px; text-align: center; background: white; color: black;">
                         <button class="btn-primary" onclick="app.sync.connect()">Verbinden ⚡</button>
                     </div>
 
@@ -469,14 +469,14 @@
                     <div class="todo-input-group"
                         style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px;">
                         <input type="text" id="todoInput"
-                            style="width: 100%; height: 60px; font-size: 1.25rem; padding: 0 20px; border-radius: 16px; background: rgba(0,0,0,0.3); border: 2px solid var(--glass-border); color: white; transition: var(--transition);"
+                            style="width: 100%; height: 60px; font-size: 1.25rem; padding: 0 20px; border-radius: 16px; background: #ffffff; border: 2px solid var(--glass-border); color: #000000; transition: var(--transition);"
                             placeholder="Was steht an? (z.B. Milch kaufen, Mail schreiben...)"
                             onkeyup="if(event.key === 'Enter') app.todo.add()">
 
                         <div style="display: flex; gap: 10px; align-items: center;">
                             <div style="flex: 1; display: flex; gap: 8px;">
                                 <select id="todoCategory"
-                                    style="flex: 1; height: 50px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 12px; color: white; padding: 0 15px; font-weight: 500;">
+                                    style="flex: 1; height: 50px; background: #ffffff; border: 1px solid var(--glass-border); border-radius: 12px; color: #000000; padding: 0 15px; font-weight: 500;">
                                     <!-- JS Populated -->
                                 </select>
                                 <button class="btn-outline" onclick="app.todo.addCategory()"
@@ -525,7 +525,7 @@
                             <h3 style="margin-bottom: 15px;">Neuen Wecker stellen</h3>
                             <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
                                 <input type="time" id="newAlarmTime"
-                                    style="font-size: 1.2rem; padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.2); color: white; border: 1px solid var(--glass-border);">
+                                    style="font-size: 1.2rem; padding: 10px; border-radius: 10px; background: #ffffff; color: #000000; border: 1px solid var(--glass-border);">
                                 <button class="btn-primary" onclick="app.alarm.add()" style="flex: 1;">Hinzufügen
                                     ⏰</button>
                             </div>
@@ -550,7 +550,7 @@
                                 style="display: block; font-size: 0.8rem; margin-bottom: 10px; color: var(--text-muted);">Auto-Nachtuhr
                                 ab:</label>
                             <input type="time" id="nightModeStart" onchange="app.alarm.saveSettings()"
-                                style="background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); color: white; padding: 5px; border-radius: 5px;">
+                                style="background: #ffffff; border: 1px solid var(--glass-border); color: #000000; padding: 5px; border-radius: 5px;">
                         </div>
                         <div class="glass"
                             style="padding: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
@@ -698,7 +698,7 @@
                             <div class="form-group">
                                 <label>Schriftart</label>
                                 <select id="settingsFont" onchange="app.updateVisualSetting('customFont', this.value)"
-                                    style="width: 100%; padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px; color: white;">
+                                    style="width: 100%; padding: 12px; background: #ffffff; border: 1px solid var(--glass-border); border-radius: 12px; color: #000000;">
                                     <option value="Outfit">Standard (Outfit)</option>
                                     <option value="System">System (Arial/Helvetica)</option>
                                     <option value="Serif">Serif (Times/Georgia)</option>
@@ -1020,6 +1020,26 @@
             </div>
         </div>
 
+        <!-- Exit Confirmation Modal -->
+        <div class="modal-overlay hidden" id="exitModalOverlay">
+            <div class="modal glass" style="max-width: 400px; text-align: center; padding: 40px 30px;">
+                <div style="margin-bottom: 25px;">
+                    <div class="icon-circle"
+                        style="width: 80px; height: 80px; background: rgba(var(--primary-rgb), 0.1); margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--glass-border);">
+                        <i data-lucide="log-out" size="32" style="color: var(--primary);"></i>
+                    </div>
+                    <h2 style="font-size: 1.5rem; margin-bottom: 10px;">App beenden?</h2>
+                    <p class="text-muted">Möchtest du Pear wirklich verlassen?</p>
+                </div>
+                <div style="display: flex; gap: 15px;">
+                    <button class="btn-outline" style="flex: 1; justify-content: center;"
+                        onclick="app.closeExitModal()">Abbrechen</button>
+                    <button class="btn-primary"
+                        style="flex: 1; justify-content: center; background: var(--danger); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);"
+                        onclick="app.confirmExit()">Beenden</button>
+                </div>
+            </div>
+        </div>
         <!-- Contact Modal -->
         <div class="modal-overlay hidden" id="contactModalOverlay">
             <div class="modal glass">

@@ -98,27 +98,69 @@ const app = {
     handleInitialNavigation() {
         // Handle Back Button
         window.addEventListener('popstate', (event) => {
-            // Close any open modals first
-            const modals = document.querySelectorAll('.modal-overlay:not(.hidden)');
+            // Close any open modals first (except the exit modal)
+            const modals = document.querySelectorAll('.modal-overlay:not(.hidden):not(#exitModalOverlay)');
             if (modals.length > 0) {
                 modals.forEach(m => m.classList.add('hidden'));
-                // If the state was just a modal state, we might stay on the same view.
-                // But usually we just want to reflect the view stored in state.
+                // To keep the user on the same page after closing a modal via back button:
+                history.pushState({ view: this.state.view }, '', '#' + this.state.view);
+                return;
             }
 
             if (event.state && event.state.view) {
-                this.navigateTo(event.state.view, true); // true = replace (don't push)
+                if (event.state.view === 'root') {
+                    // We hit the very base of history stack
+                    if (this.state.view === 'dashboard') {
+                        this.openExitModal();
+                        // Re-push dashboard so next back hits root again
+                        history.pushState({ view: 'dashboard' }, '', '#dashboard');
+                    } else {
+                        // If not on dashboard, go to dashboard first before showing exit modal
+                        this.navigateTo('dashboard', true);
+                    }
+                } else {
+                    this.navigateTo(event.state.view, true); // true = replace (don't push)
+                }
             } else {
-                // Default fallback
-                this.navigateTo('dashboard', true);
+                // Fallback for null state
+                if (this.state.view === 'dashboard') {
+                    this.openExitModal();
+                    history.pushState({ view: 'dashboard' }, '', '#dashboard');
+                } else {
+                    this.navigateTo('dashboard', true);
+                }
             }
         });
 
-        // Current URL handling or default
-        // If we have a hash, maybe use it? For now, sticky with state or localStorage
-        // but push initial state so we have a base to return to
-        history.replaceState({ view: this.state.view }, '', '#' + this.state.view);
-        this.navigateTo(this.state.view, true);
+        // Initialize history stack with a root entry to catch the back button
+        history.replaceState({ view: 'root' }, '', '#root');
+
+        // Push initial view entry
+        const initialView = this.state.view || 'dashboard';
+        history.pushState({ view: initialView }, '', '#' + initialView);
+        this.navigateTo(initialView, true);
+    },
+
+    openExitModal() {
+        const modal = document.getElementById('exitModalOverlay');
+        if (modal) {
+            modal.classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+        }
+    },
+
+    closeExitModal() {
+        const modal = document.getElementById('exitModalOverlay');
+        if (modal) modal.classList.add('hidden');
+    },
+
+    confirmExit() {
+        // Attempt to close the app (best for PWAs/Standalone)
+        window.close();
+        // Fallback for browsers that don't allow window.close()
+        setTimeout(() => {
+            window.location.href = "about:blank";
+        }, 200);
     },
 
     resetVisuals() {
