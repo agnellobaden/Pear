@@ -597,7 +597,21 @@ const app = {
             // Re-init sync
             this.init();
             app.render();
-            alert(`Sichere Verbindung hergestellt! 🔒\nKey: ${team}`);
+            alert(`Erfolgreich angemeldet! 🔒\nDein Organizer wird nun mit '${team}' synchronisiert.`);
+        },
+
+        disconnect() {
+            if (!confirm("Synchronisation wirklich beenden und vom Team abmelden?")) return;
+
+            app.state.user.teamName = '';
+            app.state.user.teamPin = '';
+            localStorage.removeItem('moltbot_team');
+            localStorage.removeItem('moltbot_pin');
+
+            if (this.unsubscribe) this.unsubscribe();
+            this.updateUI(false);
+            app.render();
+            alert("Abgemeldet. Deine Daten werden nur noch lokal gespeichert.");
         },
 
         listen() {
@@ -645,6 +659,14 @@ const app = {
                 events: app.state.events,
                 todos: app.state.todos,
                 contacts: app.state.contacts,
+                finance: app.state.finance,
+                alarms: app.state.alarms,
+                todoCategories: app.state.todoCategories,
+                userProfile: {
+                    name: app.state.user.name,
+                    avatar: app.state.user.avatar,
+                    appName: app.state.appName
+                },
                 updatedAt: Date.now(),
                 pushedBy: app.state.user.name,
                 pin: app.state.user.teamPin
@@ -729,7 +751,18 @@ const app = {
             if (text) text.textContent = isConnected ? app.state.user.teamName : 'Lokal';
 
             const display = document.getElementById('currentTeamDisplay');
-            if (display) display.textContent = isConnected ? app.state.user.teamName : 'Lokal (Kein Sync active)';
+            if (display) display.textContent = isConnected ? app.state.user.teamName : 'Lokal';
+
+            const activeSyncInfo = document.getElementById('activeSyncInfo');
+            if (activeSyncInfo) {
+                activeSyncInfo.classList.toggle('hidden', !isConnected);
+            }
+
+            const loginFields = document.querySelector('.login-fields');
+            if (loginFields) {
+                // If connected, we might want to hide login fields or just show status
+                // For now, let's keep them so users can switch teams easily
+            }
 
             // If local, show at least the current user in the presence list
             if (!isConnected) {
@@ -851,6 +884,47 @@ const app = {
             if (changed) {
                 this.state.contacts = Array.from(localContactMap.values());
             }
+        }
+
+        // Merge Finance
+        if (incoming.finance) {
+            const localFinMap = new Map(this.state.finance.map(f => [f.id, f]));
+            incoming.finance.forEach(incFin => {
+                const local = localFinMap.get(incFin.id);
+                // Finance might not have updatedAt, using createdAt
+                if (!local || incFin.createdAt > (local.createdAt || 0)) {
+                    localFinMap.set(incFin.id, incFin);
+                    changed = true;
+                }
+            });
+            if (changed) {
+                this.state.finance = Array.from(localFinMap.values());
+            }
+        }
+
+        // Merge Alarms
+        if (incoming.alarms) {
+            // Overwrite alarms if incoming is newer (simple approach for arrays)
+            if (JSON.stringify(this.state.alarms) !== JSON.stringify(incoming.alarms)) {
+                this.state.alarms = incoming.alarms;
+                changed = true;
+            }
+        }
+
+        // Merge Categories
+        if (incoming.todoCategories) {
+            if (JSON.stringify(this.state.todoCategories) !== JSON.stringify(incoming.todoCategories)) {
+                this.state.todoCategories = incoming.todoCategories;
+                changed = true;
+            }
+        }
+
+        // Sync Profile / App Name if newer
+        if (incoming.userProfile && incoming.updatedAt > (this.state.lastRemoteSync || 0)) {
+            if (incoming.userProfile.appName && incoming.userProfile.appName !== this.state.appName) {
+                this.updateAppName(incoming.userProfile.appName);
+            }
+            this.state.lastRemoteSync = incoming.updatedAt;
         }
 
         if (changed) {
@@ -1383,6 +1457,7 @@ const app = {
 
             app.state.finance.push(entry);
             app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
 
             document.getElementById('financeForm').reset();
             const dateInput = document.getElementById('finDate');
