@@ -3215,9 +3215,30 @@ const app = {
 
         process(text) {
             const input = text.toLowerCase();
-            console.log("Processing Voice Command:", input);
+            console.log("Pear AI Processing:", input);
 
-            // 0. PROFILE QUERIES
+            const statusTitle = document.getElementById('aiStatusTitle');
+            if (statusTitle) statusTitle.textContent = "Verarbeite...";
+
+            // 0. AI PERSONALITY & CONVERSATION
+            if (input.includes('wer bist du') || input.includes('was bist du')) {
+                this.showFeedback("Ich bin Pear AI, dein intelligenter persönlicher Assistent. Ich helfe dir dabei, dein Leben zu organisieren.");
+                return;
+            }
+            if (input.includes('hallo') || input.includes('hey') || input.includes('moin')) {
+                this.showFeedback(`Hallo ${app.state.user.name.split(' ')[0]}! Wie kann ich dich heute unterstützen?`);
+                return;
+            }
+            if (input.includes('danke') || input.includes('vielen dank')) {
+                this.showFeedback("Sehr gerne! Sag einfach Bescheid, wenn du noch etwas brauchst.");
+                return;
+            }
+            if (input.includes('was kannst du') || input.includes('hilfe')) {
+                this.showFeedback("Ich kann Termine planen, Aufgaben verwalten, Finanzen tracken und deine Kontakte pflegen. Frag mich einfach!");
+                return;
+            }
+
+            // 1. PROFILE QUERIES
             if (input.includes('wie heiße ich') || input.includes('mein name') || input.includes('wer bin ich')) {
                 this.showFeedback(`Dein Name ist ${app.state.user.name}.`);
                 return;
@@ -3240,32 +3261,38 @@ const app = {
                 return;
             }
 
-            // 1. FINANCE DETECTION
-            if (input.includes('euro') || input.includes('betrag') || input.includes('ausgabe') || input.includes('kosten') || input.includes('€')) {
-                this.handleFinance(text);
+            // 2. FINANCE DETECTION
+            if (input.includes('euro') || input.includes('betrag') || input.includes('ausgabe') || input.includes('kosten') || input.includes('€') || input.includes('budget')) {
+                // If just "wie ist mein budget"
+                if (input.includes('wie ist') || input.includes('wieviel')) {
+                    const monthlyExpenses = app.state.finance.reduce((acc, curr) => acc + curr.amount, 0); // simplified for this turn
+                    this.showFeedback(`Dein monatliches Budget beträgt ${app.state.monthlyBudget}€. Möchtest du eine Ausgabe eintragen?`);
+                } else {
+                    this.handleFinance(text);
+                }
                 return;
             }
 
-            // 2. APPOINTMENT DETECTION (TERMIN)
-            if (input.includes('termin') || input.includes('treffen') || input.includes('meeting') || input.includes('uhr')) {
+            // 3. APPOINTMENT DETECTION (TERMIN)
+            if (input.includes('termin') || input.includes('treffen') || input.includes('meeting') || input.includes('uhr') || input.includes('erinnere')) {
                 this.handleEvent(text);
                 return;
             }
 
-            // 3. CONTACT DETECTION
+            // 4. CONTACT DETECTION
             if (input.includes('kontakt') && (input.includes('speichern') || input.includes('neuer') || input.includes('hinzu'))) {
                 this.handleContact(text);
                 return;
             }
 
-            // 4. TODO DETECTION
+            // 5. TODO DETECTION
             if (input.includes('aufgabe') || input.includes('todo') || input.includes('kaufen') || input.includes('besorgen') || input.includes('erinnerung')) {
                 this.handleTodo(text);
                 return;
             }
 
-            // 5. DEFAULT: NOTE (NOTIZ)
-            this.handleTodo(text, '👤 Privat'); // Save as private note by default
+            // 6. DEFAULT: INTELLIGENT NOTE
+            this.handleTodo(text, '👤 Privat');
         },
 
         handleFinance(text) {
@@ -3291,7 +3318,7 @@ const app = {
 
             app.state.finance.push(entry);
             app.saveLocal();
-            if (app.state.view === 'finance') app.finance.render();
+            app.navigateTo('finance');
             this.showFeedback(`Betrag gespeichert: ${amount}€ für ${source}`);
         },
 
@@ -3314,7 +3341,7 @@ const app = {
 
             app.state.todos.unshift(newTodo);
             app.saveLocal();
-            if (app.state.view === 'todo') app.todo.render();
+            app.navigateTo('todo');
             this.showFeedback(`Aufgabe hinzugefügt: ${label}`);
         },
 
@@ -3325,25 +3352,22 @@ const app = {
             let location = "";
             let notes = "Via Sprachbefehl erstellt";
 
-            // 1. Parse Name/Title ("mit Enrico", "Treffen mit...", "Termin Zahnarzt")
-            const mitMatch = text.match(/mit\s+([a-zA-ZäöüÄÖÜß]+)/i);
+            // 1. Parse Name/Title
+            const mitMatch = text.match(/mit\s+([a-zA-ZäöüÄÖÜß\s]+)/i);
             if (mitMatch) {
-                title = `Treffen mit ${mitMatch[1]}`;
-            } else {
-                // Should extract logic like "Zahnarzt" from "Termin beim Zahnarzt"
-                // Simplified: use full text minus keywords for now as fallback
-                // But better: check for specific keywords "Termin", "Meeting"
+                title = `Treffen mit ${mitMatch[1].trim().split(' ')[0]}`;
             }
 
-            // If the user says "Trage ein Termin ein mit enrico...", we want "Treffen mit Enrico" as title.
+            // 2. Parse Location
+            const locKeywords = ['in', 'bei', 'nach', 'im', 'am ort', 'adresse'];
+            const locRegex = new RegExp(`(?:${locKeywords.join('|')})\\s+([a-zA-ZäöüÄÖÜß0-9\\s,.-]+?)(?=\\s+(?:um|am|im|für|$) )`, 'i');
+            const locMatch = text.match(locRegex) || text.match(/(?:in|bei|nach|im)\s+([a-zA-ZäöüÄÖÜß0-9\s,.-]+)$/i);
 
-            // 2. Parse Location ("in Kuppenheim", "bei...", "nach...")
-            const locMatch = text.match(/(?:in|bei|nach)\s+([a-zA-ZäöüÄÖÜß\s]+?)(?=\s+(?:um|am|im)|$)/i);
             if (locMatch) {
                 location = locMatch[1].trim();
             }
 
-            // 3. Parse Time ("um 17 Uhr", "17:30")
+            // 3. Parse Time
             const timeMatch = text.match(/(\d{1,2})(?::(\d{2}))?\s*(?:Uhr)/i);
             if (timeMatch) {
                 const h = timeMatch[1].padStart(2, '0');
@@ -3351,8 +3375,7 @@ const app = {
                 time = `${h}:${m}`;
             }
 
-            // 4. Parse Date ("morgen", "übermorgen", "am Montag")
-            // Simple logic for now
+            // 4. Parse Date
             if (text.includes('morgen')) {
                 const d = new Date(); d.setDate(d.getDate() + 1);
                 date = d.toISOString().split('T')[0];
@@ -3360,7 +3383,6 @@ const app = {
                 const d = new Date(); d.setDate(d.getDate() + 2);
                 date = d.toISOString().split('T')[0];
             }
-            // "am 20.2." or similar detection could go here
 
             const newEvent = {
                 id: Date.now().toString(),
@@ -3377,7 +3399,11 @@ const app = {
             app.state.events.push(newEvent);
             app.saveLocal();
             if (app.sync && app.sync.push) app.sync.push();
-            app.render();
+
+            // Navigate and Open modal
+            app.navigateTo('calendar');
+            app.editEvent(newEvent.id);
+
             this.showFeedback(`Termin gespeichert: ${title} in ${location || 'Ort unbekannt'} um ${time}`);
         },
 
@@ -3402,17 +3428,23 @@ const app = {
             };
             app.state.contacts.unshift(newContact);
             app.saveLocal();
-            if (app.state.view === 'contacts') app.contacts.render();
             if (app.sync && app.sync.push) app.sync.push();
+
+            // Navigate and Open modal
+            app.navigateTo('contacts');
+            app.contacts.edit(newContact.id);
 
             this.showFeedback(`Kontakt gespeichert: ${name}`);
         },
 
         showFeedback(msg) {
+            const statusTitle = document.getElementById('aiStatusTitle');
+            if (statusTitle) statusTitle.textContent = "Antwort";
+
             const resultEl = document.getElementById('voiceTranscript');
             if (resultEl) {
                 resultEl.style.color = 'var(--success)';
-                resultEl.textContent = "✔ " + msg;
+                resultEl.textContent = msg;
             }
 
             // Audible Feedback

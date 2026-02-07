@@ -465,20 +465,29 @@
                     <p>Plane deine Einkäufe und deinen Tag.</p>
                 </div>
 
-                <div class="todo-container glass animate-in">
+                <div class="todo-container glass animate-in" style="padding: 30px;">
                     <div class="todo-input-group"
-                        style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                        <input type="text" id="todoInput" style="flex: 2; min-width: 200px;"
-                            placeholder="Was steht an? (z.B. Milch kaufen, Mail schreiben...)">
-                        <div style="flex: 1; min-width: 150px; display: flex; gap: 5px;">
-                            <select id="todoCategory"
-                                style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; color: white; padding: 0 10px;">
-                                <!-- JS Populated -->
-                            </select>
-                            <button class="btn-outline" onclick="app.todo.addCategory()"
-                                title="Neue Bezeichnung">+</button>
+                        style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px;">
+                        <input type="text" id="todoInput"
+                            style="width: 100%; height: 60px; font-size: 1.25rem; padding: 0 20px; border-radius: 16px; background: rgba(0,0,0,0.3); border: 2px solid var(--glass-border); color: white; transition: var(--transition);"
+                            placeholder="Was steht an? (z.B. Milch kaufen, Mail schreiben...)"
+                            onkeyup="if(event.key === 'Enter') app.todo.add()">
+
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <div style="flex: 1; display: flex; gap: 8px;">
+                                <select id="todoCategory"
+                                    style="flex: 1; height: 50px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 12px; color: white; padding: 0 15px; font-weight: 500;">
+                                    <!-- JS Populated -->
+                                </select>
+                                <button class="btn-outline" onclick="app.todo.addCategory()"
+                                    style="height: 50px; width: 50px; border-radius: 12px; font-size: 1.5rem;"
+                                    title="Neue Bezeichnung">+</button>
+                            </div>
+                            <button class="btn-primary" onclick="app.todo.add()"
+                                style="height: 50px; padding: 0 30px; font-size: 1.1rem; border-radius: 12px;">
+                                <i data-lucide="plus" size="20"></i> Hinzufügen
+                            </button>
                         </div>
-                        <button class="btn-primary" onclick="app.todo.add()">Hinzufügen</button>
                     </div>
 
                     <div class="todo-filters" style="display: flex; gap: 10px; margin-bottom: 20px;">
@@ -1071,20 +1080,35 @@
             </button>
         </div>
 
-        <!-- Voice Recognition Overlay -->
+        <!-- Pear AI Voice & Intelligence Overlay -->
         <div id="voiceOverlay" class="voice-overlay hidden">
-            <div class="voice-content">
-                <div class="voice-wave">
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
+            <div class="ai-orb-container">
+                <div class="ai-orb"></div>
+                <div class="ai-orb-blur"></div>
+            </div>
+
+            <div class="voice-content ai-premium-content">
+                <div class="ai-badge">PEAR AI ASSISTANT</div>
+                <h2 id="aiStatusTitle">Wie kann ich dir helfen?</h2>
+
+                <div class="transcript-container glass">
+                    <p id="voiceTranscript" class="transcript">Sage z.B. "Erinnere mich an das Meeting morgen" oder "Wie
+                        ist mein Budget?"</p>
                 </div>
-                <h3>Ich höre zu...</h3>
-                <p id="voiceTranscript" class="transcript">Sage z.B. "Termin Zahnarzt morgen 10 Uhr" oder "Betrag 50
-                    Euro Tanken"</p>
-                <button class="btn-outline" onclick="app.voice.stop()">Abbrechen</button>
+
+                <div class="ai-visualizer">
+                    <div class="ai-bar"></div>
+                    <div class="ai-bar"></div>
+                    <div class="ai-bar"></div>
+                    <div class="ai-bar"></div>
+                    <div class="ai-bar"></div>
+                </div>
+
+                <div class="ai-controls">
+                    <button class="btn-outline ai-btn-close" onclick="app.voice.stop()">
+                        <i data-lucide="x" size="20"></i> Schließen
+                    </button>
+                </div>
             </div>
         </div>
     </div>
