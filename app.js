@@ -1025,8 +1025,11 @@ const app = {
             touchStartX = e.changedTouches[0].screenX;
             touchStartY = e.changedTouches[0].screenY;
             // PULL TO REFRESH START
-            if (window.scrollY === 0) {
+            // Only valid if scrolled to top AND touch starts in top area (e.g. navigation bar)
+            if (window.scrollY === 0 && e.touches[0].clientY < 60) {
                 this.ptrStartY = e.touches[0].clientY;
+            } else {
+                this.ptrStartY = -1; // Invalid start
             }
         }, { passive: true });
 
@@ -1036,8 +1039,10 @@ const app = {
             if (window.scrollY === 0 && this.ptrStartY > 0 && y > this.ptrStartY) {
                 this.ptrDist = y - this.ptrStartY;
                 if (this.ptrDist > 80 && !this.ptrTriggered) {
-                    // Visual feedback could be added here
+                    // Visual feedback
                 }
+            } else {
+                this.ptrDist = 0; // Cancel if scrolled down or invalid start
             }
         }, { passive: true });
 
