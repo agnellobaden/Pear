@@ -19,6 +19,7 @@ const app = {
         events: [],
         view: 'dashboard',
         calendarView: 'month',
+        monthViewMode: 'grid', // Default to Grid view per user request
         currentDate: new Date(),
         todos: [],
         todoFilter: 'all',
@@ -242,7 +243,7 @@ const app = {
             localStorage.setItem('moltbot_user_avatar', 'logo.svg');
         }
         this.state.user.avatar = storedAvatar;
-        this.state.view = localStorage.getItem('moltbot_view') || 'dashboard';
+        this.state.view = 'dashboard'; // Force dashboard on load to fix blank screen issues
 
         const savedEvents = localStorage.getItem('moltbot_events');
         if (savedEvents) {
@@ -1359,11 +1360,9 @@ const app = {
 
         this.render();
 
-        // Close sidebar on mobile after navigation
-        if (window.innerWidth <= 768) {
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar) sidebar.classList.remove('active');
-        }
+        // Close sidebar after navigation (always try to close to support overlay behavior on all devices)
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) sidebar.classList.remove('active');
     },
 
     toggleCard(header) {
@@ -1418,8 +1417,25 @@ const app = {
 
             for (let d = 1; d <= daysInMonth; d++) {
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const currentCellDate = new Date(year, month, d);
                 const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
-                html += `<div class="calendar-cell ${isToday ? 'today' : ''}" onclick="app.openCreateAt('${dateStr}')">${d}</div>`;
+
+                const dayEvents = this.state.events.filter(e => this.isEventOnDate(e, currentCellDate));
+                const hasEvent = dayEvents.length > 0;
+
+                let styleStr = '';
+                if (hasEvent) {
+                    const evt = dayEvents.find(e => e.color) || dayEvents[0];
+                    if (evt && evt.color) {
+                        styleStr = `background: ${evt.color}; color: #fff; font-weight: 700; border: none;`;
+                    } else {
+                        styleStr = `background: var(--primary); color: #fff; font-weight: 700; border: none;`;
+                    }
+                }
+
+                let classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''}`;
+
+                html += `<div class="${classStr}" style="${styleStr}" onclick="app.goToDay('${dateStr}')">${d}</div>`;
             }
             grid.innerHTML = html;
         }
@@ -1427,6 +1443,9 @@ const app = {
 
     // --- RENDERING ---
     render() {
+        // Auto-archive past events
+        this.checkArchivedEvents();
+
         // Sync Header Info
         const headerName = document.getElementById('headerUserName');
         if (headerName) headerName.textContent = this.state.user.name;
@@ -1901,6 +1920,7 @@ const app = {
         }
 
         const future = sorted.filter(e => {
+            if (e.archived) return false; // Don't show archived
             if (e.category === 'birthday' || e.category === 'holiday') {
                 // Show if today or in next 30 days regardless of year
                 const d = new Date(e.date);
@@ -1918,9 +1938,15 @@ const app = {
             const card = list.closest('.next-events');
             if (card) card.style.display = 'none';
         } else {
-            // Show the card
+            // Show the card and mark it green
             const card = list.closest('.next-events');
-            if (card) card.style.display = 'block';
+            if (card) {
+                card.style.display = 'block';
+                // Green indicator that content is available
+                // Apply a distinct border and subtle glow
+                card.style.border = '1px solid rgba(16, 185, 129, 0.6)';
+                card.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.15)';
+            }
 
             list.innerHTML = html + future.map(e => {
                 const d = new Date(e.date);
@@ -2018,13 +2044,32 @@ const app = {
     },
 
     renderMiniCalendar() {
+        // --- ADDED: Container for listing events ---
+        // Ensure container exists in DOM (it might not if we don't modify HTML)
+        // We will inject it dynamically if missing or assume user will add HTML? 
+        // Better: Find parent of grid and append if not exists.
         const grid = document.getElementById('miniCalendarGrid');
-        const monthHeader = document.getElementById('miniCalendarMonth');
         if (!grid) return;
+
+        // Find or create event list container
+        let eventListContainer = document.getElementById('dashboardSelectedDayEvents');
+        if (!eventListContainer && grid.parentElement) {
+            eventListContainer = document.createElement('div');
+            eventListContainer.id = 'dashboardSelectedDayEvents';
+            grid.parentElement.appendChild(eventListContainer);
+        }
+
+        const monthHeader = document.getElementById('miniCalendarMonth');
 
         const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth();
+
+        // Use locally stored selected date for dashboard interaction or default to today
+        if (!this.state.dashboardSelectedDate) {
+            this.state.dashboardSelectedDate = new Date();
+        }
+        const selectedDate = new Date(this.state.dashboardSelectedDate);
 
         monthHeader.textContent = now.toLocaleString('de-DE', { month: 'long', year: 'numeric' });
 
@@ -2041,12 +2086,65 @@ const app = {
 
         for (let d = 1; d <= daysInMonth; d++) {
             const currentCellDate = new Date(year, month, d);
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const isToday = d === now.getDate() && month === now.getMonth() && year === now.getFullYear();
-            const hasEvent = this.state.events.some(e => this.isEventOnDate(e, currentCellDate));
-            html += `<div class="calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''}" onclick="app.openCreateAt('${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}')">${d}</div>`;
+            const isSelected = d === selectedDate.getDate() && month === selectedDate.getMonth() && year === selectedDate.getFullYear();
+
+            const dayEvents = this.state.events.filter(e => this.isEventOnDate(e, currentCellDate));
+            const hasEvent = dayEvents.length > 0;
+
+            let visualContent = `${d}`;
+            if (hasEvent) {
+                const dotsHtml = dayEvents.slice(0, 4).map(e => {
+                    const color = e.color || 'var(--primary)';
+                    return `<div class="mini-event-dot" style="background: ${color};"></div>`;
+                }).join('');
+                visualContent += `<div class="mini-event-dots">${dotsHtml}</div>`;
+            }
+
+            let classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''} ${isSelected ? 'selected-day' : ''}`;
+            let styleStr = isSelected ? `border-color: var(--text-main); background: rgba(255,255,255,0.1);` : '';
+
+            // Update click to select date
+            html += `<div class="${classStr}" style="${styleStr}" onclick="app.selectDashboardDate('${dateStr}')">${visualContent}</div>`;
         }
 
         grid.innerHTML = html;
+
+        // Render the list for the selected date
+        if (eventListContainer) {
+            const events = this.state.events.filter(e => this.isEventOnDate(e, selectedDate));
+            const dateDisplay = selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
+
+            let listHtml = `<div style="margin-top:15px; border-top:1px solid var(--glass-border); padding-top:10px; animation:fadeIn 0.3s;">
+                <h5 style="margin:0 0 10px 0; color:var(--text-muted); font-size:0.9rem;">Termine am ${dateDisplay}</h5>`;
+
+            if (events.length === 0) {
+                listHtml += `<div class="text-muted" style="font-size:0.8rem; text-align:center; padding:10px;">Keine Termine</div>`;
+            } else {
+                events.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+                listHtml += `<div style="display:flex; flex-direction:column; gap:8px;">`;
+                listHtml += events.map(e => `
+                    <div onclick="app.editEvent('${e.id}')" class="scale-hover" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:12px; cursor:pointer; border-left: 3px solid ${e.color || 'var(--primary)'};">
+                        <span style="font-weight:700; font-size:0.9rem; min-width:45px;">${e.time || '--:--'}</span>
+                        <div style="overflow:hidden;">
+                            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.title}</div>
+                        </div>
+                    </div>
+                 `).join('');
+                listHtml += `</div>`;
+            }
+            listHtml += `</div>`;
+            eventListContainer.innerHTML = listHtml;
+            if (window.lucide) lucide.createIcons();
+        }
+    },
+
+    selectDashboardDate(dateStr) {
+        if (!dateStr) return;
+        const [y, m, d] = dateStr.split('-').map(Number);
+        this.state.dashboardSelectedDate = new Date(y, m - 1, d);
+        this.renderMiniCalendar();
     },
 
     renderCalendar() {
@@ -2169,24 +2267,30 @@ const app = {
 
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(year, month, d);
-            // FIX: Manual date string here too
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
             const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
 
-            // Compact event indicators for Grid View
-            const indicators = dayEvents.slice(0, 3).map(e =>
-                `<div class="event-dot ${e.category || 'work'}" title="${e.title}"></div>`
-            ).join('');
+            // Render Events as colored bars/pills for visibility
+            // Limit to 3-4 to avoid overflow
+            const visibleEvents = dayEvents.slice(0, 4);
+            const eventHtml = visibleEvents.map(e => {
+                const style = e.color ? `background-color:${e.color};` : '';
+                return `<div class="month-event-pill ${e.category}" style="${style}" title="${e.title}">
+                    <span class="truncate">${e.time || ''} ${e.title}</span>
+                </div>`;
+            }).join('');
+
+            const moreCount = dayEvents.length - visibleEvents.length;
 
             html += `
-                <div class="calendar-cell-large ${isToday ? 'today-full' : ''}" onclick="app.openCreateAt('${dateStr}')">
+                <div class="calendar-cell-large ${isToday ? 'today-full' : ''}" onclick="app.goToDay('${dateStr}')">
                     <div class="cell-header">
                         <span class="day-num">${d}</span>
-                        ${dayEvents.length > 0 ? `<div class="event-dots">${indicators}</div>` : ''}
                     </div>
-                    <div class="day-events mobile-hidden">
-                        ${dayEvents.map(e => this.renderEventActions(e)).join('')}
+                    <div class="day-events-container">
+                        ${eventHtml}
+                        ${moreCount > 0 ? `<div class="more-events">+${moreCount}</div>` : ''}
                     </div>
                 </div>
             `;
@@ -2249,6 +2353,72 @@ const app = {
         this.renderTimeGrid(grid, [date], filteredEvents, 'day');
     },
 
+
+
+    // --- HELPERS ---
+    checkArchivedEvents() {
+        const now = new Date();
+        const currentTs = now.getTime();
+        let changed = false;
+
+        this.state.events.forEach(e => {
+            if (e.archived) return; // Already archived
+
+            // Determine end time (default 1h duration if not set)
+            // If no time, assume end of day (23:59)
+            let endTs;
+            if (e.allDay || !e.time) {
+                endTs = new Date(e.date + 'T23:59:59').getTime();
+            } else {
+                const start = new Date(`${e.date}T${e.time}`);
+                // Default duration 1h
+                endTs = start.getTime() + (60 * 60 * 1000);
+            }
+
+            if (endTs < currentTs) {
+                e.archived = true;
+                e.updatedAt = Date.now();
+                changed = true;
+            }
+        });
+
+        if (changed) {
+            this.saveLocal();
+            // Don't call render here to avoid loop if called from render, 
+            // but since we modify data, next render will pick it up.
+        }
+    },
+
+    createEventElement(e) {
+        // Calculate position
+        const [h, m] = (e.time || '00:00').split(':').map(Number);
+        const startMin = h * 60 + m;
+        const duration = 60; // Default 1h if not set
+
+        const el = document.createElement('div');
+        el.className = `event-card ${e.category || ''} ${e.archived ? 'archived' : ''}`;
+        el.style.top = `${startMin}px`;
+        el.style.height = `${duration}px`;
+
+        // Styling options (color)
+        if (e.color) {
+            el.style.backgroundColor = e.archived ? '#e5e7eb' : e.color; // Muted if archived
+            el.style.borderLeftColor = e.color;
+            if (e.archived) el.style.opacity = '0.6';
+        }
+
+        el.onclick = (ev) => {
+            ev.stopPropagation();
+            app.editEvent(e.id);
+        };
+
+        el.innerHTML = `
+            <div class="event-title">${e.title}</div>
+            <div class="event-time">${e.time}</div>
+        `;
+        return el;
+    },
+
     renderTimeGrid(container, days, events, viewType) {
         container.innerHTML = '';
         container.className = `time-grid-container view-${viewType}`;
@@ -2259,12 +2429,30 @@ const app = {
         container.appendChild(header);
         container.appendChild(body);
 
-        // Scroll to 8:00 AM automatically
+        // Scroll Logic: Center first event or fallback to current time
         setTimeout(() => {
             const scrollArea = container.querySelector('.time-grid-scroll-area');
             if (scrollArea) {
-                const hour8 = scrollArea.querySelector('.grid-row[data-hour="8"]');
-                if (hour8) hour8.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                let targetScroll = 0;
+
+                // Find earliest event top position in the rendered grid
+                // We look for direct children of columns which are event cards
+                // Since cols are in shadow DOM essentially, querySelector needs to be deep or just find .event-card
+                const firstEvent = scrollArea.querySelector('.event-card');
+
+                if (firstEvent) {
+                    // Get top value (e.g. "480px")
+                    const topVal = parseInt(firstEvent.style.top || '0');
+                    // Scroll so event is vertically centered-ish (minus 150px padding)
+                    targetScroll = Math.max(0, topVal - 150);
+                } else {
+                    // Fallback to current time
+                    const now = new Date();
+                    const currentHour = now.getHours();
+                    targetScroll = Math.max(0, (currentHour - 1) * 60);
+                }
+
+                scrollArea.scrollTo({ top: targetScroll, behavior: 'smooth' });
             }
         }, 100);
 
@@ -2405,38 +2593,7 @@ const app = {
         return body;
     },
 
-    // Helper to create the event DOM element
-    createEventElement(e) {
-        // Calculate position
-        const [h, m] = (e.time || '00:00').split(':').map(Number);
-        const startMin = h * 60 + m;
-        const duration = 60; // Default 1h if not set
-        // TODO: Support actual duration if added to data model
 
-        const el = document.createElement('div');
-        el.className = `event-card ${e.category || ''}`;
-        el.style.top = `${startMin}px`;
-        el.style.height = `${duration}px`;
-
-        // Styling options (color)
-        if (e.color) {
-            el.style.backgroundColor = e.color;
-            el.style.borderLeftColor = e.color; // or darker?
-            // If color is light, text dark? 
-            // Simplified: use provided color logic or class
-        }
-
-        el.onclick = (ev) => {
-            ev.stopPropagation();
-            app.editEvent(e.id);
-        };
-
-        el.innerHTML = `
-            <div class="event-title">${e.title}</div>
-            <div class="event-time">${e.time}</div>
-        `;
-        return el;
-    },
 
     getEventStyle(e, colIndex, totalCols) {
         if (!e.time) return 'display:none';
@@ -2520,14 +2677,35 @@ const app = {
                 const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 const dailyEvents = filteredEvents.filter(e => e.date === dateStr);
                 let classStr = 'year-mini-cell';
-                if (dailyEvents.length > 2) classStr += ' has-event has-event-many';
-                else if (dailyEvents.length > 0) classStr += ' has-event';
+                let styleStr = ''; // No full background
+                let visualContent = `${d}`;
 
-                html += `<div class="${classStr}" onclick="app.openCreateAt('${dateStr}')">${d}</div>`;
+                if (dailyEvents.length > 0) {
+                    classStr += ' has-event';
+                    if (dailyEvents.length > 2) classStr += ' has-event-many';
+
+                    const dotsHtml = dailyEvents.slice(0, 3).map(e => {
+                        const color = e.color || 'var(--primary)';
+                        return `<div class="mini-event-dot" style="background: ${color}; width:3px; height:3px;"></div>`;
+                    }).join('');
+                    visualContent += `<div class="mini-event-dots" style="justify-content:center; margin-top:0;">${dotsHtml}</div>`;
+                }
+
+                // Change click action to navigate to Day View
+                html += `<div class="${classStr}" style="${styleStr}" onclick="app.goToDay('${dateStr}')">${visualContent}</div>`;
             }
             html += `</div></div>`;
         }
         grid.innerHTML = html;
+    },
+
+    goToDay(dateStr) {
+        if (!dateStr) return;
+        const [y, m, d] = dateStr.split('-').map(Number);
+        // Set date to local noon to avoid any midnight timezone shifts
+        this.state.currentDate = new Date(y, m - 1, d, 12, 0, 0);
+        this.state.calendarView = 'day';
+        this.render();
     },
 
     openCreateAt(date, time = '') {
@@ -2722,6 +2900,60 @@ const app = {
 
             if (window.lucide) lucide.createIcons();
         }
+    },
+
+    // --- FAVORITES & QUICK ACTIONS ---
+    toggleFavorites() {
+        this.state.favsCollapsed = !this.state.favsCollapsed;
+        localStorage.setItem('moltbot_favs_collapsed', this.state.favsCollapsed);
+        this.renderFavorites();
+    },
+
+    renderFavorites() {
+        const container = document.getElementById('quickContactsContainer');
+        if (!container) return;
+
+        // Visual Toggle State
+        const btn = document.getElementById('toggleFavsBtn');
+        if (btn) {
+            const icon = btn.querySelector('svg') || btn.querySelector('i');
+            if (this.state.favsCollapsed) {
+                container.style.display = 'none';
+                if (window.lucide && icon) icon.setAttribute('data-lucide', 'chevron-down');
+            } else {
+                container.style.display = 'grid';
+                if (window.lucide && icon) icon.setAttribute('data-lucide', 'chevron-up');
+            }
+            if (window.lucide) lucide.createIcons();
+        }
+
+        if (this.state.favsCollapsed) return;
+
+        const favs = this.state.contacts.filter(c => c.isFavorite);
+
+        if (favs.length === 0) {
+            container.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:var(--text-muted); font-size:0.8rem; padding:10px;">Markiere Kontakte mit ❤️ als Favorit</div>';
+            return;
+        }
+
+        container.innerHTML = favs.map(c => `
+            <a href="tel:${c.phone}" class="scale-hover" style="text-decoration:none; color:inherit; display:flex; flex-direction:column; align-items:center; gap:5px; padding:5px;">
+                <div style="position:relative; width:55px; height:55px;">
+                    <div style="width:100%; height:100%; border-radius:50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); display:flex; align-items:center; justify-content:center; overflow:hidden; border:2px solid var(--glass-border); box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
+                        ${c.importIcon
+                ? `<img src="${c.importIcon}" style="width:100%; height:100%; object-fit:cover;">`
+                : `<span style="font-size:1.2rem; font-weight:700; color:white;">${c.name.charAt(0).toUpperCase()}</span>`
+            }
+                    </div>
+                    <div style="position:absolute; bottom:-2px; right:-2px; background:var(--success); color:white; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid var(--bg-card);">
+                        <i data-lucide="phone" style="width:10px; height:10px;"></i>
+                    </div>
+                </div>
+                <span style="font-size:0.75rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:80px;">${c.name.split(' ')[0]}</span>
+            </a>
+        `).join('');
+
+        if (window.lucide) lucide.createIcons();
     },
 
     // --- CONTACTS MODULE ---
