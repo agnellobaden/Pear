@@ -2965,7 +2965,23 @@ const app = {
             ).sort((a, b) => a.name.localeCompare(b.name));
 
             if (filtered.length === 0) {
-                container.innerHTML = '<div class="glass" style="text-align:center; padding: 40px; color: var(--text-muted);">Keine Kontakte gefunden.</div>';
+                let html = '<div class="glass" style="text-align:center; padding: 40px; color: var(--text-muted); display:flex; flex-direction:column; align-items:center; gap:15px;">';
+                html += '<i data-lucide="users" size="48" style="opacity:0.5;"></i>';
+                html += '<span>Noch keine Kontakte.</span>';
+
+                // Proactive Check: offer import directly if supported
+                if ('contacts' in navigator && 'ContactsManager' in window) {
+                    html += `<button class="btn-primary" onclick="app.contacts.importMobile()" style="animation: pulse 2s infinite;">
+                        <i data-lucide="smartphone"></i> Jetzt Kontakte vom Handy importieren
+                     </button>`;
+                    html += `<small style="opacity:0.7;">(Erfordert Berechtigung)</small>`;
+                } else {
+                    html += `<small>Tipp: Importiere Kontakte über "Mehr" oder erstelle einen neuen.</small>`;
+                }
+
+                html += '</div>';
+                container.innerHTML = html;
+                if (window.lucide) lucide.createIcons();
                 return;
             }
 

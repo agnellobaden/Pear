@@ -3480,6 +3480,7 @@ body {
 }
 
 /* Grid Lines */
+/* Grid Lines */
 .grid-lines-layer {
     position: absolute;
     left: 60px;
@@ -3488,6 +3489,7 @@ body {
     top: 0;
     bottom: 0;
     pointer-events: none;
+    z-index: 1;
 }
 
 .horizontal-line {
@@ -3495,7 +3497,8 @@ body {
     left: 0;
     right: 0;
     height: 1px;
-    background: var(--glass-border);
+    background: rgba(255, 255, 255, 0.15);
+    /* More visible grid lines */
 }
 
 /* Day Columns */
@@ -3506,6 +3509,23 @@ body {
     top: 0;
     bottom: 0;
     display: flex;
+    z-index: 5;
+    /* Above grid lines */
+}
+
+.day-column {
+    flex: 1;
+    position: relative;
+    height: 100%;
+    /* Border handled by JS or CSS nth-child */
+    cursor: pointer;
+    border-left: 1px solid rgba(255, 255, 255, 0.15);
+    /* VISIBLE Vertical lines */
+}
+
+.day-column:first-child {
+    border-left: none;
+    /* First one already has axis border */
 }
 
 .day-column {

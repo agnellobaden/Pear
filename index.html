@@ -976,7 +976,8 @@
                     </div>
                 </div>
 
-                <div class="glass animate-in" style="margin-bottom: 20px; padding: 20px;">
+                <div class="glass animate-in"
+                    style="margin-bottom: 20px; padding: 20px; z-index: 200; position: relative; overflow: visible;">
                     <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
                         <div class="search-bar" style="flex: 1; min-width: 250px;">
                             <i data-lucide="search"></i>
@@ -991,14 +992,18 @@
                             <i data-lucide="user-plus"></i> Hinzufügen
                         </button>
 
+                        <button class="btn-outline" onclick="app.contacts.importMobile()"
+                            title="Kontakte direkt vom Handy importieren">
+                            <i data-lucide="smartphone"></i> Handy Import
+                        </button>
+
                         <details style="position: relative;">
                             <summary class="btn-outline"
                                 style="list-style: none; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <i data-lucide="download"></i> Import & Sync <i data-lucide="chevron-down"
-                                    size="14"></i>
+                                <i data-lucide="download"></i> Mehr <i data-lucide="chevron-down" size="14"></i>
                             </summary>
                             <div class="glass"
-                                style="position: absolute; top: 120%; right: 0; padding: 15px; display: flex; flex-direction: column; gap: 10px; min-width: 220px; z-index: 50; border: 1px solid rgba(255,255,255,0.1);">
+                                style="position: absolute; top: 120%; right: 0; padding: 15px; display: flex; flex-direction: column; gap: 10px; min-width: 220px; z-index: 9999; border: 1px solid rgba(255,255,255,0.1);">
                                 <button class="btn-outline"
                                     onclick="this.closest('details').removeAttribute('open'); app.sync.push()"
                                     title="Jetzt manuell synchronisieren"
@@ -1011,11 +1016,6 @@
                                     <input type="file" id="contactImportFile" accept=".vcf,.csv" style="display: none;"
                                         onchange="this.closest('details').removeAttribute('open'); app.contacts.import(this)">
                                 </label>
-                                <button class="btn-outline mobile-only"
-                                    onclick="this.closest('details').removeAttribute('open'); app.contacts.importMobile()"
-                                    style="justify-content: flex-start; width: 100%;">
-                                    <i data-lucide="smartphone"></i> Handy Import
-                                </button>
                             </div>
                         </details>
                     </div>
