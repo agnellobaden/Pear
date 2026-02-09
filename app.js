@@ -808,12 +808,16 @@ const app = {
             private: document.getElementById('filter-private')?.checked ?? true,
             urgent: document.getElementById('filter-urgent')?.checked ?? true,
             birthday: document.getElementById('filter-birthday')?.checked ?? true,
-            holiday: document.getElementById('filter-holiday')?.checked ?? true
+            holiday: document.getElementById('filter-holiday')?.checked ?? true,
+            archive: document.getElementById('filter-archive')?.checked ?? false
         };
         const search = document.querySelector('.search-bar input')?.value.toLowerCase() || '';
 
         // User Events
         let combined = this.state.events.filter(e => {
+            // Archive Filter: Hide archived unless enabled
+            if (e.archived && !filters.archive) return false;
+
             const matchesCategory = filters[e.category] !== false;
             const matchesSearch = e.title.toLowerCase().includes(search) || (e.notes && e.notes.toLowerCase().includes(search));
             return matchesCategory && matchesSearch;
@@ -1333,8 +1337,14 @@ const app = {
     },
 
     navigateTo(page, replace = false) {
+        // Immediate Menu Close for responsiveness
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        if (sidebar) sidebar.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+
         // If clicking the same page, do nothing unless we need to close sidebar
-        // if (this.state.view === page && !replace) return; 
+        // if (this.state.view === page && !replace) return;  
 
         this.state.view = page;
         localStorage.setItem('moltbot_view', page);
@@ -1363,6 +1373,10 @@ const app = {
         // Close sidebar after navigation (always try to close to support overlay behavior on all devices)
         const sidebar = document.getElementById('sidebar');
         if (sidebar) sidebar.classList.remove('active');
+
+        // Also remove active from overlay directly if we switch to manual class based approach
+        const overlay = document.querySelector('.sidebar-overlay');
+        if (overlay) overlay.classList.remove('active');
     },
 
     toggleCard(header) {
@@ -2297,6 +2311,60 @@ const app = {
         }
         grid.innerHTML = html;
         if (window.lucide) lucide.createIcons();
+    },
+
+    renderArchiveSettings() {
+        const container = document.getElementById('archiveManagerList');
+        if (!container) return;
+
+        const archived = this.state.events.filter(e => e.archived);
+
+        if (archived.length === 0) {
+            container.innerHTML = '<div class="empty-state" style="padding:15px; text-align:center; color:#888;">Das Archiv ist leer.</div>';
+            return;
+        }
+
+        archived.sort((a, b) => new Date(b.date) - new Date(a.date)); // Newest archived first
+
+        container.innerHTML = archived.map(e => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border:1px solid var(--glass-border);">
+                <div>
+                    <div style="font-weight:600; color:var(--text-main);">${e.title}</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">${new Date(e.date).toLocaleDateString('de-DE')}</div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="icon-btn" onclick="app.unarchiveEvent('${e.id}')" title="Wiederherstellen" style="background:rgba(255,255,255,0.1);">
+                        <i data-lucide="rotate-ccw" size="16"></i>
+                    </button>
+                    <button class="icon-btn" onclick="app.permanentlyDeleteEvent('${e.id}')" title="Endgültig löschen" style="color:var(--danger); background:rgba(255,0,0,0.1);">
+                        <i data-lucide="trash-2" size="16"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        if (window.lucide) lucide.createIcons();
+    },
+
+    unarchiveEvent(id) {
+        const evt = this.state.events.find(e => e.id === id);
+        if (evt) {
+            evt.archived = false;
+            this.saveLocal();
+            this.sync.push();
+            this.renderArchiveSettings();
+            this.render(); // Update calendar
+            alert("Termin wiederhergestellt.");
+        }
+    },
+
+    permanentlyDeleteEvent(id) {
+        if (confirm("Diesen Termin endgültig löschen? Er kann nicht wiederhergestellt werden.")) {
+            this.state.events = this.state.events.filter(e => e.id !== id);
+            this.saveLocal();
+            this.sync.push();
+            this.renderArchiveSettings();
+        }
     },
 
     renderWeekView(grid, startOfWeek, filteredEvents) {

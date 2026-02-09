@@ -234,11 +234,11 @@
                 </div>
 
                 <div class="dashboard-grid">
-                    <div class="card glass next-events collapsible-card">
+                    <div class="card glass next-events collapsible-card is-collapsed">
                         <div class="card-header-toggle" onclick="app.toggleCard(this)">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <h3>Nächste Termine</h3>
-                                <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
+                                <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
                             </div>
                             <button class="btn-text" onclick="event.stopPropagation(); app.navigateTo('calendar')">Alle
                                 ansehen</button>
@@ -307,6 +307,11 @@
                                 <input type="checkbox" id="filter-holiday" checked>
                                 <label for="filter-holiday"><span class="dot" style="background:#ff9f43"></span>
                                     Feiertage 🎊</label>
+                            </div>
+                            <div class="filter-item">
+                                <input type="checkbox" id="filter-archive">
+                                <label for="filter-archive"><span class="dot" style="background:#6c757d"></span>
+                                    Archiv anzeigen 📦</label>
                             </div>
                         </div>
                     </aside>
@@ -900,6 +905,24 @@
                         <div id="settingsHolidayList" style="display: flex; flex-direction: column; gap: 8px;">
                             <!-- JS Populated -->
                         </div>
+                    </div>
+                </div>
+
+                <div class="card glass animate-in collapsible-card is-collapsed" style="margin-top: 25px;">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <h3>Archiv 📦</h3>
+                        <i data-lucide="chevron-down" class="toggle-icon"></i>
+                    </div>
+                    <div class="card-content">
+                        <p class="text-muted" style="margin-bottom: 15px;">Wiederherstellen oder endgültiges Löschen von
+                            archivierten Einträgen.</p>
+                        <div id="archiveManagerList" style="display: flex; flex-direction: column; gap: 10px;">
+                            <div class="empty-state">Lade Archiv...</div>
+                        </div>
+                        <button class="btn-outline" onclick="app.renderArchiveSettings()"
+                            style="margin-top: 15px; width: 100%;">
+                            <i data-lucide="refresh-cw"></i> Archiv aktualisieren
+                        </button>
                     </div>
                 </div>
 
