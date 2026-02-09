@@ -2809,6 +2809,53 @@ const app = {
             document.getElementById('contactModalOverlay').classList.add('hidden');
         },
 
+        checkAutoImport() {
+            // Only if supported, empty list, and not dismissed yet
+            if (!('contacts' in navigator && 'ContactsManager' in window)) return;
+            if (app.state.contacts.length > 0) return;
+            if (sessionStorage.getItem('moltbot_skip_import')) return;
+
+            // Create and show a custom modal for "Automatic" feel
+            const modalId = 'autoImportModal';
+            if (document.getElementById(modalId)) return; // Already showing
+
+            const modal = document.createElement('div');
+            modal.id = modalId;
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.85); z-index: 10000;
+                display: flex; align-items: center; justify-content: center;
+                backdrop-filter: blur(10px); animation: fadeIn 0.3s;
+            `;
+            modal.innerHTML = `
+                <div class="glass" style="max-width: 90%; width: 400px; text-align: center; padding: 40px; border: 1px solid var(--primary);">
+                    <div style="width: 80px; height: 80px; background: rgba(var(--primary-rgb), 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+                        <i data-lucide="smartphone" size="40" style="color: var(--primary);"></i>
+                    </div>
+                    <h2 style="margin-bottom: 10px;">Telefonbuch synchronisieren?</h2>
+                    <p class="text-muted" style="margin-bottom: 30px;">Möchtest du alle Kontakte (Nummern & E-Mails) von deinem Handy in die App übertragen?</p>
+                    
+                    <button class="btn-primary w-full" style="justify-content: center; font-size: 1.1rem; padding: 15px; margin-bottom: 15px;" id="btnAutoImport">
+                        <i data-lucide="download-cloud"></i> Ja, alle importieren
+                    </button>
+                    
+                    <button class="btn-text" style="color: var(--text-muted);" onclick="sessionStorage.setItem('moltbot_skip_import', 'true'); document.getElementById('${modalId}').remove();">
+                        Nein, später
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Re-init icons for the new modal
+            if (window.lucide) lucide.createIcons();
+
+            // Bind click manually to avoid inline JS restrictions/scope issues
+            document.getElementById('btnAutoImport').onclick = () => {
+                document.getElementById(modalId).remove();
+                this.importMobile();
+            };
+        },
+
         async importMobile() {
             // Check for API support
             if (!('contacts' in navigator && 'ContactsManager' in window)) {
@@ -2817,7 +2864,8 @@ const app = {
             }
 
             try {
-                const props = ['name', 'tel', 'email', 'address'];
+                // Request as much info as possible
+                const props = ['name', 'tel', 'email', 'address', 'icon'];
                 const opts = { multiple: true };
 
                 const contacts = await navigator.contacts.select(props, opts);
@@ -2843,6 +2891,7 @@ const app = {
                                     Object.values(c.address[0]).join(', ')) : '',
                             birthday: '',
                             notes: 'Importiert vom Handy',
+                            importIcon: c.icon && c.icon[0] ? URL.createObjectURL(c.icon[0]) : null, // Future use
                             createdAt: Date.now(),
                             updatedAt: Date.now()
                         };
@@ -2853,7 +2902,11 @@ const app = {
                     app.saveLocal();
                     this.render();
                     if (app.sync && app.sync.push) app.sync.push();
-                    alert(`${count} Kontakte erfolgreich importiert!`);
+
+                    // Show success directly in UI
+                    const msg = `${count} Kontakte erfolgreich übertragen!`;
+                    app.voice.showFeedback(msg);
+                    alert(msg);
                 }
             } catch (ex) {
                 console.error("Kontakt-Import Fehler:", ex);
@@ -2953,6 +3006,9 @@ const app = {
         render() {
             const container = document.getElementById('contactMainContainer');
             if (!container) return;
+
+            // Check for Auto-Import (Automatic Prompt)
+            this.checkAutoImport();
 
             // Also render the favorites sub-section
             app.renderFavorites();
