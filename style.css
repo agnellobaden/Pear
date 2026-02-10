@@ -7,26 +7,36 @@
 body[data-theme='dark'],
 body:not([data-theme]) {
     --bg-dark: #09090b;
-    --bg-card: rgba(var(--primary-rgb), 0.04);
-    --bg-dark: #1f1f1f;
-    --bg-card: #1f1f1f;
-    --glass-border: #444746;
+    --bg-card: #18181b;
+    /* Solid Zinc-900 */
+    --bg-element: #27272a;
+    /* Solid Zinc-800 */
+    --bg-element-hover: #3f3f46;
+    /* Solid Zinc-700 */
+    --bg-hover: #27272a;
+    --glass-border: #3f3f46;
     --primary: #a8c7fa;
     --primary-rgb: 168, 199, 250;
     --primary-glow: rgba(168, 199, 250, 0.2);
     --secondary: #c2e7ff;
     --secondary-rgb: 194, 231, 255;
     --text-main: #e3e3e3;
-    --text-muted: #c4c7c5;
-    --danger: #f2b8b5;
-    --success: #81c995;
+    --text-muted: #a1a1aa;
+    --danger: #f87171;
+    --success: #4ade80;
 }
 
 /* Light Theme */
 body[data-theme='light'] {
     --bg-dark: #f8fafc;
-    --bg-card: rgba(var(--primary-rgb), 0.05);
-    --glass-border: rgba(var(--primary-rgb), 0.1);
+    --bg-card: #ffffff;
+    /* Solid White */
+    --bg-element: #f1f5f9;
+    /* Slate-100 */
+    --bg-element-hover: #e2e8f0;
+    /* Slate-200 */
+    --bg-hover: #f8fafc;
+    --glass-border: #cbd5e1;
     --primary: #52525b;
     --primary-rgb: 82, 82, 91;
     --primary-glow: rgba(82, 82, 91, 0.2);
@@ -501,16 +511,20 @@ body {
 
 .glass {
     background: var(--bg-card);
-    backdrop-filter: blur(12px);
+    /* Solid background from theme */
     border: 1px solid var(--glass-border);
     border-radius: 24px;
     padding: 24px;
     transition: var(--transition);
+    /* No backdrop-filter */
 }
 
 .glass:hover {
-    border-color: rgba(255, 255, 255, 0.2);
-    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--primary);
+    background: var(--bg-hover);
+    /* Needs to be defined or just slightly lighter */
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
 }
 
 .card-header {
@@ -537,16 +551,17 @@ body {
     align-items: center;
     gap: 16px;
     padding: 16px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--bg-element);
+    /* Solid element bg */
     border-radius: 16px;
-    border: 1px solid transparent;
+    border: 1px solid var(--glass-border);
     transition: var(--transition);
 }
 
 .event-item:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--bg-element-hover);
     transform: translateX(5px);
-    border-color: var(--glass-border);
+    border-color: var(--primary);
 }
 
 .event-hover-actions {
@@ -1314,11 +1329,22 @@ body {
 
 @media (max-width: 1200px) {
     .calendar-container {
-        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
+        grid-template-columns: none;
+        height: auto;
+        gap: 15px;
     }
 
     .calendar-sidebar {
-        display: none;
+        width: 100%;
+        display: block;
+        padding: 10px;
+    }
+
+    .calendar-main {
+        width: 100%;
+        min-height: 500px;
     }
 }
 
@@ -1935,7 +1961,19 @@ body {
     background: var(--primary);
     color: white;
     box-shadow: 0 4px 12px var(--primary-glow);
+}
 
+.calendar-sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 24px;
+    background: var(--bg-card);
+    /* Solid BG */
+    border-radius: 20px;
+    border: 1px solid var(--glass-border);
 }
 
 /* TIME GRID (Week/Day View) - Google Calendar Style */
@@ -2247,6 +2285,19 @@ body {
     color: white;
     border-color: var(--primary);
     box-shadow: 0 4px 10px var(--primary-glow);
+}
+
+/* Quick Contacts / Favorites */
+.quick-contacts-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 25px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    padding: 12px;
+    border-radius: 20px;
 }
 
 .alarm-card {
@@ -3023,10 +3074,19 @@ body {
     }
 
     .view-selector button {
-        padding: 4px 10px;
-        font-size: 0.75rem;
+        padding: 8px 12px;
+        font-size: 0.9rem;
         flex: 1;
-        /* evenly distribute */
+        white-space: nowrap;
+    }
+
+    .calendar-sidebar {
+        padding: 5px !important;
+        gap: 10px !important;
+    }
+
+    .mini-calendar-container {
+        margin-bottom: 5px !important;
     }
 
     .view-selector::-webkit-scrollbar {
@@ -3787,72 +3847,23 @@ body {
 
 @media (max-width: 768px) {
 
-    /* Compact Week View for Mobile */
-    .time-grid-container.view-week .time-axis {
-        width: 35px !important;
+    /* Scrollable Week View for Mobile */
+    .time-grid-container.view-week {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
     }
 
-    .time-grid-container.view-week .grid-lines-layer,
-    .time-grid-container.view-week .day-columns-container {
-        left: 35px !important;
-    }
-
-    .time-grid-container.view-week .time-grid-header {
-        padding-left: 0;
-        /* Adjust if header has padding */
-    }
-
-    .time-grid-container.view-week .time-gutter-header {
-        width: 35px !important;
-        min-width: 35px !important;
-    }
-
-    /* Smaller Headers */
-    .time-grid-container.view-week .header-day-col {
-        padding: 4px 0;
-    }
-
-    .time-grid-container.view-week .header-day-name {
-        font-size: 0.6rem;
-        margin-bottom: 2px;
-    }
-
-    .time-grid-container.view-week .header-day-num {
-        width: 24px;
-        height: 24px;
-        font-size: 0.9rem;
-    }
-
-    /* Compact Event Cards */
-    .time-grid-container.view-week .event-card {
-        padding: 1px 2px !important;
-        border-radius: 3px !important;
-        border-left-width: 2px !important;
-    }
-
-    .time-grid-container.view-week .event-title {
-        font-size: 0.6rem !important;
-        line-height: 1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: clip;
-        /* Clip instead of ellipsis to save space */
-    }
-
-    .time-grid-container.view-week .event-time {
-        display: none !important;
-        /* Hide time text, position shows time */
-    }
-
-    /* Ensure columns fit */
+    .time-grid-container.view-week .time-grid-header,
     .time-grid-container.view-week .time-grid-content {
-        min-width: 0 !important;
-        width: 100% !important;
+        min-width: 600px;
+        /* Force scroll */
     }
 
-    .time-grid-container.view-week .time-grid-scroll-area {
-        overflow-x: hidden !important;
-        /* Force no scroll */
+    /* Ensure headers align with content when scrolling */
+    .time-grid-container.view-week .time-grid-header {
+        position: sticky;
+        top: 0;
+        z-index: 30;
     }
 }
 

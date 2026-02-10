@@ -82,6 +82,7 @@ const app = {
             this.alarm.init();
 
             // Setup Gestures
+            this.setupGestures();
 
 
             // Initial Render & Navigation
@@ -1026,6 +1027,63 @@ const app = {
 
 
 
+    // --- GESTURES & NAVIGATION ---
+    setupGestures() {
+        let touchStartY = 0;
+        let ptrDist = 0;
+        let ptrStartY = -1;
+
+        document.addEventListener('touchstart', e => {
+            // PULL TO REFRESH START
+            // Only valid if scrolled to top AND touch starts in top area (e.g. navigation bar)
+            if (window.scrollY === 0 && e.touches[0].clientY < 60) {
+                ptrStartY = e.touches[0].clientY;
+            } else {
+                ptrStartY = -1; // Invalid start
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchmove', e => {
+            // PULL TO REFRESH MOVE
+            const y = e.touches[0].clientY;
+            if (window.scrollY === 0 && ptrStartY > 0 && y > ptrStartY) {
+                ptrDist = y - ptrStartY;
+            } else {
+                ptrDist = 0; // Cancel if scrolled down or invalid start
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchend', e => {
+            // Handle Pull to Refresh
+            if (window.scrollY === 0 && ptrDist > 150) {
+                this.handlePullToRefresh();
+            }
+            ptrDist = 0;
+            ptrStartY = 0;
+        }, { passive: true });
+    },
+
+    handlePullToRefresh() {
+        // Show loading overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'ptr-overlay';
+        overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:var(--bg-dark); z-index:9999; display:flex; justify-content:center; align-items:center; color:white; font-size:1.2rem; animation: fadeIn 0.3s;';
+        overlay.innerHTML = '<div style="display:flex; flex-direction:column; align-items:center; gap:15px;"><i data-lucide="loader-2" class="spinning" style="animation: spin 1s linear infinite;" width="40" height="40"></i><span>Wird aktualisiert...</span></div>';
+
+        // Use Lucide if available, else plain text or SVG
+        if (!window.lucide) {
+            overlay.innerHTML = '<div style="color:white;">Aktualisiere...</div>';
+        }
+
+        document.body.appendChild(overlay);
+        if (window.lucide) lucide.createIcons();
+
+        // RELOAD
+        setTimeout(() => {
+            window.location.reload();
+        }, 800);
+    },
+
     addEvent(eventData) {
         if (this.state.editingEventId) {
             // Update existing
@@ -1096,12 +1154,7 @@ const app = {
         if (modal) modal.classList.remove('hidden');
     },
 
-    deleteEvent(id) {
-        this.state.events = this.state.events.filter(e => e.id !== id);
-        this.saveLocal();
-        this.sync.push();
-        this.render();
-    },
+
 
     toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
@@ -1926,14 +1979,7 @@ const app = {
         this.renderMiniCalendar();
     },
 
-    deleteEvent(id) {
-        if (confirm("Termin wirklich löschen?")) {
-            app.state.events = app.state.events.filter(e => e.id !== id);
-            app.saveLocal();
-            app.sync.push();
-            app.render();
-        }
-    },
+
 
     toggleFavorites() {
         this.state.favsCollapsed = !this.state.favsCollapsed;
