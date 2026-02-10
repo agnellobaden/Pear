@@ -598,6 +598,21 @@ const app = {
                 this.log(`Verbinde zu Team: ${app.state.user.teamName}`);
                 this.listen();
                 this.startPresence();
+
+                // --- Always in Sync: Auto Push ---
+                if (this.autoSyncInterval) clearInterval(this.autoSyncInterval);
+                this.autoSyncInterval = setInterval(() => {
+                    this.log("Frische Daten (Auto-Sync)...");
+                    this.push();
+                }, 60000); // Every minute
+
+                // Sync on visibility change
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        this.log("App wieder aktiv, synce...");
+                        this.push();
+                    }
+                });
             } catch (e) {
                 this.log(`Init Fehler: ${e.message}`, "error");
                 this.updateUI(false);
@@ -644,6 +659,17 @@ const app = {
             this.updateUI(false);
             app.render();
             alert("Abgemeldet. Deine Daten werden nur noch lokal gespeichert.");
+        },
+
+        togglePinVisibility() {
+            const input = document.getElementById('teamPin');
+            const icon = document.getElementById('pinToggleIcon');
+            if (input && icon) {
+                const isPassword = input.type === 'password';
+                input.type = isPassword ? 'text' : 'password';
+                icon.setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
+                if (window.lucide) lucide.createIcons();
+            }
         },
 
         listen() {
@@ -790,6 +816,9 @@ const app = {
 
             const display = document.getElementById('currentTeamDisplay');
             if (display) display.textContent = isConnected ? app.state.user.teamName : 'Lokal';
+
+            const pinDisplay = document.getElementById('currentPinDisplay');
+            if (pinDisplay) pinDisplay.textContent = isConnected ? app.state.user.teamPin : '----';
 
             const activeSyncInfo = document.getElementById('activeSyncInfo');
             const mobileSyncBtn = document.getElementById('mobileSyncBtn');
