@@ -1,6 +1,9 @@
 /**
  * MoltBot Organizer - Core Application Logic
  * Featuring: Firebase Cloud Sync, Modern Calendar, and Premium UI
+ * 
+ * Copyright © 2026 Andrea Agnello, Pear Company, Deutschland
+ * All rights reserved.
  */
 
 const app = {
@@ -620,15 +623,31 @@ const app = {
         },
 
         connect() {
+            const userName = document.getElementById('userInput').value.trim();
             const team = document.getElementById('teamInput').value.trim();
             const pin = document.getElementById('teamPin').value.trim();
 
-            if (!team || !pin) return alert("Bitte Sync-Key UND PIN eingeben!");
+            if (!userName || !team || !pin) return alert("Bitte Name, Team-Schlüssel UND PIN eingeben!");
             if (pin.length < 4) return alert("Der PIN muss 4-stellig sein.");
 
-            this.log(`Anmeldeversuch: ${team}...`);
+            const isNewTeam = team !== app.state.user.teamName;
+
+            if (isNewTeam && (app.state.events.length > 0 || app.state.todos.length > 0)) {
+                if (confirm("Du wechselst das Team. Möchtest du die Termine des neuen Teams laden? (Lokale Daten werden dabei überschrieben)")) {
+                    // Clear local data for isolation
+                    app.state.events = [];
+                    app.state.todos = [];
+                    app.state.finance = [];
+                    app.state.contacts = [];
+                    app.saveLocal();
+                }
+            }
+
+            this.log(`Anmeldeversuch: ${team} (User: ${userName})...`);
+            app.state.user.name = userName;
             app.state.user.teamName = team;
             app.state.user.teamPin = pin;
+            localStorage.setItem('moltbot_username', userName);
             localStorage.setItem('moltbot_team', team);
             localStorage.setItem('moltbot_pin', pin);
 
@@ -798,10 +817,17 @@ const app = {
         },
 
         updateUI(online) {
+            const isConnected = !!app.state.user.teamName;
             const dot = document.querySelector('.status-dot');
             const text = document.getElementById('syncStatusText');
-            const isConnected = !!app.state.user.teamName;
 
+            // Update stats if connected
+            if (isConnected) {
+                const eventCountEl = document.getElementById('teamEventCount');
+                const todoCountEl = document.getElementById('teamTodoCount');
+                if (eventCountEl) eventCountEl.textContent = app.state.events.length;
+                if (todoCountEl) todoCountEl.textContent = app.state.todos.length;
+            }
             if (dot) {
                 // If connected but error: red. If not connected: blue (Local). If connected & ok: green.
                 if (!isConnected) {
@@ -813,6 +839,9 @@ const app = {
                 }
             }
             if (text) text.textContent = isConnected ? app.state.user.teamName : 'Lokal';
+
+            const nameDisplay = document.getElementById('currentUserDisplay');
+            if (nameDisplay) nameDisplay.textContent = app.state.user.name || 'Hof';
 
             const display = document.getElementById('currentTeamDisplay');
             if (display) display.textContent = isConnected ? app.state.user.teamName : 'Lokal';
