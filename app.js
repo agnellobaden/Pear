@@ -54,49 +54,55 @@ const app = {
 
     // --- INITIALIZATION ---
     init() {
-        console.log("MoltBot Initializing...");
+        try {
+            console.log("MoltBot Initializing...");
 
-        // Load local data first
-        this.loadLocal();
+            // Load local data first
+            this.loadLocal();
 
-        // Apply App Name
-        this.updateAppName(this.state.appName);
+            // Apply App Name
+            this.updateAppName(this.state.appName);
 
-        // Apply Theme
-        this.updateTheme(this.state.theme);
+            // Apply Theme
+            this.updateTheme(this.state.theme);
 
-        // Apply Visual Customizations
-        this.applyVisuals();
+            // Apply Visual Customizations
+            this.applyVisuals();
 
-        // Initialize Lucide Icons
-        if (window.lucide) lucide.createIcons();
+            // Initialize Lucide Icons
+            if (window.lucide) lucide.createIcons();
 
-        // Setup Event Listeners
-        this.setupEventListeners();
+            // Setup Event Listeners
+            this.setupEventListeners();
 
-        // Initialize Sync
-        this.sync.init();
+            // Initialize Sync
+            this.sync.init();
 
-        // Start Clock Interface
-        this.alarm.init();
+            // Start Clock Interface
+            this.alarm.init();
 
-        // Setup Gestures
-        this.setupGestures();
+            // Setup Gestures
 
-        // Initial Render & Navigation
-        this.handleInitialNavigation();
 
-        // SPLASH SCREEN LOGIC
-        setTimeout(() => {
-            const splash = document.getElementById('splash-screen');
-            if (splash) {
-                splash.style.opacity = '0';
-                splash.style.visibility = 'hidden';
-                setTimeout(() => {
-                    if (splash.parentNode) splash.parentNode.removeChild(splash);
-                }, 600);
-            }
-        }, 2000);
+            // Initial Render & Navigation
+            this.handleInitialNavigation();
+
+        } catch (e) {
+            console.error("Critical Init Error:", e);
+            alert("Fehler beim Starten: " + e.message);
+        } finally {
+            // SPLASH SCREEN LOGIC - Guaranteed removal
+            setTimeout(() => {
+                const splash = document.getElementById('splash-screen');
+                if (splash) {
+                    splash.style.opacity = '0';
+                    splash.style.visibility = 'hidden';
+                    setTimeout(() => {
+                        if (splash.parentNode) splash.parentNode.removeChild(splash);
+                    }, 600);
+                }
+            }, 2000);
+        }
     },
 
     handleInitialNavigation() {
@@ -1018,91 +1024,7 @@ const app = {
         }
     },
 
-    // --- GESTURES & NAVIGATION ---
-    setupGestures() {
-        // SWIPE LOGIC (Back/Forward)
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let touchEndX = 0;
-        let touchEndY = 0;
 
-        document.addEventListener('touchstart', e => {
-            touchStartX = e.changedTouches[0].screenX;
-            touchStartY = e.changedTouches[0].screenY;
-            // PULL TO REFRESH START
-            // Only valid if scrolled to top AND touch starts in top area (e.g. navigation bar)
-            if (window.scrollY === 0 && e.touches[0].clientY < 60) {
-                this.ptrStartY = e.touches[0].clientY;
-            } else {
-                this.ptrStartY = -1; // Invalid start
-            }
-        }, { passive: true });
-
-        document.addEventListener('touchmove', e => {
-            // PULL TO REFRESH MOVE
-            const y = e.touches[0].clientY;
-            if (window.scrollY === 0 && this.ptrStartY > 0 && y > this.ptrStartY) {
-                this.ptrDist = y - this.ptrStartY;
-                if (this.ptrDist > 80 && !this.ptrTriggered) {
-                    // Visual feedback
-                }
-            } else {
-                this.ptrDist = 0; // Cancel if scrolled down or invalid start
-            }
-        }, { passive: true });
-
-        document.addEventListener('touchend', e => {
-            touchEndX = e.changedTouches[0].screenX;
-            touchEndY = e.changedTouches[0].screenY;
-
-            // Handle Swipe
-            const xDiff = touchEndX - touchStartX;
-            const yDiff = touchEndY - touchStartY;
-
-            // Swipe Left/Right (Back/Forward) - threshold 80px, mostly horizontal
-            if (Math.abs(xDiff) > 80 && Math.abs(yDiff) < 60) {
-                if (xDiff > 0) {
-                    // Swipe Right -> Back
-                    window.history.back();
-                } else {
-                    // Swipe Left -> Forward
-                    window.history.forward();
-                }
-            }
-
-            // Handle Pull to Refresh
-            if (window.scrollY === 0 && this.ptrDist > 150) {
-                this.handlePullToRefresh();
-            }
-            this.ptrDist = 0;
-            this.ptrStartY = 0;
-
-        }, { passive: true });
-    },
-
-    handlePullToRefresh() {
-        if (this.isRefreshing) return;
-        this.isRefreshing = true;
-
-        // Show loading overlay
-        const overlay = document.createElement('div');
-        overlay.id = 'ptr-overlay';
-        overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999; display:flex; justify-content:center; align-items:center; color:white; font-size:1.2rem; backdrop-filter:blur(5px); animation: fadeIn 0.3s;';
-        overlay.innerHTML = '<div style="display:flex; flex-direction:column; align-items:center; gap:15px;"><i data-lucide="loader-2" class="spinning" style="animation: spin 1s linear infinite;" width="40" height="40"></i><span>App wird aktualisiert...</span></div>';
-
-        // Use Lucide if available, else plain text or SVG
-        if (!window.lucide) {
-            overlay.innerHTML = '<div style="color:white;">Aktualisiere...</div>';
-        }
-
-        document.body.appendChild(overlay);
-        if (window.lucide) lucide.createIcons();
-
-        // RELOAD
-        setTimeout(() => {
-            window.location.reload();
-        }, 800);
-    },
 
     addEvent(eventData) {
         if (this.state.editingEventId) {
@@ -1147,24 +1069,31 @@ const app = {
     },
 
     editEvent(id) {
-        const event = this.state.events.find(e => e.id === id);
-        if (!event) return;
+        this.state.editingEventId = id || null;
+        const event = id ? this.state.events.find(e => e.id === id) : null;
 
-        this.state.editingEventId = id;
+        // Populate Modal Safe Check
+        const setVal = (elmId, val) => {
+            const el = document.getElementById(elmId);
+            if (el) el.value = val;
+        };
 
-        // Populate Modal
-        document.getElementById('eventTitle').value = event.title || '';
-        document.getElementById('eventDate').value = event.date || '';
-        document.getElementById('eventTime').value = event.time || '';
-        document.getElementById('eventLocation').value = event.location || '';
-        document.getElementById('eventPhone').value = event.phone || '';
-        document.getElementById('eventEmail').value = event.email || '';
-        document.getElementById('eventNotes').value = event.notes || '';
-        document.getElementById('eventCategory').value = event.category || 'work';
+        setVal('eventTitle', event ? (event.title || '') : '');
+        setVal('eventDate', event ? (event.date || '') : new Date().toISOString().split('T')[0]);
+        setVal('eventTime', event ? (event.time || '') : '10:00');
+        setVal('eventLocation', event ? (event.location || '') : '');
+        setVal('eventPhone', event ? (event.phone || '') : '');
+        setVal('eventEmail', event ? (event.email || '') : '');
+        setVal('eventNotes', event ? (event.notes || '') : '');
+        setVal('eventCategory', event ? (event.category || 'work') : 'work');
+        setVal('eventColor', event ? (event.color || '#6366f1') : '#6366f1');
 
-        // Open Modal
-        document.getElementById('deleteEventBtn').style.display = 'block';
-        document.getElementById('modalOverlay').classList.remove('hidden');
+        // Toggle Delete Button
+        const delBtn = document.getElementById('deleteEventBtn');
+        if (delBtn) delBtn.style.display = event ? 'block' : 'none';
+
+        const modal = document.getElementById('modalOverlay');
+        if (modal) modal.classList.remove('hidden');
     },
 
     deleteEvent(id) {
@@ -1369,14 +1298,6 @@ const app = {
         }
 
         this.render();
-
-        // Close sidebar after navigation (always try to close to support overlay behavior on all devices)
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar) sidebar.classList.remove('active');
-
-        // Also remove active from overlay directly if we switch to manual class based approach
-        const overlay = document.querySelector('.sidebar-overlay');
-        if (overlay) overlay.classList.remove('active');
     },
 
     toggleCard(header) {
@@ -1944,13 +1865,21 @@ const app = {
                 return diff >= 0 && diff <= 30;
             }
             return new Date(e.date) >= new Date().setHours(0, 0, 0, 0);
-        }).slice(0, 5);
+        }).slice(0, 50);
 
         if (future.length === 0 && specials.length === 0) {
-            list.innerHTML = '';
-            // Hide the card
+            // Show empty state instead of hiding
             const card = list.closest('.next-events');
-            if (card) card.style.display = 'none';
+            if (card) {
+                card.style.display = 'block';
+                card.style.border = '1px solid var(--glass-border)';
+                card.style.boxShadow = 'none';
+            }
+            list.innerHTML = `<div class="empty-state" style="text-align:center; padding:30px; color:var(--text-muted);">
+                <i data-lucide="calendar-off" size="48" style="margin-bottom:10px; opacity:0.5;"></i>
+                <p>Keine anstehenden Termine.</p>
+                <button class="btn-text" onclick="app.editEvent()" style="margin-top:10px;">+ Termin erstellen</button>
+            </div>`;
         } else {
             // Show the card and mark it green
             const card = list.closest('.next-events');
