@@ -365,7 +365,7 @@
                     <p>Behalte deine Ausgaben und dein Budget im Griff.</p>
                 </div>
 
-                <div class="dashboard-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 25px;">
+                <div class="dashboard-grid" style="margin-bottom: 25px;">
                     <div class="card glass">
                         <small class="text-muted">Monatsausgaben</small>
                         <h2 id="finTotalIncome">0,00 €</h2>
@@ -398,8 +398,7 @@
                             onclick="const x = document.getElementById('finExtraStats'); x.style.display = x.style.display === 'none' ? 'grid' : 'none'; this.textContent = x.style.display === 'none' ? 'Details anzeigen' : 'Details ausblenden'">Details
                             anzeigen</button>
                     </div>
-                    <div id="finExtraStats" class="dashboard-grid"
-                        style="grid-template-columns: 1fr 1fr; margin-top: 15px; display: none; gap: 15px;">
+                    <div id="finExtraStats" class="dashboard-grid" style="margin-top: 15px; display: none; gap: 15px;">
                         <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
                             <small class="text-muted">Ausgaben heute</small>
                             <h3 id="finTodayTotal">0,00 €</h3>
@@ -750,8 +749,7 @@
 
                         <p class="text-muted" style="margin-bottom: 15px;">Wähle das Design, das dir am besten gefällt.
                         </p>
-                        <div class="theme-selector-grid"
-                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                        <div class="theme-selector-grid">
                             <button class="theme-btn" data-theme="dark" onclick="app.updateTheme('dark')">
                                 <div class="theme-preview dark"></div>
                                 <span>Dunkel</span>
