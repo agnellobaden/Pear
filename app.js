@@ -429,6 +429,7 @@ const app = {
 
     applyVisuals() {
         const root = document.documentElement;
+        const isLight = this.state.theme === 'light';
 
         // Font
         let fontStack = "'Outfit', sans-serif";
@@ -436,32 +437,17 @@ const app = {
         if (this.state.customFont === 'Mono') fontStack = "'Courier New', monospace";
         if (this.state.customFont === 'System') fontStack = "system-ui, -apple-system, sans-serif";
         if (this.state.customFont === 'Dyslexic') fontStack = "'OpenDyslexic', 'Comic Sans MS', sans-serif";
-
         root.style.setProperty('--font-main', fontStack);
 
-        // High Contrast / Plain Text Mode
-        if (this.state.highContrastMode) {
-            root.style.setProperty('--text-hero-gradient', 'none');
-            root.style.setProperty('--text-hero-fill', 'var(--text-main)');
-            // Also force background opacity for better reading
-            root.style.setProperty('--bg-card', (this.state.theme === 'light') ? 'rgba(255,255,255,0.95)' : 'rgba(20,20,30,0.95)');
-        } else {
-            root.style.removeProperty('--text-hero-gradient');
-            root.style.removeProperty('--text-hero-fill');
-            // Reset bg-card if possible, or just re-apply theme default by clearing the override
-            root.style.removeProperty('--bg-card');
-        }
+        // --- COLORS & CONTRAST ---
 
         // Primary Color Override
         if (this.state.customPrimary) {
             root.style.setProperty('--primary', this.state.customPrimary);
-
             const rgb = this.hexToRgb(this.state.customPrimary);
             if (rgb) {
                 root.style.setProperty('--primary-rgb', rgb);
                 root.style.setProperty('--primary-glow', `rgba(${rgb}, 0.4)`);
-            } else {
-                root.style.setProperty('--primary-glow', this.state.customPrimary + '66');
             }
         } else {
             root.style.removeProperty('--primary');
@@ -470,71 +456,61 @@ const app = {
         }
 
         // Secondary / Background Color Override
-        // Logic: specific secondary > specific primary > default
-        let secondaryColor = this.state.customSecondary;
-        if (!secondaryColor && this.state.customPrimary) {
-            secondaryColor = this.state.customPrimary;
-        }
-
+        let secondaryColor = this.state.customSecondary || this.state.customPrimary;
         if (secondaryColor) {
             root.style.setProperty('--secondary', secondaryColor);
             const rgb2 = this.hexToRgb(secondaryColor);
-            if (rgb2) {
-                root.style.setProperty('--secondary-rgb', rgb2);
-            }
+            if (rgb2) root.style.setProperty('--secondary-rgb', rgb2);
         } else {
-            // Reset to CSS defaults
             root.style.removeProperty('--secondary');
             root.style.removeProperty('--secondary-rgb');
         }
 
-        // --- NEW: Calculate Solid Backgrounds based on Theme/Secondary ---
-        // Default solid dark colors (Zinc)
-        let bgSolid1 = '#18181b'; // Modal
-        let bgSolid2 = '#27272a'; // Input
+        // --- Solid Backgrounds ---
+        let bgSolid1 = isLight ? '#ffffff' : '#18181b'; // Modal
+        let bgSolid2 = isLight ? '#f1f5f9' : '#27272a'; // Input
 
         if (secondaryColor) {
-            // If user picked a color, we want solid versions of it.
-            // Since we can't easily darken hex in vanilla JS without a lib, we'll try a trick:
-            // Use color-mix if supported, or just rely on the RGB variable.
-            // Actually, we can use the RGB variable inside an rgba() on top of black? 
-            // "Solid" means no transparency. 
-            // Let's use `color-mix` which is widely supported now.
-            bgSolid1 = `color-mix(in srgb, ${secondaryColor}, black 85%)`;
-            bgSolid2 = `color-mix(in srgb, ${secondaryColor}, black 75%)`;
-
-            // Also update --bg-card to use the secondary color tint
-            // Increased opacity to 0.15 so the user can actually see the color change on Dashboard
-            root.style.setProperty('--bg-card', `rgba(var(--secondary-rgb), 0.15)`);
+            const mixBase = isLight ? 'white' : 'black';
+            bgSolid1 = `color-mix(in srgb, ${secondaryColor}, ${mixBase} 85%)`;
+            bgSolid2 = `color-mix(in srgb, ${secondaryColor}, ${mixBase} 75%)`;
+            root.style.setProperty('--bg-card', isLight ? `rgba(var(--secondary-rgb), 0.08)` : `rgba(var(--secondary-rgb), 0.15)`);
         } else {
-            // Revert bg-card to default (primary based) or just clear it
             root.style.removeProperty('--bg-card');
         }
-
         root.style.setProperty('--bg-solid-1', bgSolid1);
         root.style.setProperty('--bg-solid-2', bgSolid2);
+
+        // High Contrast Mode Overrides
+        if (this.state.highContrastMode) {
+            root.style.setProperty('--text-main', isLight ? '#000000' : '#ffffff');
+            root.style.setProperty('--text-muted', isLight ? '#000000' : '#ffffff');
+            root.style.setProperty('--primary', isLight ? '#000000' : '#ffffff');
+            root.style.setProperty('--bg-card', isLight ? '#ffffff' : '#000000');
+            root.style.setProperty('--bg-dark', isLight ? '#ffffff' : '#000000');
+        } else {
+            root.style.removeProperty('--text-main');
+            root.style.removeProperty('--text-muted');
+            // primary and others already handled by their logic above
+        }
 
         // Font Weight Mode
         if (this.state.boldMode) {
             root.style.setProperty('--font-weight-body', '600');
             root.style.setProperty('--font-weight-heading', '800');
         } else {
-            root.style.setProperty('--font-weight-body', '400'); // Outfit Regular
-            root.style.setProperty('--font-weight-heading', '700'); // Outfit Bold
+            root.style.setProperty('--font-weight-body', '400');
+            root.style.setProperty('--font-weight-heading', '700');
         }
 
-        // Filters (Saturation, Contrast, Brightness)
-        // We apply this to body or html. 
-        // Note: filter on body might affect fixed elements weirdly, let's try html or body.
+        // Filters
         document.body.style.filter = `
             saturate(${this.state.globalSaturation}%) 
             contrast(${this.state.globalContrast}%) 
             brightness(${this.state.globalBrightness}%)
         `;
 
-        // Font Size Scale on Root (affecting rem units)
-        // Default browser font size is usually 16px (100%).
-        // We set font-size percentage directly on html
+        // Font Size Scale
         document.documentElement.style.fontSize = `${this.state.fontSizeScale || 100}%`;
     },
 

@@ -1005,48 +1005,48 @@
                     </div>
                 </div>
 
-                <div class="glass animate-in"
-                    style="margin-bottom: 20px; padding: 20px; z-index: 200; position: relative; overflow: visible;">
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
-                        <div class="search-bar" style="flex: 1; min-width: 250px;">
+                <div class="contacts-toolbar-new animate-in">
+                    <div class="contacts-search-row">
+                        <div class="search-bar-modern">
                             <i data-lucide="search"></i>
                             <input type="text" id="contactSearch" placeholder="Kontakte suchen..."
                                 oninput="app.contacts.render()">
                         </div>
-                        <div class="view-selector" id="contactViewSelector">
-                            <button data-view="cards" title="Kartenansicht"><i data-lucide="layout-grid"></i></button>
-                            <button data-view="table" title="Listenansicht"><i data-lucide="list"></i></button>
-                        </div>
-                        <button class="btn-primary" onclick="app.contacts.openModal()">
-                            <i data-lucide="user-plus"></i> Hinzufügen
+                    </div>
+
+                    <div class="contacts-actions-row-modern">
+                        <button class="btn-add-modern" onclick="app.contacts.openModal()">
+                            <i data-lucide="user-plus"></i> <span>Hinzufügen</span>
                         </button>
 
-                        <button class="btn-outline" onclick="app.contacts.importMobile()"
-                            title="Kontakte direkt vom Handy importieren">
-                            <i data-lucide="smartphone"></i> Handy Import
-                        </button>
+                        <div class="secondary-actions">
+                            <button class="btn-icon-modern" onclick="app.contacts.importMobile()"
+                                title="Vom Handy importieren">
+                                <i data-lucide="smartphone"></i>
+                            </button>
 
-                        <details style="position: relative;">
-                            <summary class="btn-outline"
-                                style="list-style: none; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <i data-lucide="download"></i> Mehr <i data-lucide="chevron-down" size="14"></i>
-                            </summary>
-                            <div class="glass"
-                                style="position: absolute; top: 120%; right: 0; padding: 15px; display: flex; flex-direction: column; gap: 10px; min-width: 220px; z-index: 9999; border: 1px solid rgba(255,255,255,0.1);">
-                                <button class="btn-outline"
-                                    onclick="this.closest('details').removeAttribute('open'); app.sync.push()"
-                                    title="Jetzt manuell synchronisieren"
-                                    style="justify-content: flex-start; width: 100%;">
-                                    <i data-lucide="refresh-cw"></i> Cloud Sync
-                                </button>
-                                <label class="btn-outline"
-                                    style="display: flex; align-items: center; gap: 8px; cursor: pointer; justify-content: flex-start; width: 100%;">
-                                    <i data-lucide="file-input"></i> Datei (VCF/CSV)
-                                    <input type="file" id="contactImportFile" accept=".vcf,.csv" style="display: none;"
-                                        onchange="this.closest('details').removeAttribute('open'); app.contacts.import(this)">
-                                </label>
+                            <div class="view-switch-modern" id="contactViewSelector">
+                                <button data-view="cards" title="Raster"><i data-lucide="layout-grid"></i></button>
+                                <button data-view="table" title="Liste"><i data-lucide="list"></i></button>
                             </div>
-                        </details>
+
+                            <details class="contacts-more-dropdown">
+                                <summary class="btn-icon-modern">
+                                    <i data-lucide="more-horizontal"></i>
+                                </summary>
+                                <div class="glass dropdown-menu-modern">
+                                    <button onclick="this.closest('details').removeAttribute('open'); app.sync.push()">
+                                        <i data-lucide="refresh-cw"></i> Cloud Sync
+                                    </button>
+                                    <label>
+                                        <i data-lucide="file-input"></i> Datei (VCF/CSV)
+                                        <input type="file" id="contactImportFile" accept=".vcf,.csv"
+                                            style="display: none;"
+                                            onchange="this.closest('details').removeAttribute('open'); app.contacts.import(this)">
+                                    </label>
+                                </div>
+                            </details>
+                        </div>
                     </div>
                 </div>
 
