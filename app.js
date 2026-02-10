@@ -84,6 +84,10 @@ const app = {
             // Setup Gestures
             this.setupGestures();
 
+            // --- Service Worker & Notifications ---
+            this.registerServiceWorker();
+            this.requestNotificationPermission();
+
 
             // Initial Render & Navigation
             this.handleInitialNavigation();
@@ -103,6 +107,39 @@ const app = {
                     }, 600);
                 }
             }, 2000);
+        }
+    },
+
+    registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('SW Registered', reg))
+                .catch(err => console.error('SW Error', err));
+        }
+    },
+
+    requestNotificationPermission() {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    },
+
+    notify(title, body, url = '/') {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+        // Try service worker first for background support
+        if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.ready.then(registration => {
+                registration.showNotification(title, {
+                    body: body,
+                    icon: 'icon.png',
+                    badge: 'icon.png',
+                    data: { url: url }
+                });
+            });
+        } else {
+            // Fallback to simple browser notification
+            new Notification(title, { body: body, icon: 'icon.png' });
         }
     },
 
@@ -998,6 +1035,8 @@ const app = {
             // Store the timestamp to avoid redundant merges if needed
             this.state.lastRemoteSync = incoming.updatedAt;
             this.render();
+
+            this.notify("Update erhalten", "Deine Daten wurden mit einem anderen Gerät synchronisiert.");
         }
     },
 
@@ -1086,6 +1125,11 @@ const app = {
         this.saveLocal();
         this.sync.push();
         this.render();
+
+        // Notify
+        if (!this.state.editingEventId) {
+            this.notify("Termin gespeichert", `${eventData.title || 'Neuer Termin'} am ${eventData.date}`);
+        }
     },
 
     deleteEvent(id) {
@@ -2828,6 +2872,8 @@ const app = {
             input.value = '';
             app.saveLocal();
             this.render();
+
+            app.notify("Aufgabe erstellt", text);
 
             // Sync fallback (trigger cloud push)
             if (app.sync && app.sync.push) app.sync.push();
