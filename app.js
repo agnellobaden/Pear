@@ -1161,6 +1161,17 @@ const app = {
         if (sidebar) sidebar.classList.toggle('active');
     },
 
+    toggleCalendarSidebar() {
+        const sidebar = document.getElementById('calendarSidebar');
+        if (sidebar) {
+            sidebar.classList.toggle('is-collapsed-mobile');
+            const icon = sidebar.querySelector('.sidebar-toggle-icon');
+            if (icon && window.lucide) {
+                // Lucide icons are SVGs, we just rotate them via CSS
+            }
+        }
+    },
+
     // --- NAVIGATION ---
     setupEventListeners() {
         // Nav Items
@@ -2602,11 +2613,12 @@ const app = {
                 const now = new Date();
                 const minutes = now.getHours() * 60 + now.getMinutes();
                 const topPx = minutes; // 1min = 1px scale (60px/hr)
+                const timeStr = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
                 const marker = document.createElement('div');
                 marker.className = 'now-marker';
                 marker.style.top = `${topPx}px`;
-                marker.innerHTML = `<div class="now-dot"></div><div class="now-line"></div>`;
+                marker.innerHTML = `<div class="now-dot"></div><div class="now-line"></div><div class="now-time">${timeStr}</div>`;
                 col.appendChild(marker);
             }
 

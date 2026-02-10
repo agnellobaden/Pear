@@ -264,54 +264,60 @@
             <section id="view-calendar" class="page-view">
                 <div class="calendar-container">
                     <!-- Calendar Sidebar -->
-                    <aside class="calendar-sidebar glass">
-                        <button class="btn-primary create-btn" id="sidebarCreateBtn">
-                            <i data-lucide="plus"></i> Erstellen
-                        </button>
+                    <aside class="calendar-sidebar glass is-collapsed-mobile" id="calendarSidebar">
+                        <div class="calendar-sidebar-toggle-header" onclick="app.toggleCalendarSidebar()">
+                            <h3>Kalender Optionen</h3>
+                            <i data-lucide="chevron-down" class="sidebar-toggle-icon"></i>
+                        </div>
+                        <div class="calendar-sidebar-content">
+                            <button class="btn-primary create-btn" id="sidebarCreateBtn">
+                                <i data-lucide="plus"></i> Erstellen
+                            </button>
 
-                        <div class="mini-calendar-container">
-                            <div class="mini-calendar-header">
-                                <span id="sidebarMiniMonth">Februar 2026</span>
-                                <div class="mini-nav">
-                                    <button onclick="app.calendar.prevMini()"><i
-                                            data-lucide="chevron-left"></i></button>
-                                    <button onclick="app.calendar.nextMini()"><i
-                                            data-lucide="chevron-right"></i></button>
+                            <div class="mini-calendar-container">
+                                <div class="mini-calendar-header">
+                                    <span id="sidebarMiniMonth">Februar 2026</span>
+                                    <div class="mini-nav">
+                                        <button onclick="app.calendar.prevMini()"><i
+                                                data-lucide="chevron-left"></i></button>
+                                        <button onclick="app.calendar.nextMini()"><i
+                                                data-lucide="chevron-right"></i></button>
+                                    </div>
+                                </div>
+                                <div class="calendar-grid small" id="sidebarMiniGrid">
+                                    <!-- Populated by JS -->
                                 </div>
                             </div>
-                            <div class="calendar-grid small" id="sidebarMiniGrid">
-                                <!-- Populated by JS -->
-                            </div>
-                        </div>
 
-                        <div class="calendar-filters">
-                            <h4>Meine Kalender</h4>
-                            <div class="filter-item">
-                                <input type="checkbox" id="filter-work" checked>
-                                <label for="filter-work"><span class="dot work"></span> Arbeit</label>
-                            </div>
-                            <div class="filter-item">
-                                <input type="checkbox" id="filter-private" checked>
-                                <label for="filter-private"><span class="dot private"></span> Privat</label>
-                            </div>
-                            <div class="filter-item">
-                                <input type="checkbox" id="filter-urgent" checked>
-                                <label for="filter-urgent"><span class="dot urgent"></span> Dringend</label>
-                            </div>
-                            <div class="filter-item">
-                                <input type="checkbox" id="filter-birthday" checked>
-                                <label for="filter-birthday"><span class="dot" style="background:#ffd700"></span>
-                                    Geburtstage 🎂</label>
-                            </div>
-                            <div class="filter-item">
-                                <input type="checkbox" id="filter-holiday" checked>
-                                <label for="filter-holiday"><span class="dot" style="background:#ff9f43"></span>
-                                    Feiertage 🎊</label>
-                            </div>
-                            <div class="filter-item">
-                                <input type="checkbox" id="filter-archive">
-                                <label for="filter-archive"><span class="dot" style="background:#6c757d"></span>
-                                    Archiv anzeigen 📦</label>
+                            <div class="calendar-filters">
+                                <h4>Meine Kalender</h4>
+                                <div class="filter-item">
+                                    <input type="checkbox" id="filter-work" checked>
+                                    <label for="filter-work"><span class="dot work"></span> Arbeit</label>
+                                </div>
+                                <div class="filter-item">
+                                    <input type="checkbox" id="filter-private" checked>
+                                    <label for="filter-private"><span class="dot private"></span> Privat</label>
+                                </div>
+                                <div class="filter-item">
+                                    <input type="checkbox" id="filter-urgent" checked>
+                                    <label for="filter-urgent"><span class="dot urgent"></span> Dringend</label>
+                                </div>
+                                <div class="filter-item">
+                                    <input type="checkbox" id="filter-birthday" checked>
+                                    <label for="filter-birthday"><span class="dot" style="background:#ffd700"></span>
+                                        Geburtstage 🎂</label>
+                                </div>
+                                <div class="filter-item">
+                                    <input type="checkbox" id="filter-holiday" checked>
+                                    <label for="filter-holiday"><span class="dot" style="background:#ff9f43"></span>
+                                        Feiertage 🎊</label>
+                                </div>
+                                <div class="filter-item">
+                                    <input type="checkbox" id="filter-archive">
+                                    <label for="filter-archive"><span class="dot" style="background:#6c757d"></span>
+                                        Archiv anzeigen 📦</label>
+                                </div>
                             </div>
                         </div>
                     </aside>
