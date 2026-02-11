@@ -1204,11 +1204,17 @@ const app = {
 
         this.saveLocal();
         this.sync.push();
-        this.render();
+
+        // Navigate to the event's date and view
+        const eventDate = new Date(eventData.date);
+        this.state.currentDate = eventDate;
+        this.navigateTo('calendar');
 
         // Notify
         if (!this.state.editingEventId) {
             this.notify("Termin gespeichert", `${eventData.title || 'Neuer Termin'} am ${eventData.date}`);
+        } else {
+            this.notify("Termin aktualisiert", `${eventData.title}`);
         }
     },
 
@@ -1324,7 +1330,40 @@ const app = {
             if (el) el.onchange = () => this.render();
         });
 
-        // Form
+        // Form Auto-Fill from Contacts
+        const eventTitleInput = document.getElementById('eventTitle');
+        if (eventTitleInput) {
+            eventTitleInput.addEventListener('input', (e) => {
+                const text = e.target.value.toLowerCase();
+                if (text.length < 3) return;
+
+                // Sort by name length descending to catch full names before partials
+                const contacts = [...this.state.contacts].sort((a, b) => b.name.length - a.name.length);
+
+                for (const contact of contacts) {
+                    if (contact.name && text.includes(contact.name.toLowerCase())) {
+                        const phoneInput = document.getElementById('eventPhone');
+                        const emailInput = document.getElementById('eventEmail');
+
+                        // Auto-fill if changed
+                        if (contact.phone && phoneInput.value !== contact.phone) {
+                            phoneInput.value = contact.phone;
+                            // Visual feedback (optional flash)
+                            phoneInput.style.borderColor = 'var(--success)';
+                            setTimeout(() => phoneInput.style.borderColor = 'var(--glass-border)', 1000);
+                        }
+                        if (contact.email && emailInput.value !== contact.email) {
+                            emailInput.value = contact.email;
+                            emailInput.style.borderColor = 'var(--success)';
+                            setTimeout(() => emailInput.style.borderColor = 'var(--glass-border)', 1000);
+                        }
+                        break; // Stop after first match
+                    }
+                }
+            });
+        }
+
+        // Form Submit
         document.getElementById('eventForm').onsubmit = (e) => {
             e.preventDefault();
             const event = {
@@ -1990,6 +2029,24 @@ const app = {
         const today = new Date();
         const specials = filtered.filter(e => this.isEventOnDate(e, today) && (e.category === 'birthday' || e.category === 'holiday'));
 
+        // Check Contact Birthdays for Today
+        this.state.contacts.forEach(c => {
+            if (c.birthday) {
+                const bday = new Date(c.birthday);
+                if (bday.getDate() === today.getDate() && bday.getMonth() === today.getMonth()) {
+                    // Check for duplicates in case a manual event exists
+                    const alreadyAdded = specials.some(s => s.title.includes(c.name));
+                    if (!alreadyAdded) {
+                        specials.push({
+                            title: `Geburtstag von ${c.name}`,
+                            category: 'birthday',
+                            date: today.toISOString().split('T')[0]
+                        });
+                    }
+                }
+            }
+        });
+
         // Check user's own birthday
         if (this.state.user.birthday) {
             const userBday = new Date(this.state.user.birthday);
@@ -2005,21 +2062,95 @@ const app = {
         // For birthdays, we need a special "next occurrence" sorting if we want them in "Next Events"
         // For simplicity, let's keep the core list and add a special header for today
 
-        let html = '';
+        const specialContainer = document.getElementById('dashboardSpecialContainer');
+        let specialHtml = '';
+
         if (specials.length > 0) {
-            html += `
+            specialHtml += `
                 <div class="special-reminders animate-in" style="margin-bottom: 25px; background: linear-gradient(135deg, #ffd700, #ff9f43); padding: 20px; border-radius: 20px; color: #000; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3);">
-                    <div style="display:flex; align-items:center; gap:15px;">
+                    <div style="display:flex; align-items:center; gap:15px; margin-bottom:15px;">
                         <i data-lucide="party-popper" size="32"></i>
                         <div>
                             <h3 style="margin:0; font-size:1.4rem;">Heute ist was Besonderes!</h3>
-                            <p style="margin:5px 0 0; font-weight:600;">${specials.map(s => s.title + (s.category === 'birthday' ? ' 🎂' : ' 🎊')).join(', ')}</p>
                         </div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        ${specials.map(s => {
+                // Find contact phone if not directly on event
+                let phone = s.phone;
+                if (!phone && s.category === 'birthday') {
+                    // Extract name from title "Geburtstag von [Name]" or just assume title is name if virtual
+                    const nameMatch = s.title.replace('Geburtstag von ', '').replace(' 🎂', '');
+                    const contact = this.state.contacts.find(c => c.name.includes(nameMatch));
+                    if (contact) phone = contact.phone;
+                }
+
+                return `
+                            <div style="background:rgba(255,255,255,0.2); padding:10px 15px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-weight:600; font-size:1.1rem;">${s.title} ${s.category === 'birthday' ? '🎂' : '🎊'}</span>
+                                ${phone ? `
+                                    <a href="tel:${phone}" class="btn-primary" style="background:white; color:#d97706; border:none; padding:8px 15px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.1); display:flex; align-items:center; gap:5px; text-decoration:none;">
+                                        <i data-lucide="phone" size="16"></i> Anrufen
+                                    </a>
+                                ` : ''}
+                            </div>
+                            `;
+            }).join('')}
                     </div>
                 </div>
             `;
         }
 
+        // Upcoming Birthdays in Current Month Logic
+        const currentMonth = today.getMonth();
+        const upcomingBirthdays = this.state.contacts.filter(c => {
+            if (!c.birthday) return false;
+            const bday = new Date(c.birthday);
+            // Must be in current month
+            if (bday.getMonth() !== currentMonth) return false;
+            // Must be today or future (in this month)
+            return bday.getDate() >= today.getDate();
+        }).sort((a, b) => new Date(a.birthday).getDate() - new Date(b.birthday).getDate());
+
+        // Don't duplicate if shown in specials (today)
+        const pureUpcoming = upcomingBirthdays.filter(c => new Date(c.birthday).getDate() !== today.getDate());
+
+        if (pureUpcoming.length > 0) {
+            specialHtml += `
+                <div class="upcoming-birthdays animate-in" style="margin-bottom: 25px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); padding: 15px; border-radius: 16px;">
+                    <h4 style="margin:0 0 10px 0; display:flex; align-items:center; gap:8px; color:var(--text-main); font-size:1rem;">
+                        <i data-lucide="cake" size="18" style="color:#3b82f6;"></i> Geburtstage diesen Monat
+                    </h4>
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        ${pureUpcoming.map(c => {
+                const bDay = new Date(c.birthday);
+                const age = today.getFullYear() - bDay.getFullYear();
+                return `
+                            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px 12px; border-radius:10px;">
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <span style="font-weight:600; font-size:0.9rem;">${c.name}</span>
+                                    <span style="font-size:0.8rem; opacity:0.7;">am ${bDay.getDate()}.${bDay.getMonth() + 1}.</span>
+                                </div>
+                                <span style="font-size:0.8rem; background:rgba(59,130,246,0.2); color:#60a5fa; padding:2px 8px; border-radius:10px;">wird ${age}</span>
+                            </div>`;
+            }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render Special Container
+        if (specialContainer) {
+            if (specialHtml) {
+                specialContainer.innerHTML = specialHtml;
+                specialContainer.style.display = 'block';
+            } else {
+                specialContainer.style.display = 'none';
+            }
+        }
+
+        // Render Regular Events List
+        let html = '';
         const future = sorted.filter(e => {
             if (e.archived) return false; // Don't show archived
             if (e.category === 'birthday' || e.category === 'holiday') {
@@ -2033,7 +2164,7 @@ const app = {
             return new Date(e.date) >= new Date().setHours(0, 0, 0, 0);
         }).slice(0, 50);
 
-        if (future.length === 0 && specials.length === 0) {
+        if (future.length === 0) {
             // Show empty state instead of hiding
             const card = list.closest('.next-events');
             if (card) {
@@ -2320,6 +2451,27 @@ const app = {
         const month = date.getMonth();
         const filteredEvents = this.getFilteredEvents();
 
+        // Inject Contact Birthdays for the current view year
+        const viewYear = date.getFullYear();
+        this.state.contacts.forEach(c => {
+            if (c.birthday && !c.archived) {
+                const bday = new Date(c.birthday);
+                // Create date string for the current view year
+                const dateStr = `${viewYear}-${String(bday.getMonth() + 1).padStart(2, '0')}-${String(bday.getDate()).padStart(2, '0')}`;
+
+                filteredEvents.push({
+                    id: `virtual-bday-${c.id}`,
+                    title: `${c.name} 🎂`,
+                    date: dateStr,
+                    category: 'birthday',
+                    color: '#f59e0b', // Gold for birthdays
+                    allDay: true,
+                    isVirtual: true, // Marker
+                    phone: c.phone // For quick actions
+                });
+            }
+        });
+
         // Update headers and grid classes
         grid.className = `calendar-grid-large view-${this.state.calendarView}`;
 
@@ -2431,15 +2583,37 @@ const app = {
             const date = new Date(year, month, d);
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+
+            // Sort: Birthdays first, then by time
+            dayEvents.sort((a, b) => {
+                const aIsBday = a.category === 'birthday';
+                const bIsBday = b.category === 'birthday';
+                if (aIsBday && !bIsBday) return -1;
+                if (!aIsBday && bIsBday) return 1;
+                return (a.time || '00:00').localeCompare(b.time || '00:00');
+            });
             const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
 
             // Render Events as colored bars/pills for visibility
             // Limit to 3-4 to avoid overflow
             const visibleEvents = dayEvents.slice(0, 4);
             const eventHtml = visibleEvents.map(e => {
-                const style = e.color ? `background-color:${e.color};` : '';
+                let style = e.color ? `background-color:${e.color};` : '';
+                // Add visibility enhancements
+                style += `
+                    font-weight: 700;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+                    border: 1px solid rgba(255,255,255,0.2);
+                `;
+
+                // Extra styling for birthdays
+                if (e.category === 'birthday') {
+                    style += `border: 2px solid #fff; transform: scale(1.02); z-index: 2;`;
+                }
+
                 return `<div class="month-event-pill ${e.category}" style="${style}" title="${e.title}">
-                    <span class="truncate">${e.time || ''} ${e.title}</span>
+                    <span class="truncate" style="color:white;">${e.time || ''} ${e.title}</span>
                 </div>`;
             }).join('');
 
@@ -3206,6 +3380,11 @@ const app = {
                 app.state.contacts.unshift(newContact);
             }
             app.saveLocal();
+
+            // Navigate and Feedback
+            app.navigateTo('contacts');
+            app.notify(app.state.editingContactId ? "Kontakt aktualisiert" : "Kontakt gespeichert", contactData.name);
+
             this.render();
             if (app.sync && app.sync.push) app.sync.push();
         },
@@ -3613,6 +3792,7 @@ const app = {
                 this.updateClock();
                 this.checkAlarm();
                 this.checkReminders();
+                this.checkBirthdays();
             }, 1000);
         },
 
@@ -3729,6 +3909,30 @@ const app = {
             });
         },
 
+        checkBirthdays() {
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth();
+            const currentDate = today.getDate();
+
+            app.state.contacts.forEach(c => {
+                if (!c.birthday) return;
+
+                // Check if already notified this year
+                if (c.lastBirthdayNotificationYear === currentYear) return;
+
+                const bday = new Date(c.birthday);
+                if (bday.getMonth() === currentMonth && bday.getDate() === currentDate) {
+                    // It's their birthday today!
+                    this.sendBirthdayNotification(c);
+
+                    // Mark as notified and save
+                    c.lastBirthdayNotificationYear = currentYear;
+                    app.saveLocal();
+                }
+            });
+        },
+
         sendNotification(event, minsLeft) {
             const title = `Termin in ${minsLeft} Min: ${event.title}`;
             const options = {
@@ -3743,6 +3947,22 @@ const app = {
 
             // Subtle In-App Toast (always works)
             this.showToast(title, event.color);
+        },
+
+        sendBirthdayNotification(contact) {
+            const title = `🎉 Heute: Geburtstag von ${contact.name}!`;
+            const body = "Nicht vergessen zu gratulieren!";
+
+            // Browser Notification
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(title, {
+                    body: body,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/2488/2488980.png' // Generic cake icon
+                });
+            }
+
+            // In-App Toast
+            this.showToast(`${title} \n${body}`, '#f59e0b'); // Gold color
         },
 
         showToast(text, color) {

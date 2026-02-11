@@ -241,6 +241,9 @@
                 </div>
 
                 <div class="dashboard-grid">
+                    <!-- Special Events (Birthdays) Container -->
+                    <div id="dashboardSpecialContainer" style="display:none; grid-column: 1 / -1;"></div>
+
                     <!-- Urgent Todos Section -->
                     <div id="dashboardUrgentTodos" class="card glass"
                         style="display:none; border: 1px solid rgba(239, 68, 68, 0.5); background: linear-gradient(135deg, rgba(239,68,68,0.05), rgba(0,0,0,0));">
@@ -634,7 +637,7 @@
                     <p>Plane deine Einkäufe und deinen Tag.</p>
                 </div>
 
-                <div class="todo-container glass animate-in" style="padding: 30px;">
+                <div class="todo-container glass animate-in">
                     <div class="todo-input-group"
                         style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px;">
                         <input type="text" id="todoInput"
@@ -642,8 +645,8 @@
                             placeholder="Was steht an? (z.B. Milch kaufen, Mail schreiben...)"
                             onkeyup="if(event.key === 'Enter') app.todo.add()">
 
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <div style="flex: 1; display: flex; gap: 8px;">
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <div style="flex: 1 1 200px; display: flex; gap: 8px;">
                                 <select id="todoCategory"
                                     style="flex: 1; height: 50px; background: #ffffff; border: 1px solid var(--glass-border); border-radius: 12px; color: #000000; padding: 0 15px; font-weight: 500;">
                                     <!-- JS Populated -->
@@ -653,13 +656,13 @@
                                     title="Neue Bezeichnung">+</button>
                             </div>
                             <label class="custom-checkbox-container"
-                                style="display:flex; align-items:center; gap:8px; background:rgba(239, 68, 68, 0.1); padding:0 15px; border-radius:12px; height:50px; border:1px solid rgba(239, 68, 68, 0.3); cursor:pointer;">
+                                style="display:flex; align-items:center; justify-content:center; gap:8px; background:rgba(239, 68, 68, 0.1); padding:0 15px; border-radius:12px; height:50px; border:1px solid rgba(239, 68, 68, 0.3); cursor:pointer; flex: 1 1 auto; min-width: 120px;">
                                 <input type="checkbox" id="todoUrgent"
                                     style="width:20px; height:20px; accent-color:#ef4444;">
                                 <span style="color:#ef4444; font-weight:600;">Dringend!</span>
                             </label>
                             <button class="btn-primary" onclick="app.todo.add()"
-                                style="height: 50px; padding: 0 30px; font-size: 1.1rem; border-radius: 12px;">
+                                style="height: 50px; padding: 0 30px; font-size: 1.1rem; border-radius: 12px; flex: 1 1 150px; justify-content: center;">
                                 <i data-lucide="plus" size="20"></i> Hinzufügen
                             </button>
                         </div>

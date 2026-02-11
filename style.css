@@ -4501,3 +4501,21 @@ body {
         gap: 8px;
     }
 }
+
+@media (max-width: 600px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-body {
+        padding: 0 5px 20px 0;
+        /* Enhance scroll comfort */
+    }
+
+    /* Ensure modal buttons don't overflow */
+    .modal-footer button,
+    .modal button {
+        padding: 12px 16px;
+        font-size: 1rem;
+    }
+}
