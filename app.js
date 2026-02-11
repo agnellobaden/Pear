@@ -1377,9 +1377,9 @@ const app = {
                 category: document.getElementById('eventCategory').value,
                 color: document.getElementById('eventCategory').value === 'urgent' ? '#ef4444' : document.getElementById('eventColor').value
             };
-            this.addEvent(event);
-            modal.classList.add('hidden');
             e.target.reset();
+            modal.classList.add('hidden');
+            this.addEvent(event);
         };
 
         // Contact Modal
@@ -1397,9 +1397,9 @@ const app = {
                 isFavorite: document.getElementById('contactIsFavorite').checked,
                 isUrgent: document.getElementById('contactIsUrgent') ? document.getElementById('contactIsUrgent').checked : false
             };
-            app.contacts.add(contact);
-            app.contacts.closeModal();
             e.target.reset();
+            app.contacts.closeModal();
+            app.contacts.add(contact);
         };
 
         // Contact View Switcher
@@ -2164,13 +2164,21 @@ const app = {
             return new Date(e.date) >= new Date().setHours(0, 0, 0, 0);
         }).slice(0, 50);
 
+        // Auto-expand next-events if there are events today
+        const hasEventsToday = future.some(e => this.isEventOnDate(e, today));
+        const eventCard = list.closest('.next-events');
+        if (eventCard && hasEventsToday) {
+            eventCard.classList.remove('is-collapsed');
+            const toggleIcon = eventCard.querySelector('.toggle-icon');
+            if (toggleIcon) toggleIcon.setAttribute('data-lucide', 'chevron-up');
+        }
+
         if (future.length === 0) {
             // Show empty state instead of hiding
-            const card = list.closest('.next-events');
-            if (card) {
-                card.style.display = 'block';
-                card.style.border = '1px solid var(--glass-border)';
-                card.style.boxShadow = 'none';
+            if (eventCard) {
+                eventCard.style.display = 'block';
+                eventCard.style.border = '1px solid var(--glass-border)';
+                eventCard.style.boxShadow = 'none';
             }
             list.innerHTML = `<div class="empty-state" style="text-align:center; padding:30px; color:var(--text-muted);">
                 <i data-lucide="calendar-off" size="48" style="margin-bottom:10px; opacity:0.5;"></i>
@@ -2179,30 +2187,50 @@ const app = {
             </div>`;
         } else {
             // Show the card and mark it green
-            const card = list.closest('.next-events');
-            if (card) {
-                card.style.display = 'block';
+            if (eventCard) {
+                eventCard.style.display = 'block';
                 // Green indicator that content is available
                 // Apply a distinct border and subtle glow
-                card.style.border = '1px solid rgba(16, 185, 129, 0.6)';
-                card.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.15)';
+                eventCard.style.border = '1px solid rgba(16, 185, 129, 0.6)';
+                eventCard.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.15)';
             }
 
             list.innerHTML = html + future.map(e => {
                 const d = new Date(e.date);
                 const day = d.getDate();
                 const month = d.toLocaleString('de-DE', { month: 'short' });
+
+                const eventColor = e.color || 'var(--primary)';
+                const itemStyle = `
+                    cursor: pointer; 
+                    position: relative; 
+                    border-left: 4px solid ${eventColor};
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 5px ${eventColor}20;
+                `;
+
+                // Check for phone
+                let phone = e.phone;
+                if (!phone) {
+                    const contact = this.state.contacts.find(c => c.name && e.title.includes(c.name));
+                    if (contact) phone = contact.phone;
+                }
+
                 return `
-                    <div class="event-item" onclick="app.editEvent('${e.id}')" style="cursor:pointer; position:relative;">
+                    <div class="event-item" onclick="app.editEvent('${e.id}')" style="${itemStyle}">
                         <div class="event-time-box">
                             <span class="event-day">${day}</span>
                             <span class="event-month">${month}</span>
                         </div>
                         <div class="event-info">
-                            <h4>${e.title}</h4>
-                            <p>${e.time || '--:--'} Uhr ${e.location ? `• ${e.location}` : ''}</p>
+                            <h4 style="color:var(--text-main); font-weight:700;">${e.title}</h4>
+                            <p style="opacity:0.8;">${e.time || '--:--'} Uhr ${e.location ? `• ${e.location}` : ''}</p>
                         </div>
                         <div style="display:flex; align-items:center; gap:12px; margin-left:auto;">
+                            ${phone ? `
+                                <a href="tel:${phone}" class="icon-btn-subtle" onclick="event.stopPropagation()" title="Anrufen" style="color:#d97706; background:rgba(217,119,6,0.1);">
+                                    <i data-lucide="phone" size="20"></i>
+                                </a>
+                            ` : ''}
                             ${e.location ? `
                                 <button class="icon-btn-subtle" onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte öffnen">
                                     <i data-lucide="map" size="20"></i>
