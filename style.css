@@ -962,6 +962,10 @@ body {
 .modal {
     width: 500px;
     max-width: 90%;
+    /* Ensure modal fits in viewport */
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
     animation: modalPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -991,6 +995,27 @@ body {
     margin-bottom: 24px;
     border-bottom: 1px solid var(--glass-border);
     padding-bottom: 15px;
+    /* Prevent header from shrinking */
+    flex-shrink: 0;
+}
+
+.modal-body {
+    overflow-y: auto;
+    /* Custom Scrollbar for modal body */
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) transparent;
+    padding-right: 5px;
+    /* Prevent content jumping when scrollbar appears */
+}
+
+/* Webkit Scrollbar for modal body */
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background-color: var(--primary);
+    border-radius: 3px;
 }
 
 .modal-header h2 {

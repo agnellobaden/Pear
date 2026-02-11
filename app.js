@@ -657,7 +657,9 @@ const app = {
             // Push current state to cloud so other devices see it immediately
             setTimeout(() => {
                 if (this.db) {
-                    this.push();
+                    // CHANGED: We do NOT push immediately to avoid overwriting cloud data with empty local data.
+                    // We wait for the listener to pull data first.
+                    // If we have local data, it will be merged and pushed later if needed.
                     app.render();
                     this.log("Anmeldung abgeschlossen", "success");
                 } else {
@@ -709,11 +711,13 @@ const app = {
                             const incoming = JSON.parse(data.payload);
                             this.log("Daten empfangen", "success");
                             app.mergeIncoming(incoming);
+                            app.state.hasReceivedInitialSync = true; // Mark initial sync as done
                             this.updateUI(true);
                         } catch (e) { this.log("Parse Fehler", "error"); }
                     }
                 } else {
                     this.log("Noch keine Team-Daten vorhanden");
+                    app.state.hasReceivedInitialSync = true; // Mark initial sync as done (empty cloud)
                     this.updateUI(true);
                 }
             }, (error) => {
@@ -724,6 +728,13 @@ const app = {
 
         push() {
             if (!this.db || !app.state.user.teamName) return;
+
+            // SAFETY GUARD: Prevent wiping cloud data if local is empty and we haven't pulled yet
+            const isLocalEmpty = app.state.events.length === 0 && app.state.todos.length === 0 && app.state.contacts.length === 0 && app.state.finance.length === 0;
+            if (isLocalEmpty && !app.state.hasReceivedInitialSync) {
+                console.log("Sync: Warte auf initialen Abgleich bevor Leere gesendet wird.");
+                return;
+            }
 
             // Visual feedback for ALL sync buttons
             const syncButtons = document.querySelectorAll('button[onclick="app.sync.push()"]');
@@ -966,7 +977,8 @@ const app = {
             });
 
             // 2. Remove local items that are missing in incoming AND are older than the incoming payload
-            // This signifies they were deleted on another device
+            // DISABLED for safety: Prevent deletion of local offline-created items.
+            /*
             this.state.events.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -975,6 +987,7 @@ const app = {
                     }
                 }
             });
+            */
 
             if (changed) this.state.events = Array.from(localMap.values());
         }
@@ -995,6 +1008,8 @@ const app = {
                 }
             });
 
+            // DISABLED for safety
+            /*
             this.state.todos.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -1003,6 +1018,7 @@ const app = {
                     }
                 }
             });
+            */
 
             if (changed) this.state.todos = Array.from(localTodoMap.values());
         }
@@ -1023,6 +1039,8 @@ const app = {
                 }
             });
 
+            // DISABLED for safety
+            /*
             this.state.contacts.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -1031,6 +1049,7 @@ const app = {
                     }
                 }
             });
+            */
 
             if (changed) this.state.contacts = Array.from(localContactMap.values());
         }
@@ -1051,6 +1070,8 @@ const app = {
                 }
             });
 
+            // DISABLED for safety
+            /*
             this.state.finance.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -1059,6 +1080,7 @@ const app = {
                     }
                 }
             });
+            */
 
             if (changed) this.state.finance = Array.from(localFinMap.values());
         }
@@ -1314,7 +1336,7 @@ const app = {
                 email: document.getElementById('eventEmail').value,
                 notes: document.getElementById('eventNotes').value,
                 category: document.getElementById('eventCategory').value,
-                color: document.getElementById('eventColor').value
+                color: document.getElementById('eventCategory').value === 'urgent' ? '#ef4444' : document.getElementById('eventColor').value
             };
             this.addEvent(event);
             modal.classList.add('hidden');
@@ -1332,7 +1354,9 @@ const app = {
                 address: document.getElementById('contactAddress').value,
                 birthday: document.getElementById('contactBirthday').value,
                 notes: document.getElementById('contactNotes').value,
-                isFavorite: document.getElementById('contactIsFavorite').checked
+                notes: document.getElementById('contactNotes').value,
+                isFavorite: document.getElementById('contactIsFavorite').checked,
+                isUrgent: document.getElementById('contactIsUrgent') ? document.getElementById('contactIsUrgent').checked : false
             };
             app.contacts.add(contact);
             app.contacts.closeModal();
@@ -2063,6 +2087,66 @@ const app = {
                     </div>
                 `;
             }).join('');
+        }
+
+        // Urgent Todos & Contacts Logic for Dashboard
+        const urgentContainer = document.getElementById('dashboardUrgentTodos');
+        const urgentList = document.getElementById('dashboardUrgentList');
+
+        if (urgentContainer && urgentList) {
+            const urgentTodos = this.state.todos.filter(t => !t.completed && t.urgent);
+            const urgentContacts = this.state.contacts.filter(c => c.isUrgent);
+
+            // Filter urgent events: category 'urgent' AND date >= today
+            const todayStr = new Date().toISOString().split('T')[0];
+            const urgentEvents = this.state.events.filter(e => e.category === 'urgent' && e.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date));
+
+            let urgentHtml = '';
+
+            // Render Urgent Contacts (First!)
+            urgentHtml += urgentContacts.map(c => `
+                <div onclick="${c.phone ? `window.location.href='tel:${c.phone}'` : `app.navigateTo('contacts')`}" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.15); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <i data-lucide="${c.phone ? 'phone-call' : 'user'}" size="16" style="color:#ef4444;"></i>
+                        <span style="font-weight:700; font-size:0.9rem;">${c.name}</span>
+                    </div>
+                    ${c.phone ? '<span style="font-size:0.75rem; background:#ef4444; color:white; padding:2px 6px; border-radius:4px;">ANRUFEN!</span>' : '<span style="font-size:0.75rem; color:#ef4444;">Dringend</span>'}
+                </div>
+            `).join('');
+
+            // Render Urgent Events
+            urgentHtml += urgentEvents.map(e => `
+                <div onclick="app.editEvent('${e.id}')" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.1); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <i data-lucide="calendar-clock" size="16" style="color:#ef4444;"></i>
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="font-weight:700; font-size:0.9rem;">${e.title}</span>
+                            <span style="font-size:0.7rem; opacity:0.8;">${new Date(e.date).toLocaleDateString('de-DE')} ${e.time || ''}</span>
+                        </div>
+                    </div>
+                    ${e.phone ?
+                    `<a href="tel:${e.phone}" onclick="event.stopPropagation()" style="font-size:0.75rem; background:#ef4444; color:white; padding:4px 8px; border-radius:4px; text-decoration:none; display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="12"></i> ${e.phone}</a>`
+                    : `<span style="font-size:0.75rem; color:#ef4444; border:1px solid #ef4444; padding:1px 5px; border-radius:4px;">TERMIN</span>`
+                }
+                </div>
+            `).join('');
+
+            // Render Urgent Todos
+            urgentHtml += urgentTodos.map(t => `
+                <div onclick="app.navigateTo('todo')" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.1); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <i data-lucide="check-square" size="16" style="color:#ef4444;"></i>
+                        <span style="font-weight:600; font-size:0.9rem;">${t.text}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            if (urgentTodos.length > 0 || urgentContacts.length > 0 || urgentEvents.length > 0) {
+                urgentContainer.style.display = 'block';
+                urgentList.innerHTML = urgentHtml;
+            } else {
+                urgentContainer.style.display = 'none';
+            }
         }
 
         this.renderMiniCalendar();
@@ -2918,16 +3002,21 @@ const app = {
             const text = input.value.trim();
             if (!text) return;
 
+            const isUrgent = document.getElementById('todoUrgent') ? document.getElementById('todoUrgent').checked : false;
+
             const newTodo = {
                 id: Date.now().toString(),
                 text: text,
                 category: categoryInput.value,
                 completed: false,
+                urgent: isUrgent,
                 createdAt: Date.now()
             };
 
             app.state.todos.unshift(newTodo);
             input.value = '';
+            // Reset urgent checkbox
+            if (document.getElementById('todoUrgent')) document.getElementById('todoUrgent').checked = false;
             app.saveLocal();
             this.render();
 
@@ -3008,10 +3097,13 @@ const app = {
                 });
 
                 list.innerHTML = filtered.map(t => `
-                    <div class="todo-item ${t.completed ? 'completed' : ''}" style="display: flex; align-items: center; gap: 12px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 12px; transition: var(--transition);">
+                    <div class="todo-item ${t.completed ? 'completed' : ''}" style="display: flex; align-items: center; gap: 12px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 12px; transition: var(--transition); ${t.urgent ? 'border: 1px solid rgba(239,68,68,0.5); box-shadow: 0 0 10px rgba(239,68,68,0.1);' : ''}">
                         <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="app.todo.toggle('${t.id}')" style="width: 20px; height: 20px; cursor: pointer; accent-color: var(--success);">
                         <div style="flex: 1; display: flex; flex-direction: column;">
-                            <span style="${t.completed ? 'text-decoration: line-through; opacity: 0.5;' : ''}">${t.text}</span>
+                            <div style="display:flex; align-items:center; gap:5px;">
+                                ${t.urgent ? '<i data-lucide="alert-circle" size="14" style="color:#ef4444;"></i>' : ''}
+                                <span style="${t.completed ? 'text-decoration: line-through; opacity: 0.5;' : ''}; font-weight:${t.urgent ? '700' : '400'};">${t.text}</span>
+                            </div>
                             <small style="font-size: 0.7rem; opacity: 0.6; margin-top: 2px;">${t.category || 'Generell'}</small>
                         </div>
                         <button onclick="app.todo.delete('${t.id}')" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;"><i data-lucide="trash-2" size="18"></i></button>
@@ -3131,7 +3223,9 @@ const app = {
             document.getElementById('contactAddress').value = contact.address || '';
             document.getElementById('contactBirthday').value = contact.birthday || '';
             document.getElementById('contactNotes').value = contact.notes || '';
+            document.getElementById('contactNotes').value = contact.notes || '';
             document.getElementById('contactIsFavorite').checked = !!contact.isFavorite;
+            if (document.getElementById('contactIsUrgent')) document.getElementById('contactIsUrgent').checked = !!contact.isUrgent;
 
             const delBtn = document.getElementById('deleteContactBtn');
             if (delBtn) delBtn.style.display = 'block';

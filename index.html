@@ -241,6 +241,18 @@
                 </div>
 
                 <div class="dashboard-grid">
+                    <!-- Urgent Todos Section -->
+                    <div id="dashboardUrgentTodos" class="card glass"
+                        style="display:none; border: 1px solid rgba(239, 68, 68, 0.5); background: linear-gradient(135deg, rgba(239,68,68,0.05), rgba(0,0,0,0));">
+                        <div class="card-header" style="margin-bottom:10px;">
+                            <h3 style="color:#ef4444; display:flex; align-items:center; gap:8px;">
+                                <i data-lucide="alert-circle"></i> Dringend / Wichtig
+                            </h3>
+                        </div>
+                        <div id="dashboardUrgentList" style="display:flex; flex-direction:column; gap:8px;">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
                     <div class="card glass next-events collapsible-card is-collapsed">
                         <div class="card-header-toggle" onclick="app.toggleCard(this)">
                             <div style="display: flex; align-items: center; gap: 10px;">
@@ -640,6 +652,12 @@
                                     style="height: 50px; width: 50px; border-radius: 12px; font-size: 1.5rem;"
                                     title="Neue Bezeichnung">+</button>
                             </div>
+                            <label class="custom-checkbox-container"
+                                style="display:flex; align-items:center; gap:8px; background:rgba(239, 68, 68, 0.1); padding:0 15px; border-radius:12px; height:50px; border:1px solid rgba(239, 68, 68, 0.3); cursor:pointer;">
+                                <input type="checkbox" id="todoUrgent"
+                                    style="width:20px; height:20px; accent-color:#ef4444;">
+                                <span style="color:#ef4444; font-weight:600;">Dringend!</span>
+                            </label>
                             <button class="btn-primary" onclick="app.todo.add()"
                                 style="height: 50px; padding: 0 30px; font-size: 1.1rem; border-radius: 12px;">
                                 <i data-lucide="plus" size="20"></i> Hinzufügen
@@ -1267,10 +1285,15 @@
                             <textarea id="contactNotes" placeholder="Zusätzliche Infos..."
                                 style="height: 60px;"></textarea>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" style="display:flex; gap:20px; flex-wrap:wrap;">
                             <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                                 <input type="checkbox" id="contactIsFavorite" style="width: auto;">
-                                Favorit ❤️ (Wird oben angepinnt)
+                                Favorit ❤️
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #ef4444; font-weight:600;">
+                                <input type="checkbox" id="contactIsUrgent" style="width: auto; accent-color: #ef4444;">
+                                Dringend! 🚨
                             </label>
                         </div>
                         <div style="display: flex; gap: 10px; margin-top: 20px;">
