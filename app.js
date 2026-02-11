@@ -53,7 +53,10 @@ const app = {
         fontSizeScale: parseInt(localStorage.getItem('moltbot_font_size_scale')) || 100,
         highContrastMode: localStorage.getItem('moltbot_high_contrast') === 'true',
         boldMode: localStorage.getItem('moltbot_bold_mode') === 'true',
-        teamHistory: []
+        teamHistory: [],
+        isNightLandscape: localStorage.getItem('moltbot_night_landscape') === 'true',
+        isAutoNightclockEnabled: localStorage.getItem('moltbot_auto_nightclock') === 'true',
+        isWakeLockPersistent: localStorage.getItem('moltbot_wakelock_persistent') === 'true'
     },
 
     // --- INITIALIZATION ---
@@ -84,6 +87,7 @@ const app = {
 
             // Start Clock Interface
             this.alarm.init();
+            this.alarm.render();
 
             // Setup Gestures
             this.setupGestures();
@@ -331,6 +335,11 @@ const app = {
 
         const appNameInput = document.getElementById('settingsAppName');
         if (appNameInput) appNameInput.value = this.state.appName;
+
+        // Restore Night Clock / Wake Lock persistence
+        this.state.isAutoNightclockEnabled = localStorage.getItem('moltbot_auto_nightclock') === 'true';
+        this.state.isWakeLockPersistent = localStorage.getItem('moltbot_wakelock_persistent') === 'true';
+        this.state.nightModeStart = localStorage.getItem('moltbot_night_mode_start') || '01:00';
     },
 
     saveLocal() {
@@ -348,6 +357,11 @@ const app = {
         localStorage.setItem('moltbot_todo_categories', JSON.stringify(this.state.todoCategories));
         localStorage.setItem('moltbot_alarms', JSON.stringify(this.state.alarms));
         localStorage.setItem('moltbot_team_history', JSON.stringify(this.state.teamHistory || []));
+
+        // Persist Night Clock settings in every save cycle
+        localStorage.setItem('moltbot_auto_nightclock', this.state.isAutoNightclockEnabled);
+        localStorage.setItem('moltbot_wakelock_persistent', this.state.isWakeLockPersistent);
+        localStorage.setItem('moltbot_night_mode_start', this.state.nightModeStart);
     },
 
     updateTheme(theme) {
@@ -775,7 +789,10 @@ const app = {
                 userProfile: {
                     name: app.state.user.name,
                     avatar: app.state.user.avatar,
-                    appName: app.state.appName
+                    appName: app.state.appName,
+                    autoNightclock: app.state.isAutoNightclockEnabled,
+                    nightModeStart: app.state.nightModeStart,
+                    wakeLockPersistent: app.state.isWakeLockPersistent
                 },
                 updatedAt: Date.now(),
                 pushedBy: app.state.user.name,
@@ -1165,6 +1182,16 @@ const app = {
         if (incoming.userProfile && incoming.updatedAt > (this.state.lastRemoteSync || 0)) {
             if (incoming.userProfile.appName && incoming.userProfile.appName !== this.state.appName) {
                 this.updateAppName(incoming.userProfile.appName);
+            }
+            // Sync Night Mode settings
+            if (incoming.userProfile.autoNightclock !== undefined) {
+                this.state.isAutoNightclockEnabled = incoming.userProfile.autoNightclock;
+            }
+            if (incoming.userProfile.nightModeStart !== undefined) {
+                this.state.nightModeStart = incoming.userProfile.nightModeStart;
+            }
+            if (incoming.userProfile.wakeLockPersistent !== undefined) {
+                this.state.isWakeLockPersistent = incoming.userProfile.wakeLockPersistent;
             }
             this.state.lastRemoteSync = incoming.updatedAt;
         }
@@ -1992,60 +2019,63 @@ const app = {
             const ctx = document.getElementById('financeChart');
             if (!ctx) return;
 
-            const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
-            const data = new Array(12).fill(0);
-            const budgetData = new Array(12).fill(app.state.monthlyBudget);
+            // Simplified data for a round (doughnut) chart
+            // Categories: Needs, Wants, Savings (or based on source)
+            // For now, let's group by source or just show a breakdown of expenses vs budget
+
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            let monthlyExpenses = 0;
+            const sourceTotals = {};
 
             app.state.finance.forEach(e => {
                 const d = new Date(e.date);
-                if (d.getFullYear() === new Date().getFullYear()) {
-                    data[d.getMonth()] += e.amount;
+                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+                    monthlyExpenses += e.amount;
+                    sourceTotals[e.source] = (sourceTotals[e.source] || 0) + e.amount;
                 }
             });
+
+            const remaining = Math.max(0, app.state.monthlyBudget - monthlyExpenses);
+            const labels = Object.keys(sourceTotals);
+            const values = Object.values(sourceTotals);
+
+            // Add remaining budget as a segment
+            if (remaining > 0) {
+                labels.push('Verbleibend');
+                values.push(remaining);
+            }
 
             if (this.chart) this.chart.destroy();
 
             this.chart = new Chart(ctx, {
-                type: 'line',
+                type: 'doughnut',
                 data: {
-                    labels: months,
-                    datasets: [
-                        {
-                            label: 'Ausgaben',
-                            data: data,
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            fill: true,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'Budget',
-                            data: budgetData,
-                            borderColor: '#6366f1',
-                            borderDash: [5, 5],
-                            fill: false,
-                            tension: 0
-                        }
-                    ]
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: [
+                            '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6',
+                            '#ec4899', '#64748b', '#22c55e', '#eab308'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    cutout: '70%',
                     plugins: {
                         legend: {
-                            display: true,
-                            labels: { color: '#94a3b8' }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#94a3b8' }
-                        },
-                        x: {
-                            grid: { display: false },
-                            ticks: { color: '#94a3b8' }
+                            position: 'bottom',
+                            labels: {
+                                color: '#94a3b8',
+                                usePointStyle: true,
+                                padding: 20
+                            }
                         }
                     }
                 }
@@ -2078,6 +2108,104 @@ const app = {
         </svg>`;
 
         if (title) title.innerHTML = `Willkommen zurück, ${this.state.user.name}! ${pearLogo}`;
+
+        // CALCULATE BUDGET FOR DASHBOARD WIDGET
+        const budgetWidget = document.getElementById('dashboardBudgetWidget');
+        if (budgetWidget) {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            let monthlyExpenses = 0;
+            this.state.finance.forEach(e => {
+                const d = new Date(e.date);
+                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+                    monthlyExpenses += e.amount;
+                }
+            });
+            const remaining = this.state.monthlyBudget - monthlyExpenses;
+            const percent = Math.min(100, Math.max(0, (monthlyExpenses / this.state.monthlyBudget) * 100));
+            const isOver = remaining < 0;
+
+            budgetWidget.style.display = 'block'; // Ensure it's visible
+            budgetWidget.innerHTML = `
+            <div class="card glass animate-in collapsible-card" style="margin-bottom: 20px; border: 1px solid ${isOver ? 'rgba(239, 68, 68, 0.4)' : 'var(--glass-border)'}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
+                <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="icon-circle" style="background: ${isOver ? 'rgba(239,68,68,0.1)' : 'rgba(var(--primary-rgb), 0.1)'}; color: ${isOver ? '#ef4444' : 'var(--primary)'}; width: 36px; height: 36px; border-radius: 10px;">
+                            <i data-lucide="wallet" size="18"></i>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 1rem; margin: 0;">Monats-Budget</h3>
+                            <small style="color: var(--text-muted);">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <div style="text-align: right;" class="hide-on-collapse">
+                            <div style="font-size: 1.1rem; font-weight: 800; color: ${isOver ? '#ef4444' : 'var(--text-main)'};">
+                                ${remaining.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                    </div>
+                </div>
+                
+                <div class="card-content">
+                    <div style="height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; margin-top: 15px;">
+                        <div style="width: ${percent}%; height: 100%; background: ${isOver ? '#ef4444' : 'var(--primary)'}; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted);">
+                        <span>Ausgegeben: ${monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        <span>Ziel: ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+            // DASHBOARD FINANCE CHART
+            const dashChartCard = document.getElementById('dashboardFinanceCard');
+            const dashCtx = document.getElementById('dashboardFinanceChart');
+            if (dashChartCard && dashCtx) {
+                dashChartCard.style.display = 'block';
+
+                // Re-calculate or use existing data
+                const sourceTotals = {};
+                this.state.finance.forEach(e => {
+                    const d = new Date(e.date);
+                    if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+                        sourceTotals[e.source] = (sourceTotals[e.source] || 0) + e.amount;
+                    }
+                });
+
+                const labels = Object.keys(sourceTotals);
+                const values = Object.values(sourceTotals);
+                if (remaining > 0) { labels.push('Verbleibend'); values.push(remaining); }
+
+                // Destroy existing if needed (though dashboard is usually re-rendered fresh)
+                if (this.dashFinanceChart) this.dashFinanceChart.destroy();
+
+                this.dashFinanceChart = new Chart(dashCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '75%',
+                        plugins: {
+                            legend: { display: false } // Keep it clean on dashboard
+                        }
+                    }
+                });
+            }
+
+            if (window.lucide) lucide.createIcons();
+        }
 
         const list = document.getElementById('dashboardEventList');
         if (!list) return;
@@ -2865,32 +2993,65 @@ const app = {
         }
     },
 
-    createEventElement(e) {
+    createEventElement(e, offsetPercent = 0, widthPercent = 100) {
         // Calculate position
         const [h, m] = (e.time || '00:00').split(':').map(Number);
         const startMin = h * 60 + m;
-        const duration = 60; // Default 1h if not set
+
+        // Use duration if available, default to 60m
+        const duration = e.duration || 60;
 
         const el = document.createElement('div');
         el.className = `event-card ${e.category || ''} ${e.archived ? 'archived' : ''}`;
         el.style.top = `${startMin}px`;
         el.style.height = `${duration}px`;
 
+        // Handle overlapping columns within a day
+        el.style.left = `${offsetPercent}%`;
+        el.style.width = `calc(${widthPercent}% - 6px)`;
+
         // Styling options (color)
-        if (e.color) {
-            el.style.backgroundColor = e.archived ? '#e5e7eb' : e.color; // Muted if archived
-            el.style.borderLeftColor = e.color;
-            if (e.archived) el.style.opacity = '0.6';
+        let baseColor = e.color;
+        if (!baseColor) {
+            const cat = (e.category || '').toLowerCase();
+            // Fallback to category colors (English and common German names)
+            if (cat === 'work' || cat === 'arbeit' || cat === '💼 arbeit') baseColor = '#4f46e5';
+            else if (cat === 'private' || cat === 'privat' || cat === '👤 privat') baseColor = '#9333ea';
+            else if (cat === 'urgent' || cat === 'dringend' || cat === 'wichtig') baseColor = '#dc2626';
+            else if (cat === 'birthday' || cat === 'geburtstag') baseColor = '#eab308';
+            else if (cat === 'holiday' || cat === 'feiertag') baseColor = '#0891b2';
+            else baseColor = '#64748b'; // default slate
         }
+
+        if (e.archived) baseColor = '#94a3b8';
+
+        // Use stronger opacities for better readability (77 = 47%, 44 = 27%)
+        el.style.background = `linear-gradient(135deg, ${baseColor}77, ${baseColor}44)`;
+        el.style.borderLeft = `4px solid ${baseColor}`;
+        el.style.color = 'var(--text-main)';
+
+        if (e.archived) el.style.opacity = '0.8';
 
         el.onclick = (ev) => {
             ev.stopPropagation();
             app.editEvent(e.id);
         };
 
+        // Determine icon
+        let icon = 'clock';
+        const cat = (e.category || '').toLowerCase();
+        if (cat.includes('birth') || cat.includes('geburt') || cat.includes('cake')) icon = 'cake';
+        else if (e.location) icon = 'map-pin';
+
         el.innerHTML = `
-            <div class="event-title">${e.title}</div>
-            <div class="event-time">${e.time}</div>
+            <div class="event-card-inner">
+                <div class="event-card-header">
+                    <i data-lucide="${icon}" size="12"></i>
+                    <span class="event-time">${e.time || '--:--'}</span>
+                </div>
+                <div class="event-title">${e.title}</div>
+                ${e.location ? `<div class="event-loc"><i data-lucide="map-pin" size="10"></i> ${e.location}</div>` : ''}
+            </div>
         `;
         return el;
     },
@@ -2900,9 +3061,11 @@ const app = {
         container.className = `time-grid-container view-${viewType}`;
 
         const header = this.renderTimeGridHeader(days, viewType);
+        const allDayRow = this.renderAllDayRow(days, events);
         const body = this.renderTimeGridBody(days, events, viewType);
 
         container.appendChild(header);
+        container.appendChild(allDayRow);
         container.appendChild(body);
 
         // Scroll Logic: Center first event or fallback to current time
@@ -2967,25 +3130,55 @@ const app = {
         return header;
     },
 
+    renderAllDayRow(days, events) {
+        const row = document.createElement('div');
+        row.className = 'all-day-events-row';
+
+        const gutter = document.createElement('div');
+        gutter.className = 'all-day-gutter';
+        gutter.textContent = 'Ganztags';
+        row.appendChild(gutter);
+
+        const content = document.createElement('div');
+        content.className = 'all-day-content';
+
+        days.forEach(date => {
+            const dayAllDayEvents = events.filter(e => e.allDay && this.isEventOnDate(e, date));
+            dayAllDayEvents.forEach(e => {
+                const pill = document.createElement('div');
+                pill.className = `all-day-pill ${e.category || ''}`;
+                if (e.color) pill.style.background = e.color;
+                pill.textContent = e.title;
+                pill.onclick = () => app.editEvent(e.id);
+                content.appendChild(pill);
+            });
+        });
+
+        row.appendChild(content);
+        return row;
+    },
+
     renderTimeGridBody(days, events, viewType) {
         const body = document.createElement('div');
         body.className = 'time-grid-scroll-area';
 
-        // Main content wrapper
         const content = document.createElement('div');
         content.className = 'time-grid-content';
-        // Height: 24h * 60px = 1440px
         content.style.height = '1440px';
 
         // 1. Time Axis (Left side labels)
         const timeAxis = document.createElement('div');
         timeAxis.className = 'time-axis';
+        timeAxis.onclick = (ev) => {
+            const rect = timeAxis.getBoundingClientRect();
+            const relativeY = ev.clientY - rect.top;
+            const hour = Math.floor(relativeY / 60);
+            const minutes = Math.floor((relativeY % 60) / 15) * 15;
+            const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            // Default to first day in current view
+            app.openCreateAt(days[0].toISOString().split('T')[0], timeStr);
+        };
         for (let h = 0; h <= 23; h++) {
-            // Google Calendar puts label *on* the line.
-            // We render a label for each hour.
-            // Optional: Skip 00:00 if it looks weird at very top, but user requested 0-23.
-            // Actually, 00:00 at top index 0. User wants it.
-
             const label = document.createElement('div');
             label.className = 'time-label-slot';
             label.style.top = `${h * 60}px`;
@@ -2994,71 +3187,87 @@ const app = {
         }
         content.appendChild(timeAxis);
 
-        // 2. Grid Lines (Horizontal)
+        // Grid Lines (Hours & Half-Hours)
         const gridLines = document.createElement('div');
         gridLines.className = 'grid-lines-layer';
-        for (let h = 1; h < 24; h++) {
+        for (let h = 0; h < 24; h++) {
+            // Hour Line
             const line = document.createElement('div');
             line.className = 'horizontal-line';
             line.style.top = `${h * 60}px`;
             gridLines.appendChild(line);
+
+            // Half-Hour Line (except for the last hour maybe, but let's go full 24)
+            const halfLine = document.createElement('div');
+            halfLine.className = 'half-hour-line';
+            halfLine.style.top = `${h * 60 + 30}px`;
+            gridLines.appendChild(halfLine);
         }
         content.appendChild(gridLines);
 
-        // 3. Columns Container (Days)
+        // Columns
         const columnsContainer = document.createElement('div');
         columnsContainer.className = 'day-columns-container';
 
         days.forEach((date, dayIndex) => {
             const col = document.createElement('div');
             col.className = 'day-column';
-            col.style.width = `${100 / days.length}%`; // Equal width
+            col.style.width = `${100 / days.length}%`;
 
-            // Vertical line (border-left or right)
-            if (dayIndex > 0) {
-                col.style.borderLeft = '1px solid var(--glass-border)';
-            }
+            const dayEvents = events.filter(e => !e.allDay && this.isEventOnDate(e, date));
 
-            // Filter events for this day
-            const dayEvents = events.filter(e => this.isEventOnDate(e, date));
+            // Smarter Position Calculation (Overlap Handling)
+            dayEvents.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
 
-            // Render Events
-            dayEvents.forEach(e => {
-                if (e.allDay) return; // All-day handled separately (TODO)
+            dayEvents.forEach((e, idx) => {
+                // Simplified overlap: if same hour, shift right
+                // In a perfect world we'd check precise minute overlaps
+                const startTime = e.time || '00:00';
+                const overlaps = dayEvents.filter((other, oIdx) => {
+                    if (idx === oIdx) return false;
+                    const oStart = other.time || '00:00';
+                    return oStart.split(':')[0] === startTime.split(':')[0];
+                });
 
-                const eventEl = this.createEventElement(e);
+                let offset = 0;
+                let width = 100;
+                if (overlaps.length > 0) {
+                    const myOverlapIdx = [e, ...overlaps].sort((a, b) => a.id.localeCompare(b.id)).indexOf(e);
+                    width = 100 / (overlaps.length + 1);
+                    offset = myOverlapIdx * width;
+                }
+
+                const eventEl = this.createEventElement(e, offset, width);
                 col.appendChild(eventEl);
             });
 
-            // Current Time Marker (if today)
+            // Now Marker
             if (new Date().toDateString() === date.toDateString()) {
                 const now = new Date();
-                const minutes = now.getHours() * 60 + now.getMinutes();
-                const topPx = minutes; // 1min = 1px scale (60px/hr)
-                const timeStr = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-
+                const nowTime = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                const topPx = now.getHours() * 60 + now.getMinutes();
                 const marker = document.createElement('div');
                 marker.className = 'now-marker';
                 marker.style.top = `${topPx}px`;
-                marker.innerHTML = `<div class="now-dot"></div><div class="now-line"></div><div class="now-time">${timeStr}</div>`;
+
+                // Add a small time badge to the marker
+                marker.innerHTML = `<div class="now-time-badge">${nowTime}</div>`;
+
                 col.appendChild(marker);
             }
 
-            // Click/Create listener for this column
-            col.onclick = (e) => {
-                if (e.target.closest('.event-card')) return;
+            col.onclick = (ev) => {
+                if (ev.target.closest('.event-card')) return;
                 const rect = col.getBoundingClientRect();
-                const clickY = e.clientY - rect.top + body.scrollTop;
-                // Wait, clientY relative to viewport. rect.top relative to viewport.
-                // But col is inside scroll area... 
-                // Actually easiest: relative to e.target if e.target is col.
-                // e.offsetY gives Y relative to target.
+                const relativeY = ev.clientY - rect.top;
 
-                // Let's rely on app.openCreateAt logic or simplified:
-                const timeClicked = Math.floor(e.offsetY / 60);
-                const hourStr = timeClicked.toString().padStart(2, '0') + ':00';
-                const dateStr = date.toISOString().split('T')[0];
-                app.openCreateAt(dateStr, hourStr);
+                // Snap to 15 minutes
+                const totalMinutes = Math.floor(relativeY);
+                const hour = Math.floor(totalMinutes / 60);
+                const minutes = Math.floor((totalMinutes % 60) / 15) * 15;
+
+                const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                app.openCreateAt(date.toISOString().split('T')[0], timeStr);
             };
 
             columnsContainer.appendChild(col);
@@ -3066,7 +3275,6 @@ const app = {
 
         content.appendChild(columnsContainer);
         body.appendChild(content);
-
         return body;
     },
 
@@ -3880,6 +4088,11 @@ const app = {
                 this.checkReminders();
                 this.checkBirthdays();
             }, 1000);
+
+            // Auto-request persistence if enabled
+            if (app.state.isWakeLockPersistent) {
+                setTimeout(() => this.toggleWakeLock(true), 2000); // Small delay to improve success chance
+            }
         },
 
         updateClock() {
@@ -3915,7 +4128,7 @@ const app = {
                 clockEl.textContent = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
             }
             if (dateEl) {
-                dateEl.textContent = now.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'short' });
+                dateEl.textContent = now.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
             }
 
             // Fetch weather and location only once per session or periodically
@@ -3965,10 +4178,12 @@ const app = {
         },
 
         checkAutoNightMode(now) {
+            if (!app.state.isAutoNightclockEnabled) return;
+
             const current = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
             if (current === app.state.nightModeStart && !app.state.isNightClockFullscreen) {
                 this.toggleFullscreen(true);
-                // Also ensure wake lock is on
+                // Also ensure wake lock is on (if user wants auto-nightclock, they likely want wake lock too)
                 const wakeCheck = document.getElementById('wakeLockCheck');
                 if (wakeCheck && !wakeCheck.checked) {
                     wakeCheck.checked = true;
@@ -4090,6 +4305,10 @@ const app = {
             const overlay = document.getElementById('nightClockFullscreen');
             if (overlay) {
                 overlay.classList.toggle('hidden', !desiredState);
+                if (desiredState) {
+                    overlay.classList.toggle('is-landscape-forced', app.state.isNightLandscape);
+                    if (window.lucide) lucide.createIcons();
+                }
             }
 
             // Browser Fullscreen API
@@ -4117,10 +4336,29 @@ const app = {
             }
         },
 
+        toggleLandscape() {
+            app.state.isNightLandscape = !app.state.isNightLandscape;
+            localStorage.setItem('moltbot_night_landscape', app.state.isNightLandscape);
+
+            const overlay = document.getElementById('nightClockFullscreen');
+            if (overlay) {
+                overlay.classList.toggle('is-landscape-forced', app.state.isNightLandscape);
+            }
+        },
+
         saveSettings() {
             const start = document.getElementById('nightModeStart').value;
+            const autoEnabled = document.getElementById('autoNightclockAction').checked;
+
             app.state.nightModeStart = start;
+            app.state.isAutoNightclockEnabled = autoEnabled;
+
             localStorage.setItem('moltbot_night_mode_start', start);
+            localStorage.setItem('moltbot_auto_nightclock', autoEnabled);
+
+            // Robust persistence: trigger a full save and sync
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
         },
 
         updateDesign(type, value) {
@@ -4231,17 +4469,22 @@ const app = {
             }
         },
 
-        async toggleWakeLock() {
+        async toggleWakeLock(force = null) {
             const check = document.getElementById('wakeLockCheck');
             if (!check) return;
 
-            if (check.checked) {
+            const shouldActivate = force !== null ? force : check.checked;
+            check.checked = shouldActivate;
+
+            if (shouldActivate) {
                 try {
                     if ('wakeLock' in navigator) {
-                        app.state.wakeLock = await navigator.wakeLock.request('screen');
-                        console.log("Wake Lock active");
+                        if (!app.state.wakeLock) {
+                            app.state.wakeLock = await navigator.wakeLock.request('screen');
+                            console.log("Wake Lock active");
+                        }
                     } else {
-                        alert("Dein Browser unterstützt das Wachbleiben leider nicht.");
+                        if (force === null) alert("Dein Browser unterstützt das Wachbleiben leider nicht.");
                         check.checked = false;
                     }
                 } catch (err) {
@@ -4256,12 +4499,45 @@ const app = {
                     });
                 }
             }
+
+            // Always persist the preference
+            app.state.isWakeLockPersistent = check.checked;
+            localStorage.setItem('moltbot_wakelock_persistent', check.checked);
         },
 
         render() {
             const list = document.getElementById('alarmList');
             if (!list) return;
 
+            // Populate settings inputs FIRST (so they work even if alarm list is empty)
+            const startInput = document.getElementById('nightModeStart');
+            if (startInput) startInput.value = app.state.nightModeStart;
+
+            const autoNightToggle = document.getElementById('autoNightclockAction');
+            if (autoNightToggle) autoNightToggle.checked = app.state.isAutoNightclockEnabled;
+
+            const wakeLockToggle = document.getElementById('wakeLockCheck');
+            if (wakeLockToggle) wakeLockToggle.checked = app.state.isWakeLockPersistent;
+
+            const brightInput = document.getElementById('nightBrightness');
+            if (brightInput) brightInput.value = app.state.nightModeBrightness || 1;
+
+            const colorInput = document.getElementById('nightColor');
+            if (colorInput) colorInput.value = app.state.nightModeColor || '#ffffff';
+
+            // Populate Fullscreen inputs
+            const fsBright = document.getElementById('fsBrightness');
+            if (fsBright) fsBright.value = app.state.nightModeBrightness || 1;
+            const fsColor = document.getElementById('fsColor');
+            if (fsColor) fsColor.value = app.state.nightModeColor || '#ffffff';
+
+            // Apply styles immediately
+            this.updateDesign('brightness', app.state.nightModeBrightness || 1);
+            this.updateDesign('color', app.state.nightModeColor || '#ffffff');
+
+            if (window.lucide) lucide.createIcons();
+
+            // Then render the list
             if (app.state.alarms.length === 0) {
                 list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">Noch keine Wecker eingestellt.</div>';
                 return;
@@ -4293,26 +4569,6 @@ const app = {
             }).join('');
 
             if (window.lucide) lucide.createIcons();
-
-            // Populate settings
-            const startInput = document.getElementById('nightModeStart');
-            if (startInput) startInput.value = app.state.nightModeStart;
-
-            const brightInput = document.getElementById('nightBrightness');
-            if (brightInput) brightInput.value = app.state.nightModeBrightness;
-
-            const colorInput = document.getElementById('nightColor');
-            if (colorInput) colorInput.value = app.state.nightModeColor;
-
-            // Populate Fullscreen inputs
-            const fsBright = document.getElementById('fsBrightness');
-            if (fsBright) fsBright.value = app.state.nightModeBrightness;
-            const fsColor = document.getElementById('fsColor');
-            if (fsColor) fsColor.value = app.state.nightModeColor;
-
-            // Apply styles immediately
-            this.updateDesign('brightness', app.state.nightModeBrightness);
-            this.updateDesign('color', app.state.nightModeColor);
         }
     },
 

@@ -34,6 +34,7 @@
          but here we use the CDN script tags for simplicity if not using bundler -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style_table.css">
@@ -200,29 +201,25 @@
 
             <!-- Views -->
             <section id="view-dashboard" class="page-view active">
-                <div class="hero dashboard-hero" style="flex-direction: column; align-items: flex-start; gap: 20px;">
-                    <div class="hero-info-pills"
-                        style="display: flex; gap: 12px; width: 100%; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none;">
-                        <div class="info-pill highlight" style="flex-shrink: 0;">
+                <div class="hero dashboard-hero">
+                    <div class="hero-info-pills">
+                        <div class="info-pill highlight">
                             <i data-lucide="clock"></i>
                             <span id="dashClock">--:--</span>
                         </div>
-                        <div class="info-pill highlight" style="flex-shrink: 0;">
+                        <div class="info-pill highlight">
                             <i data-lucide="calendar"></i>
                             <span id="dashDate">---, --. ---</span>
                         </div>
-                        <div class="info-pill highlight mobile-hide-pill" style="flex-shrink: 0;">
-                            <i data-lucide="map-pin"></i>
-                            <span id="dashLocation">Ort...</span>
-                        </div>
-                        <div class="info-pill highlight mobile-hide-pill" style="flex-shrink: 0;">
-                            <i data-lucide="cloud-sun"></i>
+                        <div class="info-pill highlight">
+                            <i data-lucide="thermometer" class="mobile-only-inline"></i>
+                            <i data-lucide="map-pin" class="mobile-hide"></i>
+                            <span id="dashLocation" class="mobile-hide">Ort...</span>
                             <span id="dashTemp">--°C</span>
                         </div>
                     </div>
 
-                    <div class="hero-main-row"
-                        style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div class="hero-main-row">
                         <div class="hero-text">
                             <h1 id="dashboardWelcomeTitle">Willkommen zurück! 👋</h1>
                             <p>Hier ist eine Übersicht deiner nächsten Termine.</p>
@@ -241,18 +238,22 @@
                 </div>
 
                 <div class="dashboard-grid">
-                    <!-- Special Events (Birthdays) Container -->
                     <div id="dashboardSpecialContainer" style="display:none; grid-column: 1 / -1;"></div>
 
+                    <!-- Dashboard Summary Widgets -->
+                    <div id="dashboardBudgetWidget" style="grid-column: 1 / -1; display: none;"></div>
+
                     <!-- Urgent Todos Section -->
-                    <div id="dashboardUrgentTodos" class="card glass"
+                    <div id="dashboardUrgentTodos" class="card glass collapsible-card is-collapsed"
                         style="display:none; border: 1px solid rgba(239, 68, 68, 0.5); background: linear-gradient(135deg, rgba(239,68,68,0.05), rgba(0,0,0,0));">
-                        <div class="card-header" style="margin-bottom:10px;">
+                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
                             <h3 style="color:#ef4444; display:flex; align-items:center; gap:8px;">
                                 <i data-lucide="alert-circle"></i> Dringend / Wichtig
                             </h3>
+                            <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
                         </div>
-                        <div id="dashboardUrgentList" style="display:flex; flex-direction:column; gap:8px;">
+                        <div id="dashboardUrgentList" class="card-content"
+                            style="display:flex; flex-direction:column; gap:8px;">
                             <!-- Populated by JS -->
                         </div>
                     </div>
@@ -270,17 +271,35 @@
                         </div>
                     </div>
 
-                    <div class="card glass mini-calendar">
-                        <div class="calendar-header">
-                            <h3 id="miniCalendarMonth">Februar 2026</h3>
+                    <div class="card glass mini-calendar collapsible-card is-collapsed">
+                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h3 id="miniCalendarMonth">Februar 2026</h3>
+                                <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                            </div>
                         </div>
-                        <div class="calendar-grid small" id="miniCalendarGrid">
-                            <!-- JS populated -->
+                        <div class="card-content">
+                            <div class="calendar-grid small" id="miniCalendarGrid">
+                                <!-- JS populated -->
+                            </div>
+                        </div>
+                        <div id="dashboardFinanceCard" class="card glass collapsible-card is-collapsed"
+                            style="display: none;">
+                            <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <h3>Finanz-Übersicht</h3>
+                                    <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                                </div>
+                                <button class="btn-text"
+                                    onclick="event.stopPropagation(); app.navigateTo('finance')">Details</button>
+                            </div>
+                            <div class="card-content">
+                                <div style="height: 200px; position: relative; margin-top: 10px;">
+                                    <canvas id="dashboardFinanceChart"></canvas>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-
-                </div>
             </section>
 
             <section id="view-calendar" class="page-view">
@@ -761,12 +780,19 @@
                         </div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 30px;">
-                        <div class="glass" style="padding: 15px; text-align: center;">
-                            <label
-                                style="display: block; font-size: 0.8rem; margin-bottom: 10px; color: var(--text-muted);">Auto-Nachtuhr
-                                ab:</label>
-                            <input type="time" id="nightModeStart" onchange="app.alarm.saveSettings()"
-                                style="background: #ffffff; border: 1px solid var(--glass-border); color: #000000; padding: 5px; border-radius: 5px;">
+                        <div class="glass"
+                            style="padding: 15px; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="autoNightclockAction" onchange="app.alarm.saveSettings()">
+                                <label for="autoNightclockAction"
+                                    style="font-size: 0.8rem; cursor: pointer; color: var(--text-muted);">Automatisch
+                                    aktivieren</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 0.75rem; color: var(--text-muted);">Ab:</span>
+                                <input type="time" id="nightModeStart" onchange="app.alarm.saveSettings()"
+                                    style="background: #ffffff; border: 1px solid var(--glass-border); color: #000000; padding: 5px; border-radius: 5px; font-size: 0.8rem;">
+                            </div>
                         </div>
                         <div class="glass"
                             style="padding: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
@@ -1398,6 +1424,12 @@
 
     <!-- Fullscreen Night Clock Overlay (Moved to root level) -->
     <div id="nightClockFullscreen" class="night-overlay hidden" onclick="app.alarm.toggleFullscreen()">
+        <!-- Explicit power-off button for better usability -->
+        <button class="night-close-btn" onclick="event.stopPropagation(); app.alarm.toggleFullscreen(false)"
+            title="Nachtuhr beenden">
+            <i data-lucide="power"></i>
+        </button>
+
         <div class="night-clock-large" id="fullscreenClock">00:00</div>
         <div class="night-clock-date" id="fullscreenDate">Freitag, 6. Februar</div>
 
@@ -1411,6 +1443,11 @@
             <div class="control-group">
                 <i data-lucide="palette" size="16"></i>
                 <input type="color" id="fsColor" oninput="app.alarm.updateDesign('color', this.value)">
+            </div>
+            <div class="control-group" onclick="app.alarm.toggleLandscape()"
+                style="cursor:pointer; background: rgba(255,255,255,0.05); padding: 5px 12px; border-radius: 20px;">
+                <i data-lucide="monitor-off" size="16" style="transform: rotate(90deg);"></i>
+                <span style="font-size: 0.8rem; font-weight: 500;">Quermodus</span>
             </div>
         </div>
 
