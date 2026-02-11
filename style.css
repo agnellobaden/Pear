@@ -173,6 +173,15 @@ body[data-theme='gold'] .logo-icon {
     font-family: 'Google Sans', 'Roboto', 'Outfit', sans-serif;
     /* Prioritize Google-like fonts */
     font-weight: var(--font-weight-body, 400);
+    /* Prevents horizontal overflow by long words or strings */
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+html,
+body {
+    max-width: 100vw;
+    overflow-x: hidden;
 }
 
 h1,
@@ -209,16 +218,31 @@ h6 {
     display: none !important;
 }
 
+.page-view {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 80px;
+    /* Space for dock */
+}
+
 body {
     background: var(--bg-dark);
     color: var(--text-main);
-    overflow: hidden;
+    overflow-x: hidden;
+    /* Prevent horizontal scroll on mobile */
+    overflow-y: hidden;
+    /* Initial state, will be handled by sub-containers or scroll logic */
     height: 100vh;
+    width: 100vw;
 }
 
 #app {
     display: flex;
     height: 100vh;
+    max-width: 100vw;
+    overflow: hidden;
 }
 
 /* Sidebar */
@@ -350,7 +374,14 @@ body {
     align-items: center;
     padding: 0 16px;
     width: 400px;
+    max-width: 100%;
     transition: var(--transition);
+}
+
+@media (max-width: 768px) {
+    .search-bar {
+        width: 100%;
+    }
 }
 
 .search-bar:focus-within {
@@ -365,6 +396,8 @@ body {
     padding: 12px;
     width: 100%;
     outline: none;
+    min-width: 0;
+    /* Prevents input from pushing parent */
 }
 
 .search-bar i {
@@ -397,6 +430,15 @@ body {
     display: none;
     padding: 0 40px 120px;
     animation: fadeIn 0.4s ease-out;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    .page-view {
+        padding: 0 15px 120px;
+    }
 }
 
 .page-view.active {
@@ -428,6 +470,18 @@ body {
     padding: 30px;
     border-radius: 24px;
     border: 1px solid var(--glass-border);
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .dashboard-hero {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 20px;
+    }
 }
 
 .info-pill {
@@ -529,13 +583,14 @@ body {
 /* Grid & Cards */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr));
     gap: 24px;
+    width: 100%;
 }
 
 .finance-stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
     gap: 20px;
 }
 
@@ -547,7 +602,11 @@ body {
     transition: var(--transition);
     box-sizing: border-box;
     width: 100%;
-    /* Ensure it doesn't overflow parent */
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    overflow: hidden;
+    /* Safety against child overflow */
 }
 
 @media (max-width: 600px) {
@@ -566,16 +625,31 @@ body {
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
 }
 
+.card {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
 .card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 24px;
+    gap: 10px;
+    flex-wrap: wrap;
+    /* Allow wrapping if title is very long */
 }
 
 .card-header h3 {
     font-size: 1.25rem;
     font-weight: 600;
+    min-width: 0;
+    /* Truncation safety */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Event List */
@@ -595,6 +669,9 @@ body {
     border-radius: 16px;
     border: 1px solid var(--glass-border);
     transition: var(--transition);
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .event-item:hover {
@@ -672,14 +749,29 @@ body {
     text-transform: uppercase;
 }
 
+.event-info {
+    flex: 1;
+    min-width: 0;
+    /* Important for flex child truncation */
+}
+
 .event-info h4 {
     font-size: 1rem;
     margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .event-info p {
     font-size: 0.85rem;
     color: var(--text-muted);
+    /* Allow wrapping but stay within bounds */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .event-category-badge {
@@ -961,12 +1053,13 @@ body {
 
 .modal {
     width: 500px;
-    max-width: 90%;
+    max-width: 95%;
     /* Ensure modal fits in viewport */
-    max-height: 90vh;
+    max-height: 95vh;
     display: flex;
     flex-direction: column;
     animation: modalPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    overflow: hidden;
 }
 
 .modal.glass {
@@ -2796,8 +2889,9 @@ body {
 /* Contact Cards View */
 .contact-cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
     gap: 20px;
+    width: 100%;
 }
 
 .contact-card {
@@ -2851,9 +2945,17 @@ body {
     color: var(--text-main);
 }
 
+.card-info {
+    min-width: 0;
+    /* Safety for flex child truncation */
+}
+
 .card-info h3 {
     margin: 0 0 10px 0;
     font-size: 1.2rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .info-line {
@@ -2865,10 +2967,14 @@ body {
     text-decoration: none;
     margin-bottom: 8px;
     transition: var(--transition);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.info-line:hover {
-    color: var(--primary);
+.info-line span {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .address-box {
@@ -2909,6 +3015,12 @@ body {
     padding: 8px;
     border-radius: 8px;
     margin-top: 10px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
 }
 
 /* Collapsible Settings Cards */

@@ -52,7 +52,8 @@ const app = {
         globalBrightness: parseInt(localStorage.getItem('moltbot_global_brightness')) || 100,
         fontSizeScale: parseInt(localStorage.getItem('moltbot_font_size_scale')) || 100,
         highContrastMode: localStorage.getItem('moltbot_high_contrast') === 'true',
-        boldMode: localStorage.getItem('moltbot_bold_mode') === 'true'
+        boldMode: localStorage.getItem('moltbot_bold_mode') === 'true',
+        teamHistory: []
     },
 
     // --- INITIALIZATION ---
@@ -309,6 +310,7 @@ const app = {
         this.state.alarms = safeLoad('moltbot_alarms', []);
         this.state.finance = safeLoad('moltbot_finance', []);
         this.state.todoCategories = safeLoad('moltbot_todo_categories', ['🛒 Einkauf', '💼 Arbeit', '🏠 Zuhause', '👤 Privat']);
+        this.state.teamHistory = safeLoad('moltbot_team_history', []);
 
         this.state.theme = localStorage.getItem('moltbot_theme') || 'dark';
         this.state.quickActionLeft = localStorage.getItem('moltbot_qa_left') || 'dashboard';
@@ -345,6 +347,7 @@ const app = {
         localStorage.setItem('moltbot_finance', JSON.stringify(this.state.finance));
         localStorage.setItem('moltbot_todo_categories', JSON.stringify(this.state.todoCategories));
         localStorage.setItem('moltbot_alarms', JSON.stringify(this.state.alarms));
+        localStorage.setItem('moltbot_team_history', JSON.stringify(this.state.teamHistory || []));
     },
 
     updateTheme(theme) {
@@ -651,6 +654,18 @@ const app = {
             localStorage.setItem('moltbot_team', team);
             localStorage.setItem('moltbot_pin', pin);
 
+            // Update History
+            if (!app.state.teamHistory) app.state.teamHistory = [];
+            const historyItem = { team, pin, userName, lastUsed: Date.now() };
+            const existingIdx = app.state.teamHistory.findIndex(h => h.team === team);
+            if (existingIdx > -1) {
+                app.state.teamHistory[existingIdx] = historyItem;
+            } else {
+                app.state.teamHistory.unshift(historyItem);
+            }
+            if (app.state.teamHistory.length > 5) app.state.teamHistory.pop();
+            app.saveLocal();
+
             // Re-init sync
             this.init();
 
@@ -666,6 +681,13 @@ const app = {
                     this.log("Verbindung fehlgeschlagen!", "error");
                 }
             }, 800);
+        },
+
+        switchTeam(team, pin, userName) {
+            document.getElementById('userInput').value = userName;
+            document.getElementById('teamInput').value = team;
+            document.getElementById('teamPin').value = pin;
+            this.connect();
         },
 
         disconnect() {
@@ -858,7 +880,13 @@ const app = {
             if (display) display.textContent = isConnected ? app.state.user.teamName : 'Lokal';
 
             const pinDisplay = document.getElementById('currentPinDisplay');
-            if (pinDisplay) pinDisplay.textContent = isConnected ? app.state.user.teamPin : '----';
+            if (pinDisplay) pinDisplay.textContent = '****'; // Always reset to hidden on UI update
+
+            const teamKeyDisplay = document.getElementById('displayTeamKey');
+            if (teamKeyDisplay) teamKeyDisplay.textContent = isConnected ? app.state.user.teamName : '---';
+
+            const teamPinDisplay = document.getElementById('displayTeamPin');
+            if (teamPinDisplay) teamPinDisplay.textContent = '****'; // Always reset to hidden on UI update
 
             const activeSyncInfo = document.getElementById('activeSyncInfo');
             const mobileSyncBtn = document.getElementById('mobileSyncBtn');
@@ -885,6 +913,37 @@ const app = {
                             <span class="member-name">${app.state.user.name} (Ich)</span>
                         </div>
                     `;
+                }
+            }
+
+            // Render Team History
+            const historyCard = document.getElementById('recentTeamsCard');
+            const historyList = document.getElementById('recentTeamsList');
+            if (historyCard && historyList) {
+                const history = app.state.teamHistory || [];
+                // Only show history if we have items AND we are NOT currently trying to join a team (or always show it when not connected)
+                if (history.length > 0) {
+                    historyCard.style.display = 'block';
+                    historyList.innerHTML = history.map(h => `
+                        <div class="glass" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(var(--primary-rgb), 0.2); cursor: pointer; transition: all 0.2s;" 
+                             onclick="app.sync.switchTeam('${h.team}', '${h.pin}', '${h.userName}')"
+                             onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-2px)';"
+                             onmouseout="this.style.borderColor='rgba(var(--primary-rgb), 0.2)'; this.style.transform='none';">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div class="avatar-small" style="background: var(--primary); width: 32px; height: 32px; font-size: 0.8rem;">
+                                    ${h.team.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div style="font-weight: 700; font-size: 0.95rem;">${h.team}</div>
+                                    <div style="font-size: 0.75rem; opacity: 0.6;">Als: ${h.userName}</div>
+                                </div>
+                            </div>
+                            <i data-lucide="chevron-right" size="18" style="opacity: 0.5;"></i>
+                        </div>
+                    `).join('');
+                    if (window.lucide) lucide.createIcons();
+                } else {
+                    historyCard.style.display = 'none';
                 }
             }
         }
@@ -2503,6 +2562,9 @@ const app = {
         // Update headers and grid classes
         grid.className = `calendar-grid-large view-${this.state.calendarView}`;
 
+        // Show weekday header only in month view
+        weekdayHeader.style.display = (this.state.calendarView === 'month') ? 'grid' : 'none';
+
         if (this.state.calendarView === 'year') {
             monthHeader.textContent = year;
             weekdayHeader.innerHTML = '';
@@ -2518,11 +2580,7 @@ const app = {
             endOfWeek.setDate(startOfWeek.getDate() + 6);
 
             monthHeader.textContent = `${startOfWeek.getDate()}. - ${endOfWeek.getDate()}. ${endOfWeek.toLocaleString('de-DE', { month: 'short', year: 'numeric' })}`;
-            weekdayHeader.innerHTML = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d, i) => {
-                const dayDate = new Date(startOfWeek);
-                dayDate.setDate(startOfWeek.getDate() + i);
-                return `<div>${d} ${dayDate.getDate()}</div>`;
-            }).join('');
+            weekdayHeader.innerHTML = '';
             this.renderWeekView(grid, startOfWeek, filteredEvents);
         } else if (this.state.calendarView === 'day') {
             monthHeader.textContent = date.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });

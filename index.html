@@ -590,15 +590,53 @@
                                         <span id="currentPinDisplay"
                                             style="font-family: monospace; letter-spacing: 2px; background: var(--bg-card); padding: 4px 10px; border-radius: 6px; font-size: 0.85rem;">****</span>
                                         <button class="btn-icon-mini"
-                                            onclick="const s = document.getElementById('currentPinDisplay'); if(s.textContent.includes('*')) { s.textContent = app.state.user.teamPin; this.innerHTML = '<i data-lucide=\'eye-off\'></i>'; } else { s.textContent = '****'; this.innerHTML = '<i data-lucide=\'eye\'></i>'; } lucide.createIcons();">
+                                            onclick="{ const s = document.getElementById('currentPinDisplay'); if(s.textContent.includes('*')) { s.textContent = app.state.user.teamPin; this.innerHTML = '<i data-lucide=\'eye-off\'></i>'; } else { s.textContent = '****'; this.innerHTML = '<i data-lucide=\'eye\'></i>'; } lucide.createIcons(); }">
                                             <i data-lucide="eye" size="14"></i>
                                         </button>
                                     </div>
                                 </div>
-                                <button class="btn-primary w-full" style="height: 50px;" onclick="app.sync.push()">
-                                    <i data-lucide="refresh-cw"></i> Jetzt abgleichen
                                 </button>
                             </div>
+
+                            <div class="team-data-summary"
+                                style="margin-top: 20px; background: rgba(var(--primary-rgb), 0.1); padding: 20px; border-radius: 20px; border: 1px solid var(--glass-border);">
+                                <h4
+                                    style="margin: 0 0 15px 0; font-size: 0.9rem; display: flex; align-items: center; gap: 8px;">
+                                    <i data-lucide="key" size="16"></i> Deine Zugangsdaten
+                                </h4>
+                                <div style="display: flex; flex-direction: column; gap: 12px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 0.85rem; opacity: 0.7;">Team-Schlüssel:</span>
+                                        <span id="displayTeamKey"
+                                            style="font-weight: 700; font-family: monospace; background: var(--bg-card); padding: 4px 10px; border-radius: 8px; font-size: 1rem; color: var(--primary);">---</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 0.85rem; opacity: 0.7;">Privat-PIN:</span>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span id="displayTeamPin"
+                                                style="font-weight: 700; font-family: monospace; background: var(--bg-card); padding: 4px 10px; border-radius: 8px; font-size: 1rem; color: var(--secondary);">****</span>
+                                            <button class="btn-icon-mini"
+                                                onclick="{ const s = document.getElementById('displayTeamPin'); if(s.textContent.includes('*')) { s.textContent = app.state.user.teamPin; this.innerHTML = '<i data-lucide=\'eye-off\'></i>'; } else { s.textContent = '****'; this.innerHTML = '<i data-lucide=\'eye\'></i>'; } lucide.createIcons(); }">
+                                                <i data-lucide="eye" size="14"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p style="margin: 15px 0 0 0; font-size: 0.75rem; opacity: 0.6; font-style: italic;">
+                                    Gib diese Daten auf deinen anderen Geräten ein, um dich zu verbinden.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="recentTeamsCard" class="card glass animate-in"
+                        style="margin-top: 25px; padding: 25px; text-align: left; display: none;">
+                        <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                            <i data-lucide="history" size="18" style="color: var(--primary);"></i>
+                            Zuletzt genutzte Teams
+                        </h4>
+                        <div id="recentTeamsList" style="display: flex; flex-direction: column; gap: 10px;">
+                            <!-- JS populated -->
                         </div>
                     </div>
 
