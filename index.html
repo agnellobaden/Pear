@@ -271,32 +271,16 @@
                         </div>
                     </div>
 
-                    <div class="card glass mini-calendar collapsible-card is-collapsed">
+                    <div class="card glass mini-calendar collapsible-card">
                         <div class="card-header-toggle" onclick="app.toggleCard(this)">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <h3 id="miniCalendarMonth">Februar 2026</h3>
-                                <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                                <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
                             </div>
                         </div>
                         <div class="card-content">
                             <div class="calendar-grid small" id="miniCalendarGrid">
                                 <!-- JS populated -->
-                            </div>
-                        </div>
-                        <div id="dashboardFinanceCard" class="card glass collapsible-card is-collapsed"
-                            style="display: none;">
-                            <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <h3>Finanz-Übersicht</h3>
-                                    <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
-                                </div>
-                                <button class="btn-text"
-                                    onclick="event.stopPropagation(); app.navigateTo('finance')">Details</button>
-                            </div>
-                            <div class="card-content">
-                                <div style="height: 200px; position: relative; margin-top: 10px;">
-                                    <canvas id="dashboardFinanceChart"></canvas>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -1417,6 +1401,45 @@
                         <i data-lucide="x" size="20"></i> Schließen
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Quick Expense Modal -->
+    <div class="modal-overlay hidden" id="quickExpenseModal"
+        style="background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
+        <div class="modal-card animate-in"
+            style="max-width: 400px; background: var(--bg-card); border: 1px solid var(--glass-border); box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+            <div class="modal-header">
+                <h3>Ausgabe hinzufügen</h3>
+                <button class="btn-icon" onclick="document.getElementById('quickExpenseModal').classList.add('hidden')">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="quickExpenseForm" onsubmit="app.finance.saveQuickAdd(event)"
+                    style="display: flex; flex-direction: column; gap: 15px;">
+                    <div class="input-group">
+                        <label>Betrag (€)</label>
+                        <input type="number" id="quickFinAmount" step="0.01" required placeholder="0.00" autoFocus
+                            style="font-size: 1.5rem; text-align: center; font-weight: 800; padding: 15px; border-radius: 12px; background: var(--bg-element); border: 2px solid var(--primary); color: var(--text-main);">
+                    </div>
+                    <div class="input-group">
+                        <label>Zweck / Quelle</label>
+                        <input type="text" id="quickFinSource" placeholder="z.B. Supermarkt, Tanken..." required
+                            style="padding: 12px; border-radius: 10px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main);">
+                    </div>
+                    <div class="input-group">
+                        <label>Datum</label>
+                        <input type="date" id="quickFinDate" required
+                            style="padding: 12px; border-radius: 10px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main);">
+                    </div>
+                    <button type="submit" class="btn-primary"
+                        style="padding: 15px; font-weight: 700; font-size: 1.1rem; border-radius: 12px; margin-top: 10px;">
+                        Speichern
+                    </button>
+                </form>
             </div>
         </div>
     </div>

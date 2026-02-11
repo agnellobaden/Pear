@@ -1869,6 +1869,46 @@ const app = {
     finance: {
         chart: null,
 
+        openQuickAdd() {
+            const modal = document.getElementById('quickExpenseModal');
+            if (!modal) return;
+            const form = document.getElementById('quickExpenseForm');
+            if (form) form.reset();
+            const dateInput = document.getElementById('quickFinDate');
+            if (dateInput) dateInput.valueAsDate = new Date();
+            modal.classList.remove('hidden');
+            document.getElementById('quickFinAmount').focus();
+        },
+
+        saveQuickAdd(e) {
+            e.preventDefault();
+            const amount = parseFloat(document.getElementById('quickFinAmount').value);
+            const date = document.getElementById('quickFinDate').value;
+            const source = document.getElementById('quickFinSource').value || 'Ausgabe';
+
+            if (isNaN(amount)) return;
+
+            const entry = {
+                id: Date.now().toString(),
+                amount,
+                date,
+                source,
+                createdAt: Date.now()
+            };
+
+            app.state.finance.push(entry);
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+
+            document.getElementById('quickExpenseModal').classList.add('hidden');
+
+            // Refresh dashboard or finance view
+            if (app.state.view === 'dashboard') app.renderDashboard();
+            if (app.state.view === 'finance') this.render();
+
+            app.notify("Ausgabe gespeichert", `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} für ${source} erfasst.`);
+        },
+
         addEntry(e) {
             e.preventDefault();
             const amount = parseFloat(document.getElementById('finAmount').value);
@@ -2128,7 +2168,7 @@ const app = {
 
             budgetWidget.style.display = 'block'; // Ensure it's visible
             budgetWidget.innerHTML = `
-            <div class="card glass animate-in collapsible-card" style="margin-bottom: 20px; border: 1px solid ${isOver ? 'rgba(239, 68, 68, 0.4)' : 'var(--glass-border)'}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
+            <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOver ? 'rgba(239, 68, 68, 0.4)' : 'var(--glass-border)'}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
                 <div class="card-header-toggle" onclick="app.toggleCard(this)">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <div class="icon-circle" style="background: ${isOver ? 'rgba(239,68,68,0.1)' : 'rgba(var(--primary-rgb), 0.1)'}; color: ${isOver ? '#ef4444' : 'var(--primary)'}; width: 36px; height: 36px; border-radius: 10px;">
@@ -2140,6 +2180,9 @@ const app = {
                         </div>
                     </div>
                     <div style="display:flex; align-items:center; gap:10px;">
+                        <button class="btn-text highlight" style="font-size: 0.75rem; padding: 5px 10px; background: rgba(var(--primary-rgb), 0.1); border-radius: 8px;" onclick="event.stopPropagation(); app.finance.openQuickAdd()">
+                            <i data-lucide="plus-circle" size="14"></i> Ausgabe
+                        </button>
                         <div style="text-align: right;" class="hide-on-collapse">
                             <div style="font-size: 1.1rem; font-weight: 800; color: ${isOver ? '#ef4444' : 'var(--text-main)'};">
                                 ${remaining.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
@@ -2160,49 +2203,6 @@ const app = {
                 </div>
             </div>
         `;
-
-            // DASHBOARD FINANCE CHART
-            const dashChartCard = document.getElementById('dashboardFinanceCard');
-            const dashCtx = document.getElementById('dashboardFinanceChart');
-            if (dashChartCard && dashCtx) {
-                dashChartCard.style.display = 'block';
-
-                // Re-calculate or use existing data
-                const sourceTotals = {};
-                this.state.finance.forEach(e => {
-                    const d = new Date(e.date);
-                    if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
-                        sourceTotals[e.source] = (sourceTotals[e.source] || 0) + e.amount;
-                    }
-                });
-
-                const labels = Object.keys(sourceTotals);
-                const values = Object.values(sourceTotals);
-                if (remaining > 0) { labels.push('Verbleibend'); values.push(remaining); }
-
-                // Destroy existing if needed (though dashboard is usually re-rendered fresh)
-                if (this.dashFinanceChart) this.dashFinanceChart.destroy();
-
-                this.dashFinanceChart = new Chart(dashCtx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            data: values,
-                            backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: '75%',
-                        plugins: {
-                            legend: { display: false } // Keep it clean on dashboard
-                        }
-                    }
-                });
-            }
 
             if (window.lucide) lucide.createIcons();
         }
@@ -2351,14 +2351,7 @@ const app = {
             return new Date(e.date) >= new Date().setHours(0, 0, 0, 0);
         }).slice(0, 50);
 
-        // Auto-expand next-events if there are events today
-        const hasEventsToday = future.some(e => this.isEventOnDate(e, today));
         const eventCard = list.closest('.next-events');
-        if (eventCard && hasEventsToday) {
-            eventCard.classList.remove('is-collapsed');
-            const toggleIcon = eventCard.querySelector('.toggle-icon');
-            if (toggleIcon) toggleIcon.setAttribute('data-lucide', 'chevron-up');
-        }
 
         if (future.length === 0) {
             // Show empty state instead of hiding
