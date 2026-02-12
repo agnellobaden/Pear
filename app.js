@@ -67,6 +67,9 @@ const app = {
             // Load local data first
             this.loadLocal();
 
+            // Auto-archive past events
+            this.archivePastEvents();
+
             // Apply App Name
             this.updateAppName(this.state.appName);
 
@@ -2123,6 +2126,115 @@ const app = {
         }
     },
 
+    renderDriveMode() {
+        const driveContainer = document.getElementById('dashboardDriveMode');
+        if (!driveContainer) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        // Get today's events with location info
+        const driveEvents = this.state.events.filter(e =>
+            !e.archived &&
+            e.date === today &&
+            e.location && e.location.trim() !== '' &&
+            e.category !== 'holiday'
+        ).sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+
+        if (driveEvents.length === 0) {
+            driveContainer.style.display = 'none';
+            return;
+        }
+
+        driveContainer.style.display = 'block';
+
+        let stopsHtml = driveEvents.map((e, index) => {
+            return `
+                <div style="display: flex; align-items: flex-start; gap: 12px; position: relative; padding-bottom: ${index === driveEvents.length - 1 ? '0' : '20px'};">
+                    ${index !== driveEvents.length - 1 ? '<div style="position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: rgba(var(--primary-rgb), 0.2);"></div>' : ''}
+                    <div style="width: 30px; height: 30px; background: rgba(var(--primary-rgb), 0.1); border: 2px solid var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; z-index: 2;">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: var(--primary);">${index + 1}</span>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${e.title}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
+                            <i data-lucide="clock" size="14"></i> ${e.time || '--:--'} Uhr
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px; margin-top: 4px;">
+                            <i data-lucide="map-pin" size="14"></i> ${e.location}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        driveContainer.innerHTML = `
+            <div class="card glass animate-in" style="margin-bottom: 20px; border: 1px solid rgba(var(--primary-rgb), 0.2); background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
+                <div style="padding: 20px 20px 10px 20px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="icon-circle" style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); width: 36px; height: 36px; border-radius: 10px;">
+                            <i data-lucide="car" size="18"></i>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 1.1rem; margin: 0;">Drive Mode</h3>
+                            <small style="color: var(--text-muted);">${driveEvents.length} Ziele für heute</small>
+                        </div>
+                    </div>
+                    <button class="btn-primary" onclick="app.startDriveModeNavigation()" style="padding: 10px 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; border-radius: 12px; font-size: 0.9rem;">
+                        <i data-lucide="navigation" size="18"></i> Route starten
+                    </button>
+                </div>
+                
+                <div style="padding: 10px 25px 25px 25px;">
+                    <div style="margin-bottom: 15px; font-size: 0.85rem; color: var(--text-muted); font-style: italic; display: flex; align-items: center; gap: 8px;">
+                        <i data-lucide="map-pin" size="14" style="color: var(--primary);"></i> Start: Aktueller Standort
+                    </div>
+                    ${stopsHtml}
+                </div>
+            </div>
+        `;
+
+        if (window.lucide) lucide.createIcons();
+    },
+
+    startDriveModeNavigation() {
+        if (!navigator.geolocation) {
+            alert("Geolocation wird von deinem Browser nicht unterstützt.");
+            return;
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        const driveEvents = this.state.events.filter(e =>
+            !e.archived &&
+            e.date === today &&
+            e.location && e.location.trim() !== '' &&
+            e.category !== 'holiday'
+        ).sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+
+        if (driveEvents.length === 0) return;
+
+        navigator.geolocation.getCurrentPosition((position) => {
+            const origin = `${position.coords.latitude},${position.coords.longitude}`;
+            const destination = encodeURIComponent(driveEvents[driveEvents.length - 1].location);
+
+            let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+
+            if (driveEvents.length > 1) {
+                const waypoints = driveEvents.slice(0, -1).map(e => encodeURIComponent(e.location)).join('|');
+                url += `&waypoints=${waypoints}`;
+            }
+
+            window.open(url, '_blank');
+        }, (error) => {
+            console.error("Geolocation failed for drive mode:", error);
+            const destination = encodeURIComponent(driveEvents[driveEvents.length - 1].location);
+            let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+            if (driveEvents.length > 1) {
+                const waypoints = driveEvents.slice(0, -1).map(e => encodeURIComponent(e.location)).join('|');
+                url += `&waypoints=${waypoints}`;
+            }
+            window.open(url, '_blank');
+        });
+    },
+
     renderDashboard() {
         const title = document.getElementById('dashboardWelcomeTitle');
         const pearLogo = `
@@ -2206,6 +2318,12 @@ const app = {
 
             if (window.lucide) lucide.createIcons();
         }
+
+        // Auto-archive past events before rendering dashboard
+        this.archivePastEvents();
+
+        // Render Drive Mode widget
+        this.renderDriveMode();
 
         const list = document.getElementById('dashboardEventList');
         if (!list) return;
@@ -2348,7 +2466,10 @@ const app = {
                 const diff = (nextOcc - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24);
                 return diff >= 0 && diff <= 30;
             }
-            return new Date(e.date) >= new Date().setHours(0, 0, 0, 0);
+            const eventDateTime = new Date(e.date + 'T' + (e.time || '00:00'));
+            const nowTime = new Date();
+            // Strictly hide if the time has passed
+            return eventDateTime >= nowTime;
         }).slice(0, 50);
 
         const eventCard = list.closest('.next-events');
@@ -2591,7 +2712,7 @@ const app = {
             const isToday = d === now.getDate() && month === now.getMonth() && year === now.getFullYear();
             const isSelected = d === selectedDate.getDate() && month === selectedDate.getMonth() && year === selectedDate.getFullYear();
 
-            const dayEvents = this.state.events.filter(e => this.isEventOnDate(e, currentCellDate));
+            const dayEvents = this.state.events.filter(e => !e.archived && this.isEventOnDate(e, currentCellDate));
             const hasEvent = dayEvents.length > 0;
 
             let visualContent = `${d}`;
@@ -2614,7 +2735,7 @@ const app = {
 
         // Render the list for the selected date
         if (eventListContainer) {
-            const events = this.state.events.filter(e => this.isEventOnDate(e, selectedDate));
+            const events = this.state.events.filter(e => !e.archived && this.isEventOnDate(e, selectedDate));
             const dateDisplay = selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
 
             let listHtml = `<div style="margin-top:15px; border-top:1px solid var(--glass-border); padding-top:10px; animation:fadeIn 0.3s;">
@@ -2884,6 +3005,39 @@ const app = {
             this.renderArchiveSettings();
             this.render(); // Update calendar
             alert("Termin wiederhergestellt.");
+        }
+    },
+
+    archivePastEvents() {
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const currentTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+        let changed = false;
+
+        this.state.events.forEach(e => {
+            // Only archive one-time events that are NOT already archived
+            // and NOT holidays/birthdays
+            if (!e.archived && e.category !== 'holiday' && e.category !== 'birthday') {
+                const eventDate = e.date;
+                const eventTime = e.time || '00:00';
+
+                // Case 1: Past date
+                if (eventDate < todayStr) {
+                    e.archived = true;
+                    changed = true;
+                }
+                // Case 2: Today but already passed time
+                else if (eventDate === todayStr && eventTime < currentTime) {
+                    e.archived = true;
+                    changed = true;
+                }
+            }
+        });
+
+        if (changed) {
+            this.saveLocal();
+            if (this.sync && this.sync.push) this.sync.push();
+            console.log("Archiving updated for time-based completion.");
         }
     },
 
