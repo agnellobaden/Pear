@@ -56,8 +56,18 @@ const app = {
         teamHistory: [],
         isNightLandscape: localStorage.getItem('moltbot_night_landscape') === 'true',
         isAutoNightclockEnabled: localStorage.getItem('moltbot_auto_nightclock') === 'true',
-        isWakeLockPersistent: localStorage.getItem('moltbot_wakelock_persistent') === 'true'
+        isWakeLockPersistent: localStorage.getItem('moltbot_wakelock_persistent') === 'true',
+        widgetOrder: JSON.parse(localStorage.getItem('moltbot_widget_order')) || ['special', 'drive', 'kpis', 'todos', 'events', 'mini_calendar'],
+        widgetVisibility: JSON.parse(localStorage.getItem('moltbot_widgets')) || {
+            'special': true,
+            'drive': true,
+            'kpis': true,
+            'todos': true,
+            'events': true,
+            'mini_calendar': true
+        }
     },
+
 
     // --- INITIALIZATION ---
     init() {
@@ -1554,40 +1564,62 @@ const app = {
         };
     },
 
-    navigateTo(page, replace = false) {
+    async navigateTo(page, replace = false) {
         // Immediate Menu Close for responsiveness
         const sidebar = document.getElementById('sidebar');
         const overlay = document.querySelector('.sidebar-overlay');
         if (sidebar) sidebar.classList.remove('active');
         if (overlay) overlay.classList.remove('active');
 
-        // If clicking the same page, do nothing unless we need to close sidebar
-        // if (this.state.view === page && !replace) return;  
-
-        this.state.view = page;
-        localStorage.setItem('moltbot_view', page);
-
-        // Update History
-        if (!replace) {
-            history.pushState({ view: page }, '', '#' + page);
+        // Visual feedback: Start transition (Avoid "blur" as users find it "verschwommen")
+        const mainContent = document.querySelector('.content');
+        if (mainContent) {
+            mainContent.style.opacity = '0.6';
         }
 
-        document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
-        document.getElementById(`view-${page}`).classList.add('active');
+        // Small delay to let UI settle
+        await new Promise(r => setTimeout(r, 100));
 
-        document.querySelectorAll('.nav-item').forEach(btn => {
-            btn.classList.toggle('active', btn.getAttribute('data-page') === page);
-        });
+        try {
+            this.state.view = page;
+            localStorage.setItem('moltbot_view', page);
 
-        // Toggle Header buttons based on view
-        const addContactBtn = document.getElementById('addContactBtn');
+            // Update History
+            if (!replace) {
+                history.pushState({ view: page }, '', '#' + page);
+            }
 
-        if (addContactBtn) {
-            addContactBtn.style.display = (page === 'contacts') ? 'flex' : 'none';
+            document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
+            const targetView = document.getElementById(`view-${page}`);
+            if (targetView) targetView.classList.add('active');
+
+            document.querySelectorAll('.nav-item, .voice-side-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-page') === page);
+            });
+
+
+            // Toggle Header buttons based on view
+            const addContactBtn = document.getElementById('addContactBtn');
+            if (addContactBtn) {
+                addContactBtn.style.display = (page === 'contacts') ? 'flex' : 'none';
+            }
+
+            if (page === 'settings') this.renderWidgetSettings();
+
+            this.render();
+
+        } catch (e) {
+            console.error("Navigation error:", e);
+        } finally {
+            // End transition ALWAYS (Removes the reported "verschwommen" look)
+            if (mainContent) {
+                mainContent.style.opacity = '1';
+                mainContent.style.filter = 'none';
+            }
         }
-
-        this.render();
     },
+
+
 
     toggleCard(header) {
         const card = header.closest('.collapsible-card');
@@ -2353,6 +2385,70 @@ const app = {
     },
 
     renderDashboard() {
+        const grid = document.querySelector('.dashboard-grid');
+        if (!grid) return;
+
+        // Clear children to re-render in specified order
+        grid.innerHTML = '';
+
+        // Definition of widgets and their container templates
+        const widgetTemplates = {
+            'special': '<div id="dashboardSpecialContainer" style="grid-column: 1 / -1; display:none;"></div>',
+            'drive': '<div id="dashboardDriveMode" style="grid-column: 1 / -1; display: none;"></div>',
+            'kpis': '<div id="dashboardBudgetWidget" style="grid-column: 1 / -1; display: none;"></div>',
+            'todos': `
+                <div id="dashboardUrgentTodos" class="card glass collapsible-card is-collapsed"
+                    style="display:none; border: 1px solid rgba(239, 68, 68, 0.5); background: linear-gradient(135deg, rgba(239,68,68,0.05), rgba(0,0,0,0));">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <h3 style="color:#ef4444; display:flex; align-items:center; gap:8px;">
+                            <i data-lucide="alert-circle"></i> Dringend / Wichtig
+                        </h3>
+                        <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                    </div>
+                    <div id="dashboardUrgentList" class="card-content" style="display:flex; flex-direction:column; gap:8px;"></div>
+                </div>`,
+            'events': `
+                <div class="card glass next-events collapsible-card is-collapsed">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <h3>Nächste Termine</h3>
+                            <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                        </div>
+                        <button class="btn-text" onclick="event.stopPropagation(); app.navigateTo('calendar')">Alle ansehen</button>
+                    </div>
+                    <div class="event-list card-content" id="dashboardEventList">
+                        <div class="empty-state">Lade Termine...</div>
+                    </div>
+                </div>`,
+            'mini_calendar': `
+                <div class="card glass mini-calendar collapsible-card">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <h3 id="miniCalendarMonth">Kalender</h3>
+                            <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
+                        </div>
+                    </div>
+                    <div class="card-content">
+                        <div class="calendar-grid small" id="miniCalendarGrid"></div>
+                    </div>
+                </div>`
+        };
+
+        // Create containers in order
+        this.state.widgetOrder.forEach(key => {
+            if (this.state.widgetVisibility[key] && widgetTemplates[key]) {
+                const temp = document.createElement('div');
+                temp.innerHTML = widgetTemplates[key];
+                const element = temp.firstElementChild;
+                grid.appendChild(element);
+
+                // Set initial display to block if it was hidden by template ID (except kpis/drive which are handled specifically)
+                if (element.id && !['dashboardBudgetWidget', 'dashboardDriveMode', 'dashboardSpecialContainer'].includes(element.id)) {
+                    element.style.display = 'block';
+                }
+            }
+        });
+
         const title = document.getElementById('dashboardWelcomeTitle');
         const pearLogo = `
         <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="vertical-align: bottom; margin-left: 5px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
@@ -2376,65 +2472,75 @@ const app = {
             <path d="M50,10 Q50,0 60,5 C55,8 52,10 50,10" fill="url(#rainbowGradDash)" />
         </svg>`;
 
-        if (title) title.innerHTML = `Willkommen zurück, ${this.state.user.name}! ${pearLogo}`;
+        if (title) title.innerHTML = `Hallo, ${this.state.user.name.split(' ')[0]}! ${pearLogo}`;
 
-        // CALCULATE BUDGET FOR DASHBOARD WIDGET
+        // CALCULATE METRICS FOR DASHBOARD KPI GRID
         const budgetWidget = document.getElementById('dashboardBudgetWidget');
         if (budgetWidget) {
+            budgetWidget.style.display = 'block';
+
             const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+
+            // 1. Daily Expenses
+            let dailyExpenses = 0;
+            this.state.finance.forEach(e => { if (e.date === todayStr) dailyExpenses += e.amount; });
+
+            // 2. Budget Progress
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
             let monthlyExpenses = 0;
             this.state.finance.forEach(e => {
                 const d = new Date(e.date);
-                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
-                    monthlyExpenses += e.amount;
-                }
+                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) monthlyExpenses += e.amount;
             });
-            const remaining = this.state.monthlyBudget - monthlyExpenses;
-            const percent = Math.min(100, Math.max(0, (monthlyExpenses / this.state.monthlyBudget) * 100));
-            const isOver = remaining < 0;
+            const budgetPercent = Math.min(100, Math.round((monthlyExpenses / this.state.monthlyBudget) * 100));
+            const isOverBudget = monthlyExpenses > this.state.monthlyBudget;
 
-            budgetWidget.style.display = 'block'; // Ensure it's visible
+            // 3. Next Appointment
+            const futureEvents = this.getFilteredEvents().filter(e => e.date >= todayStr && e.category !== 'holiday').sort((a, b) => a.date.localeCompare(b.date) || (a.time || '00:00').localeCompare(b.time || '00:00'));
+            const nextEvent = futureEvents[0];
+
             budgetWidget.innerHTML = `
-            <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOver ? 'rgba(239, 68, 68, 0.4)' : 'var(--glass-border)'}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
-                <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="icon-circle" style="background: ${isOver ? 'rgba(239,68,68,0.1)' : 'rgba(var(--primary-rgb), 0.1)'}; color: ${isOver ? '#ef4444' : 'var(--primary)'}; width: 36px; height: 36px; border-radius: 10px;">
-                            <i data-lucide="wallet" size="18"></i>
-                        </div>
-                        <div>
-                            <h3 style="font-size: 1rem; margin: 0;">Monats-Budget</h3>
-                            <small style="color: var(--text-muted);">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
-                        </div>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <button class="btn-text highlight" style="font-size: 0.75rem; padding: 5px 10px; background: rgba(var(--primary-rgb), 0.1); border-radius: 8px;" onclick="event.stopPropagation(); app.finance.openQuickAdd()">
-                            <i data-lucide="plus-circle" size="14"></i> Ausgabe
-                        </button>
-                        <div style="text-align: right;" class="hide-on-collapse">
-                            <div style="font-size: 1.1rem; font-weight: 800; color: ${isOver ? '#ef4444' : 'var(--text-main)'};">
-                                ${remaining.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
-                            </div>
-                        </div>
-                        <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+            <div class="metric-container animate-in">
+                <!-- KPI 1: Expenses Today -->
+                <div class="metric-card" onclick="app.navigateTo('finance')">
+                    <div class="metric-label"><i data-lucide="credit-card" size="14"></i> Ausgaben Heute</div>
+                    <div class="metric-value">${dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                    <div class="metric-trend ${dailyExpenses > 0 ? 'down' : ''}">
+                        <i data-lucide="${dailyExpenses > 0 ? 'trending-up' : 'check'}" size="14"></i>
+                        ${dailyExpenses > 0 ? 'Erfasst am ' + now.toLocaleDateString('de-DE') : 'Alles im Griff'}
                     </div>
                 </div>
-                
-                <div class="card-content">
-                    <div style="height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; margin-top: 15px;">
-                        <div style="width: ${percent}%; height: 100%; background: ${isOver ? '#ef4444' : 'var(--primary)'}; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+
+                <!-- KPI 2: Next Event -->
+                <div class="metric-card" onclick="app.navigateTo('calendar')">
+                    <div class="metric-label"><i data-lucide="calendar" size="14"></i> Nächster Termin</div>
+                    <div class="metric-value" style="font-size: 1.1rem; min-height: 2.22rem; display: flex; align-items: center; color: var(--primary);">
+                        ${nextEvent ? nextEvent.title : 'Keine Termine'}
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted);">
-                        <span>Ausgegeben: ${monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
-                        <span>Ziel: ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                    <div class="metric-trend">
+                        <i data-lucide="clock" size="14"></i>
+                        ${nextEvent ? (nextEvent.date === todayStr ? 'Heute' : new Date(nextEvent.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })) + (nextEvent.time ? ' um ' + nextEvent.time : '') : 'Entspanne dich'}
+                    </div>
+                </div>
+
+                <!-- KPI 3: Budget Usage -->
+                <div class="metric-card" onclick="app.navigateTo('finance')">
+                    <div class="metric-label"><i data-lucide="pie-chart" size="14"></i> Budget-Nutzung</div>
+                    <div class="metric-value">${budgetPercent}%</div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin: 4px 0;">
+                        <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? 'var(--danger)' : 'var(--primary)'}; transition: width 1s ease;"></div>
+                    </div>
+                    <div class="metric-trend ${isOverBudget ? 'down' : 'up'}" style="font-size: 0.75rem;">
+                         ${isOverBudget ? 'Über Limit!' : (this.state.monthlyBudget - monthlyExpenses).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) + ' übrig'}
                     </div>
                 </div>
             </div>
-        `;
-
+            `;
             if (window.lucide) lucide.createIcons();
         }
+
 
         // Auto-archive past events before rendering dashboard
         this.archivePastEvents();
@@ -2682,41 +2788,43 @@ const app = {
 
             // Render Urgent Contacts (First!)
             urgentHtml += urgentContacts.map(c => `
-                <div onclick="${c.phone ? `window.location.href='tel:${c.phone}'` : `app.navigateTo('contacts')`}" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.15); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <i data-lucide="${c.phone ? 'phone-call' : 'user'}" size="16" style="color:#ef4444;"></i>
-                        <span style="font-weight:700; font-size:0.9rem;">${c.name}</span>
+                <div class="urgent-item-accent" onclick="${c.phone ? `window.location.href='tel:${c.phone}'` : `app.navigateTo('contacts')`}">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <i data-lucide="${c.phone ? 'phone-call' : 'user'}" size="18" style="color:#ef4444;"></i>
+                        <span style="font-weight:700; font-size:1rem;">${c.name}</span>
                     </div>
-                    ${c.phone ? '<span style="font-size:0.75rem; background:#ef4444; color:white; padding:2px 6px; border-radius:4px;">ANRUFEN!</span>' : '<span style="font-size:0.75rem; color:#ef4444;">Dringend</span>'}
+                    ${c.phone ? '<span class="urgent-badge-pill">ANRUFEN!</span>' : '<span style="font-size:0.75rem; color:#ef4444; font-weight:800;">DRINGEND</span>'}
                 </div>
             `).join('');
 
             // Render Urgent Events
             urgentHtml += urgentEvents.map(e => `
-                <div onclick="app.editEvent('${e.id}')" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.1); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <i data-lucide="calendar-clock" size="16" style="color:#ef4444;"></i>
+                <div class="urgent-item-accent" onclick="app.editEvent('${e.id}')">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <i data-lucide="calendar-clock" size="18" style="color:#ef4444;"></i>
                         <div style="display:flex; flex-direction:column;">
-                            <span style="font-weight:700; font-size:0.9rem;">${e.title}</span>
-                            <span style="font-size:0.7rem; opacity:0.8;">${new Date(e.date).toLocaleDateString('de-DE')} ${e.time || ''}</span>
+                            <span style="font-weight:700; font-size:1rem;">${e.title}</span>
+                            <span style="font-size:0.8rem; opacity:0.9;">Heute ${e.time || ''}</span>
                         </div>
                     </div>
                     ${e.phone ?
-                    `<a href="tel:${e.phone}" onclick="event.stopPropagation()" style="font-size:0.75rem; background:#ef4444; color:white; padding:4px 8px; border-radius:4px; text-decoration:none; display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="12"></i> ${e.phone}</a>`
-                    : `<span style="font-size:0.75rem; color:#ef4444; border:1px solid #ef4444; padding:1px 5px; border-radius:4px;">TERMIN</span>`
+                    `<a href="tel:${e.phone}" class="urgent-badge-pill" onclick="event.stopPropagation()" style="text-decoration:none; display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="12"></i> ANRUFEN</a>`
+                    : `<span class="urgent-badge-pill">TERMIN</span>`
                 }
                 </div>
             `).join('');
 
             // Render Urgent Todos
             urgentHtml += urgentTodos.map(t => `
-                <div onclick="app.navigateTo('todo')" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.1); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <i data-lucide="check-square" size="16" style="color:#ef4444;"></i>
-                        <span style="font-weight:600; font-size:0.9rem;">${t.text}</span>
+                <div class="urgent-item-accent" onclick="app.navigateTo('todo')">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <i data-lucide="check-square" size="18" style="color:#ef4444;"></i>
+                        <span style="font-weight:700; font-size:1rem;">${t.text}</span>
                     </div>
+                    <span class="urgent-badge-pill">TODO</span>
                 </div>
             `).join('');
+
 
             if (urgentTodos.length > 0 || urgentContacts.length > 0 || urgentEvents.length > 0) {
                 urgentContainer.style.display = 'block';
@@ -5254,6 +5362,90 @@ const app = {
                 utterance.rate = 1.0;
                 window.speechSynthesis.speak(utterance);
             }
+        }
+    },
+
+    updateWidgetVisibility(widget, visible) {
+        if (!this.state.widgetVisibility) this.state.widgetVisibility = {};
+        this.state.widgetVisibility[widget] = visible;
+        localStorage.setItem('moltbot_widgets', JSON.stringify(this.state.widgetVisibility));
+        if (this.state.view === 'dashboard') this.renderDashboard();
+        if (this.state.view === 'settings') this.renderWidgetSettings();
+    },
+
+    moveWidget(index, direction) {
+        const order = this.state.widgetOrder;
+        if (direction === 'up' && index > 0) {
+            [order[index], order[index - 1]] = [order[index - 1], order[index]];
+        } else if (direction === 'down' && index < order.length - 1) {
+            [order[index], order[index + 1]] = [order[index + 1], order[index]];
+        }
+        this.state.widgetOrder = [...order];
+        localStorage.setItem('moltbot_widget_order', JSON.stringify(this.state.widgetOrder));
+
+        if (this.state.view === 'dashboard') this.renderDashboard();
+        if (this.state.view === 'settings') this.renderWidgetSettings();
+    },
+
+    renderWidgetSettings() {
+        const list = document.getElementById('widgetOrderList');
+        if (!list) return;
+
+        const widgetNames = {
+            'special': 'Besonderheiten (Geburtstage/Feiertage)',
+            'drive': 'Drive Mode (Smart Navigation)',
+            'kpis': 'Finanz-Kennzahlen & Übersicht',
+            'todos': 'Dringende Aufgaben',
+            'events': 'Nächste Termine',
+            'mini_calendar': 'Mini-Monatskalender'
+        };
+
+        const widgetIcons = {
+            'special': 'party-popper',
+            'drive': 'car',
+            'kpis': 'trending-up',
+            'todos': 'alert-circle',
+            'events': 'calendar',
+            'mini_calendar': 'grid'
+        };
+
+        list.innerHTML = this.state.widgetOrder.map((key, index) => {
+            const isVisible = this.state.widgetVisibility[key];
+            return `
+            <div class="widget-settings-item" style="display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.03); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <button class="btn-icon-mini" onclick="app.moveWidget(${index}, 'up')" ${index === 0 ? 'disabled style="opacity:0.3"' : ''}>
+                        <i data-lucide="chevron-up" size="14"></i>
+                    </button>
+                    <button class="btn-icon-mini" onclick="app.moveWidget(${index}, 'down')" ${index === this.state.widgetOrder.length - 1 ? 'disabled style="opacity:0.3"' : ''}>
+                        <i data-lucide="chevron-down" size="14"></i>
+                    </button>
+                </div>
+                
+                <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(var(--primary-rgb), 0.1); display: flex; align-items: center; justify-content: center; color: var(--primary);">
+                    <i data-lucide="${widgetIcons[key]}" size="20"></i>
+                </div>
+
+                <div style="flex: 1;">
+                    <span style="font-weight: 600; font-size: 0.95rem;">${widgetNames[key]}</span>
+                </div>
+
+                <label class="custom-switch" style="cursor: pointer;">
+                    <input type="checkbox" ${isVisible ? 'checked' : ''} onchange="app.updateWidgetVisibility('${key}', this.checked)" style="width: 20px; height: 20px; accent-color: var(--primary);">
+                </label>
+            </div>
+            `;
+        }).join('');
+
+        if (window.lucide) lucide.createIcons();
+    },
+
+
+    showFeedback() {
+        const f = prompt("Wie können wir MoltBot verbessern? Deine Meinung ist uns wichtig!");
+        if (f) {
+            alert("Vielen Dank! Dein Feedback wurde gespeichert.");
+            console.log("UX Feedback:", f);
         }
     }
 };

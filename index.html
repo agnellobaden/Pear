@@ -1168,7 +1168,32 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="card glass secondary animate-in collapsible-card is-collapsed" style="margin-top: 25px;">
+
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <h3>Dashboard-Anpassung ⚙️</h3>
+                        <i data-lucide="chevron-down" class="toggle-icon"></i>
+                    </div>
+                    <div class="card-content">
+                        <p class="text-muted" style="margin-bottom: 20px;">Personalisiere dein Dashboard: Ändere die
+                            Reihenfolge oder blende Bereiche ein/aus.</p>
+
+                        <div id="widgetOrderList"
+                            style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 25px;">
+                            <!-- Dynamically populated by JS: app.renderWidgetSettings() -->
+                        </div>
+
+                        <div class="settings-hint"
+                            style="font-size: 0.8rem; color: var(--text-muted); display:flex; gap:10px; align-items:center;">
+                            <i data-lucide="info" size="14"></i>
+                            Jede Änderung wird sofort auf deinem Dashboard übernommen.
+                        </div>
+                    </div>
+
+                </div>
             </section>
+
 
             <section id="view-contacts" class="page-view">
                 <div class="hero">
@@ -1241,7 +1266,13 @@
                     <!-- Populated by JS as either table or cards -->
                 </div>
             </section>
+
         </main> <!-- End of Main Content -->
+
+        <!-- Feedback FAB (Point 9) -->
+        <button class="feedback-fab" onclick="app.showFeedback()" title="Feedback geben">
+            <i data-lucide="message-square"></i>
+        </button>
 
         <!-- Modals -->
         <div class="modal-overlay hidden" id="modalOverlay">
@@ -1373,16 +1404,23 @@
 
         <!-- Bottom Navigation Bar (Mobile & Tablet) -->
         <div class="voice-dock">
-            <button id="qaLeftBtn" class="voice-side-btn left" onclick="app.navigateTo(app.state.quickActionLeft)">
-                <i data-lucide="layout-dashboard"></i>
-            </button>
-            <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()">
-                <i data-lucide="mic"></i>
-            </button>
-            <button id="qaRightBtn" class="voice-side-btn right" onclick="app.navigateTo(app.state.quickActionRight)">
-                <i data-lucide="settings"></i>
-            </button>
+            <button class="voice-side-btn" data-page="dashboard" onclick="app.navigateTo('dashboard')"
+                title="Dashboard"><i data-lucide="layout-dashboard"></i></button>
+            <button class="voice-side-btn" data-page="calendar" onclick="app.navigateTo('calendar')" title="Kalender"><i
+                    data-lucide="calendar"></i></button>
+            <button class="voice-side-btn" data-page="finance" onclick="app.navigateTo('finance')" title="Finanzen"><i
+                    data-lucide="wallet"></i></button>
+            <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()" title="Sprachsteuerung"><i
+                    data-lucide="mic"></i></button>
+            <button class="voice-side-btn" data-page="team" onclick="app.navigateTo('team')" title="Team Sync"><i
+                    data-lucide="users"></i></button>
+            <button class="voice-side-btn" data-page="contacts" onclick="app.navigateTo('contacts')" title="Kontakte"><i
+                    data-lucide="contact"></i></button>
+            <button class="voice-side-btn" data-page="settings" onclick="app.navigateTo('settings')"
+                title="Einstellungen"><i data-lucide="settings"></i></button>
         </div>
+
+
 
         <!-- Pear AI Voice & Intelligence Overlay -->
         <div id="voiceOverlay" class="voice-overlay hidden">
