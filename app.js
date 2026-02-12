@@ -57,11 +57,12 @@ const app = {
         isNightLandscape: localStorage.getItem('moltbot_night_landscape') === 'true',
         isAutoNightclockEnabled: localStorage.getItem('moltbot_auto_nightclock') === 'true',
         isWakeLockPersistent: localStorage.getItem('moltbot_wakelock_persistent') === 'true',
-        widgetOrder: JSON.parse(localStorage.getItem('moltbot_widget_order')) || ['special', 'drive', 'kpis', 'todos', 'events', 'mini_calendar'],
+        widgetOrder: JSON.parse(localStorage.getItem('moltbot_widget_order')) || ['special', 'drive', 'kpis', 'finance_add', 'todos', 'events', 'mini_calendar'],
         widgetVisibility: JSON.parse(localStorage.getItem('moltbot_widgets')) || {
             'special': true,
             'drive': true,
             'kpis': true,
+            'finance_add': true,
             'todos': true,
             'events': true,
             'mini_calendar': true
@@ -357,6 +358,32 @@ const app = {
         this.state.isAutoNightclockEnabled = localStorage.getItem('moltbot_auto_nightclock') === 'true';
         this.state.isWakeLockPersistent = localStorage.getItem('moltbot_wakelock_persistent') === 'true';
         this.state.nightModeStart = localStorage.getItem('moltbot_night_mode_start') || '01:00';
+
+        // Migration: Ensure finance_add is in widgetOrder/Visibility for existing users
+        const savedOrderStr = localStorage.getItem('moltbot_widget_order');
+        if (savedOrderStr) {
+            const order = JSON.parse(savedOrderStr);
+            if (!order.includes('finance_add')) {
+                const kpiIdx = order.indexOf('kpis');
+                if (kpiIdx !== -1) order.splice(kpiIdx + 1, 0, 'finance_add');
+                else order.unshift('finance_add');
+                this.state.widgetOrder = order;
+                localStorage.setItem('moltbot_widget_order', JSON.stringify(order));
+            } else {
+                this.state.widgetOrder = order;
+            }
+        }
+        const savedVisStr = localStorage.getItem('moltbot_widgets');
+        if (savedVisStr) {
+            const vis = JSON.parse(savedVisStr);
+            if (vis['finance_add'] === undefined) {
+                vis['finance_add'] = true;
+                this.state.widgetVisibility = vis;
+                localStorage.setItem('moltbot_widgets', JSON.stringify(vis));
+            } else {
+                this.state.widgetVisibility = vis;
+            }
+        }
     },
 
     saveLocal() {
@@ -1993,6 +2020,44 @@ const app = {
             this.render();
         },
 
+        addQuickEntry(e) {
+            e.preventDefault();
+            const amountInput = document.getElementById('dashFinAmount');
+            const dateInput = document.getElementById('dashFinDate');
+            const sourceInput = document.getElementById('dashFinSource');
+
+            if (!amountInput || !dateInput) return;
+
+            const amount = parseFloat(amountInput.value);
+            const date = dateInput.value;
+            const source = sourceInput.value || 'Ausgabe';
+
+            if (isNaN(amount)) return;
+
+            const entry = {
+                id: Date.now().toString(),
+                amount,
+                date,
+                source,
+                createdAt: Date.now()
+            };
+
+            app.state.finance.push(entry);
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+
+            // Clear form
+            amountInput.value = '';
+            sourceInput.value = '';
+            // Reset date to today
+            dateInput.valueAsDate = new Date();
+
+            app.notify("Ausgabe erfasst", `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} für ${source} hinzugefügt.`);
+
+            // Re-render dashboard components to update KPI widget
+            app.renderDashboard();
+        },
+
 
         editBudget() {
             const newBudget = prompt('Bitte gib dein monatliches Budget ein (€):', app.state.monthlyBudget);
@@ -2438,6 +2503,37 @@ const app = {
             'special': '<div id="dashboardSpecialContainer" style="grid-column: 1 / -1; display:none;"></div>',
             'drive': '<div id="dashboardDriveMode" style="grid-column: 1 / -1; display: none;"></div>',
             'kpis': '<div id="dashboardBudgetWidget" style="grid-column: 1 / -1; display: none;"></div>',
+            'finance_add': `
+                <div class="card glass animate-in collapsible-card" style="grid-column: 1 / -1;">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <h3 style="display: flex; align-items: center; gap: 10px;">
+                            <i data-lucide="plus-circle" class="text-primary"></i> Ausgabe hinzufügen
+                        </h3>
+                        <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
+                    </div>
+                    <div class="card-content">
+                        <form id="dashFinanceForm" onsubmit="app.finance.addQuickEntry(event)" style="display: grid; gap: 20px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label style="font-size: 0.85rem; margin-bottom: 8px; display: block; opacity: 0.8;">Betrag (€)</label>
+                                    <input type="number" id="dashFinAmount" step="0.01" placeholder="0.00" required
+                                           style="width: 100%; border-radius: 12px; border: 1px solid var(--glass-border); padding: 12px; background: rgba(255,255,255,0.03);">
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-size: 0.85rem; margin-bottom: 8px; display: block; opacity: 0.8;">Datum</label>
+                                    <input type="date" id="dashFinDate" required
+                                           style="width: 100%; border-radius: 12px; border: 1px solid var(--glass-border); padding: 12px; background: rgba(255,255,255,0.03);">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label style="font-size: 0.85rem; margin-bottom: 8px; display: block; opacity: 0.8;">Beschreibung / Zweck</label>
+                                <input type="text" id="dashFinSource" placeholder="z.B. Lebensmittel, Miete, Hobby..."
+                                       style="width: 100%; border-radius: 12px; border: 1px solid var(--glass-border); padding: 12px; background: rgba(255,255,255,0.03);">
+                            </div>
+                            <button type="submit" class="btn-primary" style="height: 50px; font-weight: 700; font-size: 1rem;">Eintragen</button>
+                        </form>
+                    </div>
+                </div>`,
             'todos': `
                 <div id="dashboardUrgentTodos" class="card glass collapsible-card is-collapsed"
                     style="display:none; border: 1px solid rgba(239, 68, 68, 0.5); background: linear-gradient(135deg, rgba(239,68,68,0.05), rgba(0,0,0,0));">
@@ -2581,6 +2677,10 @@ const app = {
             </div>
             `;
             if (window.lucide) lucide.createIcons();
+
+            // Initialize dash date input
+            const dashFinDate = document.getElementById('dashFinDate');
+            if (dashFinDate && !dashFinDate.value) dashFinDate.valueAsDate = new Date();
         }
 
 
@@ -5489,6 +5589,7 @@ const app = {
             'special': 'Besonderheiten (Geburtstage/Feiertage)',
             'drive': 'Drive Mode (Smart Navigation)',
             'kpis': 'Finanz-Kennzahlen & Übersicht',
+            'finance_add': 'Schnelle Ausgabenerfassung',
             'todos': 'Dringende Aufgaben',
             'events': 'Nächste Termine',
             'mini_calendar': 'Mini-Monatskalender'
@@ -5498,6 +5599,7 @@ const app = {
             'special': 'party-popper',
             'drive': 'car',
             'kpis': 'trending-up',
+            'finance_add': 'plus-circle',
             'todos': 'alert-circle',
             'events': 'calendar',
             'mini_calendar': 'grid'
