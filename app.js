@@ -103,6 +103,10 @@ const app = {
             // Initial Render & Navigation
             this.handleInitialNavigation();
 
+            // Start Departure Reminders Check (every minute)
+            setInterval(() => this.checkDepartureReminders(), 60000);
+            this.checkDepartureReminders(); // Initial check
+
         } catch (e) {
             console.error("Critical Init Error:", e);
             alert("Fehler beim Starten: " + e.message);
@@ -1056,8 +1060,6 @@ const app = {
             });
 
             // 2. Remove local items that are missing in incoming AND are older than the incoming payload
-            // DISABLED for safety: Prevent deletion of local offline-created items.
-            /*
             this.state.events.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -1066,7 +1068,6 @@ const app = {
                     }
                 }
             });
-            */
 
             if (changed) this.state.events = Array.from(localMap.values());
         }
@@ -1087,8 +1088,7 @@ const app = {
                 }
             });
 
-            // DISABLED for safety
-            /*
+            // Remove local items missing in incoming
             this.state.todos.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -1097,7 +1097,6 @@ const app = {
                     }
                 }
             });
-            */
 
             if (changed) this.state.todos = Array.from(localTodoMap.values());
         }
@@ -1118,8 +1117,7 @@ const app = {
                 }
             });
 
-            // DISABLED for safety
-            /*
+            // Remove local items missing in incoming
             this.state.contacts.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -1128,7 +1126,6 @@ const app = {
                     }
                 }
             });
-            */
 
             if (changed) this.state.contacts = Array.from(localContactMap.values());
         }
@@ -1149,8 +1146,7 @@ const app = {
                 }
             });
 
-            // DISABLED for safety
-            /*
+            // Remove local items missing in incoming
             this.state.finance.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -1159,7 +1155,6 @@ const app = {
                     }
                 }
             });
-            */
 
             if (changed) this.state.finance = Array.from(localFinMap.values());
         }
@@ -1938,11 +1933,6 @@ const app = {
             this.render();
         },
 
-        deleteEntry(id) {
-            app.state.finance = app.state.finance.filter(e => e.id !== id);
-            app.saveLocal();
-            this.render();
-        },
 
         editBudget() {
             const newBudget = prompt('Bitte gib dein monatliches Budget ein (€):', app.state.monthlyBudget);
@@ -1959,6 +1949,7 @@ const app = {
                 app.state.finance = app.state.finance.filter(e => e.id !== id);
                 app.saveLocal();
                 this.render();
+                if (app.sync && app.sync.push) app.sync.push();
             }
         },
 
@@ -1967,6 +1958,7 @@ const app = {
                 app.state.finance = [];
                 app.saveLocal();
                 this.render();
+                if (app.sync && app.sync.push) app.sync.push();
             }
         },
 
@@ -2146,7 +2138,23 @@ const app = {
 
         driveContainer.style.display = 'block';
 
+        const now = new Date();
+        const currentTimeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+        let isAnyUrgent = false;
+
         let stopsHtml = driveEvents.map((e, index) => {
+            // Calculate departure time (Travel Time + 20 min buffer)
+            const metrics = this.state.travelMetrics ? this.state.travelMetrics[e.id] : null;
+            const travelMins = metrics ? metrics.duration : 0;
+            const totalBuffer = travelMins + 20;
+
+            const [hours, minutes] = (e.time || '00:00').split(':').map(Number);
+            const depDate = new Date();
+            depDate.setHours(hours, minutes - totalBuffer, 0, 0);
+            const depTimeStr = depDate.getHours().toString().padStart(2, '0') + ':' + depDate.getMinutes().toString().padStart(2, '0');
+
+            if (depTimeStr === currentTimeStr) isAnyUrgent = true;
+
             return `
                 <div style="display: flex; align-items: flex-start; gap: 12px; position: relative; padding-bottom: ${index === driveEvents.length - 1 ? '0' : '20px'};">
                     ${index !== driveEvents.length - 1 ? '<div style="position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: rgba(var(--primary-rgb), 0.2);"></div>' : ''}
@@ -2154,7 +2162,12 @@ const app = {
                         <span style="font-size: 0.8rem; font-weight: 800; color: var(--primary);">${index + 1}</span>
                     </div>
                     <div style="flex: 1;">
-                        <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${e.title}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${e.title}</div>
+                            <div style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; font-weight: 800;">
+                                Abfahrt: ${depTimeStr}
+                            </div>
+                        </div>
                         <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
                             <i data-lucide="clock" size="14"></i> ${e.time || '--:--'} Uhr
                         </div>
@@ -2167,7 +2180,7 @@ const app = {
         }).join('');
 
         driveContainer.innerHTML = `
-            <div class="card glass animate-in" style="margin-bottom: 20px; border: 1px solid rgba(var(--primary-rgb), 0.2); background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
+            <div class="card glass animate-in ${isAnyUrgent ? 'drive-urgent' : ''}" style="margin-bottom: 20px; border: 1px solid rgba(var(--primary-rgb), 0.2); background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
                 <div style="padding: 20px 20px 10px 20px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <div class="icon-circle" style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); width: 36px; height: 36px; border-radius: 10px;">
@@ -2188,11 +2201,57 @@ const app = {
                         <i data-lucide="map-pin" size="14" style="color: var(--primary);"></i> Start: Aktueller Standort
                     </div>
                     ${stopsHtml}
+                    <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(var(--primary-rgb), 0.1); font-size: 0.75rem; color: var(--primary); font-weight: 600;">
+                        <i data-lucide="info" size="14"></i> Abfahrt = Fahrzeit + 20 Min. Puffer.
+                    </div>
                 </div>
             </div>
         `;
 
         if (window.lucide) lucide.createIcons();
+    },
+
+    checkDepartureReminders() {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const currentTimeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+        // Refresh travel metrics every 15 mins if needed
+        if (!this.lastTravelRefresh || (now.getTime() - this.lastTravelRefresh > 900000)) {
+            this.calculateRealTravelTimes();
+            this.lastTravelRefresh = now.getTime();
+        }
+
+        if (!this.departureNotified) this.departureNotified = new Set();
+
+        this.state.events.forEach(e => {
+            if (!e.archived && e.date === todayStr && e.location && e.time) {
+                const metrics = this.state.travelMetrics ? this.state.travelMetrics[e.id] : null;
+                const travelMins = metrics ? metrics.duration : 0;
+                const totalBuffer = travelMins + 20;
+
+                const [hours, minutes] = e.time.split(':').map(Number);
+                const depDate = new Date();
+                depDate.setHours(hours, minutes - totalBuffer, 0, 0);
+
+                const depTimeStr = depDate.getHours().toString().padStart(2, '0') + ':' + depDate.getMinutes().toString().padStart(2, '0');
+                const reminderKey = `${e.id}_${depTimeStr}`;
+
+                if (currentTimeStr === depTimeStr && !this.departureNotified.has(reminderKey)) {
+                    const infoText = travelMins > 0 ? `(Fahrtzeit: ~${travelMins} Min + 20 Min Puffer)` : `(inkl. 20 Min Puffer)`;
+                    this.notify(
+                        "Drive Mode: Zeit loszufahren! 🚗",
+                        `Dein Termin "${e.title}" in ${e.location} beginnt um ${e.time}. Bitte jetzt losfahren ${infoText}.`,
+                        '/'
+                    );
+                    this.departureNotified.add(reminderKey);
+                    // Refresh UI to show pulse
+                    this.renderDriveMode();
+                }
+            }
+        });
     },
 
     startDriveModeNavigation() {
@@ -2232,6 +2291,64 @@ const app = {
                 url += `&waypoints=${waypoints}`;
             }
             window.open(url, '_blank');
+        });
+    },
+
+    async calculateRealTravelTimes() {
+        if (!navigator.geolocation) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const driveEvents = this.state.events.filter(e =>
+            !e.archived && e.date === today && e.location && e.location.trim() !== '' && e.category !== 'holiday'
+        );
+
+        if (driveEvents.length === 0) return;
+
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const origin = { lat: position.coords.latitude, lon: position.coords.longitude };
+
+            if (!this.state.travelMetrics) this.state.travelMetrics = {};
+
+            for (const event of driveEvents) {
+                try {
+                    // 1. Geocode if needed
+                    let destCoords = event.coords;
+                    if (!destCoords) {
+                        const geoUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(event.location)}&limit=1`;
+                        const geoRes = await fetch(geoUrl);
+                        const geoData = await geoRes.json();
+                        if (geoData && geoData[0]) {
+                            destCoords = { lat: geoData[0].lat, lon: geoData[0].lon };
+                            event.coords = destCoords; // Save to event
+                        }
+                    }
+
+                    if (destCoords) {
+                        // 2. Fetch Duration from OSRM
+                        const routeUrl = `https://router.project-osrm.org/route/v1/driving/${origin.lon},${origin.lat};${destCoords.lon},${destCoords.lat}?overview=false`;
+                        const routeRes = await fetch(routeUrl);
+                        const routeData = await routeRes.json();
+
+                        if (routeData.routes && routeData.routes[0]) {
+                            const durationSeconds = routeData.routes[0].duration;
+                            const durationMinutes = Math.ceil(durationSeconds / 60);
+
+                            this.state.travelMetrics[event.id] = {
+                                duration: durationMinutes,
+                                lastUpdate: new Date().getTime()
+                            };
+
+                            console.log(`Travel time for ${event.title}: ${durationMinutes} mins`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn(`Could not fetch travel time for ${event.title}:`, err);
+                }
+            }
+            // Trigger refresh after calcs
+            this.renderDriveMode();
+        }, (err) => {
+            console.warn("Geolocation denied, using default buffer.");
         });
     },
 
@@ -4491,6 +4608,25 @@ const app = {
             if (overlay) {
                 overlay.classList.toggle('is-landscape-forced', app.state.isNightLandscape);
             }
+
+            // Update UI Icons (Bedside Layout)
+            const mainIcon = document.getElementById('landscapeMainIcon');
+            if (mainIcon) {
+                mainIcon.setAttribute('data-lucide', app.state.isNightLandscape ? 'check-circle' : 'layout-template');
+            }
+
+            const mainBtn = document.getElementById('landscapeMainBtn');
+            if (mainBtn) {
+                mainBtn.style.background = app.state.isNightLandscape ? 'var(--primary)' : 'rgba(var(--primary-rgb), 0.1)';
+                mainBtn.style.color = app.state.isNightLandscape ? 'white' : 'var(--primary)';
+            }
+
+            const toggleText = document.getElementById('landscapeToggleText');
+            if (toggleText) {
+                toggleText.textContent = app.state.isNightLandscape ? 'Standard-Layout' : 'Nachttisch-Format';
+            }
+
+            if (window.lucide) lucide.createIcons();
         },
 
         saveSettings() {
@@ -4579,8 +4715,9 @@ const app = {
         delete(id) {
             if (confirm("Wecker wirklich löschen?")) {
                 app.state.alarms = app.state.alarms.filter(a => a.id !== id);
-                this.save();
+                app.saveLocal();
                 this.render();
+                if (app.sync && app.sync.push) app.sync.push();
             }
         },
 
@@ -4681,6 +4818,21 @@ const app = {
             // Apply styles immediately
             this.updateDesign('brightness', app.state.nightModeBrightness || 1);
             this.updateDesign('color', app.state.nightModeColor || '#ffffff');
+
+            // Sync Landscape State UI
+            const mainBtn = document.getElementById('landscapeMainBtn');
+            if (mainBtn) {
+                mainBtn.style.background = app.state.isNightLandscape ? 'var(--primary)' : 'rgba(var(--primary-rgb), 0.1)';
+                mainBtn.style.color = app.state.isNightLandscape ? 'white' : 'var(--primary)';
+            }
+            const mainIcon = document.getElementById('landscapeMainIcon');
+            if (mainIcon) {
+                mainIcon.setAttribute('data-lucide', app.state.isNightLandscape ? 'check-circle' : 'layout-template');
+            }
+            const toggleText = document.getElementById('landscapeToggleText');
+            if (toggleText) {
+                toggleText.textContent = app.state.isNightLandscape ? 'Standard-Layout' : 'Nachttisch-Format';
+            }
 
             if (window.lucide) lucide.createIcons();
 

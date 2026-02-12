@@ -788,6 +788,17 @@
                         </div>
                     </div>
 
+                    <!-- Orientation Setting for Bedside Mode -->
+                    <div class="glass"
+                        style="margin-top: 15px; padding: 15px; display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 0.9rem; color: var(--text-muted);">Nachttisch-Format:</span>
+                        <button class="btn-icon-mini" id="landscapeMainBtn" onclick="app.alarm.toggleLandscape()"
+                            title="Format für Nachttisch wählen"
+                            style="background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; width: 40px; height: 40px;">
+                            <i data-lucide="layout-template" id="landscapeMainIcon"></i>
+                        </button>
+                    </div>
+
                     <div class="glass" style="margin-top: 15px; padding: 15px;">
                         <div
                             style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
@@ -1477,9 +1488,9 @@
                 <input type="color" id="fsColor" oninput="app.alarm.updateDesign('color', this.value)">
             </div>
             <div class="control-group" onclick="app.alarm.toggleLandscape()"
-                style="cursor:pointer; background: rgba(255,255,255,0.05); padding: 5px 12px; border-radius: 20px;">
-                <i data-lucide="monitor-off" size="16" style="transform: rotate(90deg);"></i>
-                <span style="font-size: 0.8rem; font-weight: 500;">Quermodus</span>
+                style="cursor:pointer; background: rgba(255,255,255,0.08); padding: 8px 18px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);">
+                <i data-lucide="layout-template" size="16"></i>
+                <span id="landscapeToggleText" style="font-size: 0.8rem; font-weight: 600;">Nachttisch-Format</span>
             </div>
         </div>
 
