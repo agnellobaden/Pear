@@ -1453,6 +1453,26 @@ body {
     resize: none;
 }
 
+.btn-icon-subtle {
+    background: rgba(var(--primary-rgb), 0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--primary);
+    width: 44px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    text-decoration: none;
+}
+
+.btn-icon-subtle:hover {
+    background: rgba(var(--primary-rgb), 0.15);
+    transform: translateY(-2px);
+    border-color: var(--primary);
+}
 
 .hidden {
     display: none !important;
@@ -4220,28 +4240,6 @@ body {
     background: rgba(255, 255, 255, 0.05);
 }
 
-.voice-side-btn i {
-    width: 20px;
-    height: 20px;
-}
-
-@media (max-width: 480px) {
-    .voice-side-btn {
-        width: 32px;
-        height: 32px;
-    }
-
-    .voice-side-btn i {
-        width: 18px;
-        height: 18px;
-    }
-
-    .voice-btn {
-        width: 55px;
-        height: 55px;
-    }
-}
-
 /* Settings Input Grid Fix */
 .settings-input-grid {
     display: grid;
@@ -4255,9 +4253,6 @@ body {
     }
 }
 
-/* Hero Info Pills logic moved to main hero section for better structure */
-
-
 .voice-btn:hover {
     transform: scale(1.1);
     box-shadow: 0 15px 40px var(--primary-glow);
@@ -4270,15 +4265,15 @@ body {
 
 @keyframes voice-pulse {
     0% {
-        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.6);
+        box-shadow: 0 0 0 0 rgba(168, 199, 250, 0.6);
     }
 
     70% {
-        box-shadow: 0 0 0 20px rgba(99, 102, 241, 0);
+        box-shadow: 0 0 0 20px rgba(168, 199, 250, 0);
     }
 
     100% {
-        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+        box-shadow: 0 0 0 0 rgba(168, 199, 250, 0);
     }
 }
 
@@ -4298,6 +4293,7 @@ body {
 }
 
 .voice-overlay.hidden {
+
     opacity: 0;
     pointer-events: none;
 }

@@ -74,16 +74,9 @@
     </div>
 
     <div id="app">
-        <div class="sidebar-overlay" onclick="document.getElementById('sidebar').classList.remove('active')"></div>
-
         <!-- Navigation -->
         <nav class="sidebar" id="sidebar">
-            <div class="sidebar-header mobile-only">
-                <h3>Menü</h3>
-                <button class="close-sidebar" onclick="document.getElementById('sidebar').classList.remove('active')">
-                    <i data-lucide="x"></i>
-                </button>
-            </div>
+
             <div class="logo">
                 <svg class="logo-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                     <defs>
@@ -138,28 +131,24 @@
 
         <!-- Main Content -->
         <main class="content">
-            <!-- Mobile Header with Hamburger -->
+            <!-- Mobile Header (Minimalist) -->
             <header class="top-bar mobile-only"
-                style="justify-content: space-between; align-items: center; display: flex;">
-                <button class="menu-toggle" onclick="document.getElementById('sidebar').classList.add('active')">
-                    <i data-lucide="menu"></i>
-                </button>
+                style="justify-content: space-between; align-items: center; display: flex; padding: 10px 20px;">
+                <div style="font-weight: 800; font-size: 1.2rem; color: var(--primary);">Pear</div>
 
-                <div style="display: flex; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 15px;">
                     <button id="mobileSyncBtn" class="icon-btn hidden" title="Jetzt synchronisieren"
                         onclick="app.sync.push()"
-                        style="margin-right: 12px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border);">
-                        <i data-lucide="refresh-cw"></i>
+                        style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 38px; height: 38px;">
+                        <i data-lucide="refresh-cw" size="18"></i>
                     </button>
-                    <button class="icon-btn" onclick="app.voice.start()" style="margin-right: 10px;">
-                        <i data-lucide="mic"></i>
-                    </button>
-                    <div class="avatar" style="width: 40px; height: 40px;" onclick="app.navigateTo('settings')">
+                    <div class="avatar" style="width: 38px; height: 38px;" onclick="app.navigateTo('settings')">
                         <img id="headerUserAvatarMobile" src="logo.svg"
                             style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                     </div>
                 </div>
             </header>
+
 
             <header class="top-bar mobile-hidden">
                 <div class="search-bar">
@@ -238,53 +227,9 @@
                 </div>
 
                 <div class="dashboard-grid">
-                    <div id="dashboardSpecialContainer" style="display:none; grid-column: 1 / -1;"></div>
+                    <!-- Statically defined widgets removed. Now dynamically rendered by app.js based on widgetOrder. -->
+                </div>
 
-                    <!-- Dashboard Summary Widgets -->
-                    <div id="dashboardDriveMode" style="grid-column: 1 / -1; display: none;"></div>
-                    <div id="dashboardBudgetWidget" style="grid-column: 1 / -1; display: none;"></div>
-
-                    <!-- Urgent Todos Section -->
-                    <div id="dashboardUrgentTodos" class="card glass collapsible-card is-collapsed"
-                        style="display:none; border: 1px solid rgba(239, 68, 68, 0.5); background: linear-gradient(135deg, rgba(239,68,68,0.05), rgba(0,0,0,0));">
-                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                            <h3 style="color:#ef4444; display:flex; align-items:center; gap:8px;">
-                                <i data-lucide="alert-circle"></i> Dringend / Wichtig
-                            </h3>
-                            <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
-                        </div>
-                        <div id="dashboardUrgentList" class="card-content"
-                            style="display:flex; flex-direction:column; gap:8px;">
-                            <!-- Populated by JS -->
-                        </div>
-                    </div>
-                    <div class="card glass next-events collapsible-card is-collapsed">
-                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <h3>Nächste Termine</h3>
-                                <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
-                            </div>
-                            <button class="btn-text" onclick="event.stopPropagation(); app.navigateTo('calendar')">Alle
-                                ansehen</button>
-                        </div>
-                        <div class="event-list card-content" id="dashboardEventList">
-                            <div class="empty-state">Lade Termine...</div>
-                        </div>
-                    </div>
-
-                    <div class="card glass mini-calendar collapsible-card">
-                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <h3 id="miniCalendarMonth">Februar 2026</h3>
-                                <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
-                            </div>
-                        </div>
-                        <div class="card-content">
-                            <div class="calendar-grid small" id="miniCalendarGrid">
-                                <!-- JS populated -->
-                            </div>
-                        </div>
-                    </div>
             </section>
 
             <section id="view-calendar" class="page-view">
@@ -871,13 +816,22 @@
                             </div>
                             <div class="input-group">
                                 <label>Telefon</label>
-                                <input type="tel" id="settingsUserPhone" placeholder="Telefonnummer..."
-                                    onchange="app.updateUserData('phone', this.value)">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="tel" id="settingsUserPhone" placeholder="Telefonnummer..."
+                                        onchange="app.updateUserData('phone', this.value)" style="flex: 1;">
+                                    <a id="settingsCallBtn" href="#" class="btn-icon-subtle hidden" title="Anrufen"
+                                        style="color: var(--success);"><i data-lucide="phone" size="18"></i></a>
+                                </div>
                             </div>
                             <div class="input-group">
                                 <label>E-Mail</label>
-                                <input type="email" id="settingsUserEmail" placeholder="E-Mail..."
-                                    onchange="app.updateUserData('email', this.value)">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="email" id="settingsUserEmail" placeholder="E-Mail..."
+                                        onchange="app.updateUserData('email', this.value)" style="flex: 1;">
+                                    <a id="settingsMailBtn" href="#" class="btn-icon-subtle hidden"
+                                        title="E-Mail schreiben" style="color: var(--primary);"><i data-lucide="mail"
+                                            size="18"></i></a>
+                                </div>
                             </div>
                         </div>
                         <div class="input-group" style="margin-top: 15px;">
@@ -1304,11 +1258,21 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Telefon</label>
-                                <input type="tel" id="eventPhone" placeholder="+49...">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="tel" id="eventPhone" placeholder="+49..." style="flex: 1;">
+                                    <a id="eventCallBtn" href="#" class="btn-icon-subtle hidden" title="Anrufen"
+                                        style="color: var(--success);"><i data-lucide="phone" size="18"></i></a>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>E-Mail</label>
-                                <input type="email" id="eventEmail" placeholder="kontakt@beispiel.de">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="email" id="eventEmail" placeholder="kontakt@beispiel.de"
+                                        style="flex: 1;">
+                                    <a id="eventMailBtn" href="#" class="btn-icon-subtle hidden"
+                                        title="E-Mail schreiben" style="color: var(--primary);"><i data-lucide="mail"
+                                            size="18"></i></a>
+                                </div>
                             </div>
                         </div>
                         <div class="form-group">
@@ -1360,11 +1324,23 @@
                         </div>
                         <div class="form-group">
                             <label>Telefon</label>
-                            <input type="tel" id="contactPhone" placeholder="+49 123 456789">
+                            <div style="display: flex; gap: 8px;">
+                                <input type="tel" id="contactPhone" placeholder="+49 123 456789" style="flex: 1;">
+                                <a id="contactCallBtn" href="#" class="btn-icon-subtle hidden" title="Anrufen"
+                                    style="color: var(--success);">
+                                    <i data-lucide="phone" size="18"></i>
+                                </a>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>E-Mail</label>
-                            <input type="email" id="contactEmail" placeholder="max@beispiel.de">
+                            <div style="display: flex; gap: 8px;">
+                                <input type="email" id="contactEmail" placeholder="max@beispiel.de" style="flex: 1;">
+                                <a id="contactMailBtn" href="#" class="btn-icon-subtle hidden" title="E-Mail schreiben"
+                                    style="color: var(--primary);">
+                                    <i data-lucide="mail" size="18"></i>
+                                </a>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>Adresse</label>
@@ -1410,8 +1386,14 @@
                     data-lucide="calendar"></i></button>
             <button class="voice-side-btn" data-page="finance" onclick="app.navigateTo('finance')" title="Finanzen"><i
                     data-lucide="wallet"></i></button>
+            <button class="voice-side-btn" data-page="todo" onclick="app.navigateTo('todo')" title="Aufgaben"><i
+                    data-lucide="check-square"></i></button>
+
             <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()" title="Sprachsteuerung"><i
                     data-lucide="mic"></i></button>
+
+            <button class="voice-side-btn" data-page="alarm" onclick="app.navigateTo('alarm')" title="Wecker"><i
+                    data-lucide="clock"></i></button>
             <button class="voice-side-btn" data-page="team" onclick="app.navigateTo('team')" title="Team Sync"><i
                     data-lucide="users"></i></button>
             <button class="voice-side-btn" data-page="contacts" onclick="app.navigateTo('contacts')" title="Kontakte"><i
@@ -1419,6 +1401,7 @@
             <button class="voice-side-btn" data-page="settings" onclick="app.navigateTo('settings')"
                 title="Einstellungen"><i data-lucide="settings"></i></button>
         </div>
+
 
 
 

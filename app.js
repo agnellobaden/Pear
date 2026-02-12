@@ -432,9 +432,11 @@ const app = {
         this.state.user[key] = value;
         localStorage.setItem(`moltbot_user_${key}`, value);
 
-        // Update relevant views
         if (this.state.view === 'settings' || this.state.view === 'dashboard') {
             this.render();
+            // Also update action links explicitly for responsiveness
+            if (key === 'phone') app.updateActionLink('settingsUserPhone', 'settingsCallBtn', 'tel:');
+            if (key === 'email') app.updateActionLink('settingsUserEmail', 'settingsMailBtn', 'mailto:');
         }
 
         // Sync if possible
@@ -1346,6 +1348,10 @@ const app = {
         setVal('eventCategory', event ? (event.category || 'work') : 'work');
         setVal('eventColor', event ? (event.color || '#6366f1') : '#6366f1');
 
+        // Update Action Buttons
+        this.updateActionLink('eventPhone', 'eventCallBtn', 'tel:');
+        this.updateActionLink('eventEmail', 'eventMailBtn', 'mailto:');
+
         // Toggle Delete Button
         const delBtn = document.getElementById('deleteEventBtn');
         if (delBtn) delBtn.style.display = event ? 'block' : 'none';
@@ -1442,12 +1448,14 @@ const app = {
                         // Auto-fill if changed
                         if (contact.phone && phoneInput.value !== contact.phone) {
                             phoneInput.value = contact.phone;
+                            app.updateActionLink('eventPhone', 'eventCallBtn', 'tel:');
                             // Visual feedback (optional flash)
                             phoneInput.style.borderColor = 'var(--success)';
                             setTimeout(() => phoneInput.style.borderColor = 'var(--glass-border)', 1000);
                         }
                         if (contact.email && emailInput.value !== contact.email) {
                             emailInput.value = contact.email;
+                            app.updateActionLink('eventEmail', 'eventMailBtn', 'mailto:');
                             emailInput.style.borderColor = 'var(--success)';
                             setTimeout(() => emailInput.style.borderColor = 'var(--glass-border)', 1000);
                         }
@@ -1456,6 +1464,19 @@ const app = {
                 }
             });
         }
+
+        // Live Action Button Updates
+        ['eventPhone', 'eventEmail', 'contactPhone', 'contactEmail', 'settingsUserPhone', 'settingsUserEmail'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                const isSettings = id.includes('settings');
+                const btnId = isSettings ? (id.includes('Phone') ? 'settingsCallBtn' : 'settingsMailBtn') : (id.includes('event') ? (id.includes('Phone') ? 'eventCallBtn' : 'eventMailBtn') : (id.includes('Phone') ? 'contactCallBtn' : 'contactMailBtn'));
+                const prefix = id.includes('Phone') ? 'tel:' : 'mailto:';
+                el.addEventListener('input', () => app.updateActionLink(id, btnId, prefix));
+                // Also update on change for settings (since they have onchange handlers)
+                el.addEventListener('change', () => app.updateActionLink(id, btnId, prefix));
+            }
+        });
 
         // Form Submit
         document.getElementById('eventForm').onsubmit = (e) => {
@@ -1769,12 +1790,19 @@ const app = {
             if (nameInput) nameInput.value = this.state.user.name;
             const addrInput = document.getElementById('settingsUserAddress');
             if (addrInput) addrInput.value = this.state.user.address;
-            const phoneInput = document.getElementById('settingsUserPhone');
-            if (phoneInput) phoneInput.value = this.state.user.phone;
             const emailInput = document.getElementById('settingsUserEmail');
-            if (emailInput) emailInput.value = this.state.user.email;
+            if (emailInput) {
+                emailInput.value = this.state.user.email;
+                app.updateActionLink('settingsUserEmail', 'settingsMailBtn', 'mailto:');
+            }
             const bdayInput = document.getElementById('settingsUserBirthday');
             if (bdayInput) bdayInput.value = this.state.user.birthday;
+
+            const phoneInput = document.getElementById('settingsUserPhone');
+            if (phoneInput) {
+                phoneInput.value = this.state.user.phone;
+                app.updateActionLink('settingsUserPhone', 'settingsCallBtn', 'tel:');
+            }
 
             const avatarPreview = document.getElementById('settingsUserAvatarPreview');
             if (avatarPreview) {
@@ -2187,6 +2215,13 @@ const app = {
 
             if (depTimeStr === currentTimeStr) isAnyUrgent = true;
 
+            // Check for phone
+            let phone = e.phone;
+            if (!phone) {
+                const contact = this.state.contacts.find(c => c.name && e.title.includes(c.name));
+                if (contact) phone = contact.phone;
+            }
+
             return `
                 <div style="display: flex; align-items: flex-start; gap: 12px; position: relative; padding-bottom: ${index === driveEvents.length - 1 ? '0' : '20px'};">
                     ${index !== driveEvents.length - 1 ? '<div style="position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: rgba(var(--primary-rgb), 0.2);"></div>' : ''}
@@ -2196,8 +2231,15 @@ const app = {
                     <div style="flex: 1;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${e.title}</div>
-                            <div style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; font-weight: 800;">
-                                Abfahrt: ${depTimeStr}
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                ${phone ? `
+                                    <a href="tel:${phone}" onclick="event.stopPropagation()" class="btn-icon-subtle" style="width: 28px; height: 28px; color: var(--success); background: rgba(var(--success-rgb), 0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                        <i data-lucide="phone" size="14"></i>
+                                    </a>
+                                ` : ''}
+                                <div style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; font-weight: 800;">
+                                    Abfahrt: ${depTimeStr}
+                                </div>
                             </div>
                         </div>
                         <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
@@ -2732,11 +2774,15 @@ const app = {
                     box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 5px ${eventColor}20;
                 `;
 
-                // Check for phone
+                // Check for phone & email
                 let phone = e.phone;
-                if (!phone) {
+                let email = e.email;
+                if (!phone || !email) {
                     const contact = this.state.contacts.find(c => c.name && e.title.includes(c.name));
-                    if (contact) phone = contact.phone;
+                    if (contact) {
+                        if (!phone) phone = contact.phone;
+                        if (!email) email = contact.email;
+                    }
                 }
 
                 return `
@@ -2747,17 +2793,22 @@ const app = {
                         </div>
                         <div class="event-info">
                             <h4 style="color:var(--text-main); font-weight:700;">${e.title}</h4>
-                            <p style="opacity:0.8;">${e.time || '--:--'} Uhr ${e.location ? `• ${e.location}` : ''}</p>
+                            <p style="opacity:0.8;">${e.time || '--:--'} Uhr ${e.location ? `• ${e.location}` : ''} ${email ? `• ${email}` : ''}</p>
                         </div>
-                        <div style="display:flex; align-items:center; gap:12px; margin-left:auto;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
                             ${phone ? `
-                                <a href="tel:${phone}" class="icon-btn-subtle" onclick="event.stopPropagation()" title="Anrufen" style="color:#d97706; background:rgba(217,119,6,0.1);">
-                                    <i data-lucide="phone" size="20"></i>
+                                <a href="tel:${phone}" class="btn-icon-subtle" onclick="event.stopPropagation()" title="Anrufen" style="color:#d97706; background:rgba(217,119,6,0.1); width: 36px; height: 36px; border-radius: 10px;">
+                                    <i data-lucide="phone" size="18"></i>
+                                </a>
+                            ` : ''}
+                            ${email ? `
+                                <a href="mailto:${email}" class="btn-icon-subtle" onclick="event.stopPropagation()" title="E-Mail schreiben" style="color:#3b82f6; background:rgba(59,130,246,0.1); width: 36px; height: 36px; border-radius: 10px;">
+                                    <i data-lucide="mail" size="18"></i>
                                 </a>
                             ` : ''}
                             ${e.location ? `
-                                <button class="icon-btn-subtle" onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte öffnen">
-                                    <i data-lucide="map" size="20"></i>
+                                <button class="btn-icon-subtle" onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte öffnen" style="width: 36px; height: 36px; border-radius: 10px;">
+                                    <i data-lucide="map" size="18"></i>
                                 </button>
                             ` : ''}
                             <div class="event-category-badge category-${e.category}" style="${e.color ? `background:${e.color}; color:white;` : ''}">${e.category}</div>
@@ -3300,12 +3351,28 @@ const app = {
             const sorted = [...events].sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
             eventsHtml = sorted.map(e => {
                 const colorStyle = e.color ? `border-left: 3px solid ${e.color};` : '';
+
+                // Contact Link Logic
+                let phone = e.phone;
+                let email = e.email;
+                if (!phone || !email) {
+                    const contact = this.state.contacts.find(c => c.name && e.title.toLowerCase().includes(c.name.toLowerCase()));
+                    if (contact) {
+                        if (!phone) phone = contact.phone;
+                        if (!email) email = contact.email;
+                    }
+                }
+
                 return `
                 <div class="agenda-event-item" onclick="app.editEvent('${e.id}')" style="${colorStyle}">
                     <div class="agenda-time">${e.time || 'Ganztägig'}</div>
                     <div class="agenda-details">
                         <div class="agenda-title">${e.title}</div>
                         ${e.location ? `<div class="agenda-loc"><i data-lucide="map-pin" size="12"></i> ${e.location}</div>` : ''}
+                        <div style="display:flex; gap:8px; margin-top:4px;">
+                            ${phone ? `<a href="tel:${phone}" onclick="event.stopPropagation()" class="text-link" style="font-size:0.75rem; color:var(--success); display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="11"></i> ${phone}</a>` : ''}
+                            ${email ? `<a href="mailto:${email}" onclick="event.stopPropagation()" class="text-link" style="font-size:0.75rem; color:var(--primary); display:flex; align-items:center; gap:4px;"><i data-lucide="mail" size="11"></i> E-Mail</a>` : ''}
+                        </div>
                     </div>
                 </div>`;
             }).join('');
@@ -3771,7 +3838,26 @@ const app = {
             const formattedTime = time.includes(':') ? (time.split(':')[0].padStart(2, '0') + ':00') : time;
             document.getElementById('eventTime').value = formattedTime;
         }
+        // Reset action buttons for new event
+        this.updateActionLink('eventPhone', 'eventCallBtn', 'tel:');
+        this.updateActionLink('eventEmail', 'eventMailBtn', 'mailto:');
+
         document.getElementById('modalOverlay').classList.remove('hidden');
+    },
+
+    updateActionLink(inputId, btnId, prefix) {
+        const input = document.getElementById(inputId);
+        const btn = document.getElementById(btnId);
+        if (!input || !btn) return;
+
+        const val = input.value.trim();
+        if (val) {
+            btn.href = prefix + val;
+            btn.classList.remove('hidden');
+        } else {
+            btn.href = '#';
+            btn.classList.add('hidden');
+        }
     },
 
     // --- CREATE MENU ---
@@ -4068,9 +4154,12 @@ const app = {
             document.getElementById('contactAddress').value = contact.address || '';
             document.getElementById('contactBirthday').value = contact.birthday || '';
             document.getElementById('contactNotes').value = contact.notes || '';
-            document.getElementById('contactNotes').value = contact.notes || '';
             document.getElementById('contactIsFavorite').checked = !!contact.isFavorite;
             if (document.getElementById('contactIsUrgent')) document.getElementById('contactIsUrgent').checked = !!contact.isUrgent;
+
+            // Update Action Buttons
+            app.updateActionLink('contactPhone', 'contactCallBtn', 'tel:');
+            app.updateActionLink('contactEmail', 'contactMailBtn', 'mailto:');
 
             const delBtn = document.getElementById('deleteContactBtn');
             if (delBtn) delBtn.style.display = 'block';
@@ -4106,6 +4195,11 @@ const app = {
             app.state.editingContactId = null;
             document.getElementById('contactModalTitle').textContent = "Kontakt hinzufügen";
             document.getElementById('contactForm').reset();
+
+            // Reset action buttons
+            app.updateActionLink('contactPhone', 'contactCallBtn', 'tel:');
+            app.updateActionLink('contactEmail', 'contactMailBtn', 'mailto:');
+
             const delBtn = document.getElementById('deleteContactBtn');
             if (delBtn) delBtn.style.display = 'none';
             document.getElementById('contactModalOverlay').classList.remove('hidden');
