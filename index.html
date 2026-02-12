@@ -345,11 +345,19 @@
 
                 <div class="dashboard-grid" style="margin-bottom: 25px;">
                     <div class="card glass">
-                        <small class="text-muted">Monatsausgaben</small>
-                        <h2 id="finTotalIncome">0,00 €</h2>
+                        <small class="text-muted">Monatseinnahmen</small>
+                        <h2 id="finTotalIncome" style="color: var(--success);">0,00 €</h2>
                     </div>
                     <div class="card glass">
-                        <small class="text-muted">Monatsbudget</small>
+                        <small class="text-muted">Monatsausgaben</small>
+                        <h2 id="finTotalExpenses" style="color: var(--danger);">0,00 €</h2>
+                    </div>
+                    <div class="card glass">
+                        <small class="text-muted">Bilanz (Rest)</small>
+                        <h2 id="finBalance">0,00 €</h2>
+                    </div>
+                    <div class="card glass">
+                        <small class="text-muted">Monatsbudget (Limit)</small>
                         <div style="display:flex; align-items:center; gap:10px;">
                             <h2 id="finTotalBudget">0,00 €</h2>
                             <button class="btn-icon" onclick="app.finance.editBudget()"><i data-lucide="edit-3"
@@ -361,29 +369,29 @@
                         <h2 id="finRemaining">0,00 €</h2>
                     </div>
                     <div class="card glass">
-                        <small class="text-muted">Jahresausgaben</small>
+                        <small class="text-muted">Jahresbilanz</small>
                         <h2 id="finYearTotal">0,00 €</h2>
                     </div>
                 </div>
 
-                <div class="card glass" style="margin-bottom: 25px; padding: 15px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 25px;">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <i data-lucide="trending-up" size="18" class="text-primary"></i>
                             <span style="font-weight: 600;">Kurzübersicht (Tag/Woche)</span>
                         </div>
-                        <button class="btn-text" style="font-size: 0.8rem;"
-                            onclick="const x = document.getElementById('finExtraStats'); x.style.display = x.style.display === 'none' ? 'grid' : 'none'; this.textContent = x.style.display === 'none' ? 'Details anzeigen' : 'Details ausblenden'">Details
-                            anzeigen</button>
+                        <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
                     </div>
-                    <div id="finExtraStats" class="dashboard-grid" style="margin-top: 15px; display: none; gap: 15px;">
-                        <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
-                            <small class="text-muted">Ausgaben heute</small>
-                            <h3 id="finTodayTotal">0,00 €</h3>
-                        </div>
-                        <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
-                            <small class="text-muted">Ausgaben diese Woche</small>
-                            <h3 id="finWeekTotal">0,00 €</h3>
+                    <div class="card-content">
+                        <div id="finExtraStats" class="dashboard-grid" style="margin-top: 15px; gap: 15px;">
+                            <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
+                                <small class="text-muted">Ausgaben heute</small>
+                                <h3 id="finTodayTotal">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
+                                <small class="text-muted">Ausgaben diese Woche</small>
+                                <h3 id="finWeekTotal" style="color: var(--danger);">0,00 €</h3>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -402,11 +410,23 @@
                                     <input type="date" id="finDate" required>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label>Beschreibung / Zweck</label>
-                                <input type="text" id="finSource" placeholder="z.B. Lebensmittel, Miete, Hobby...">
+                            <div class="form-row" style="display: flex; gap: 15px; margin-top: 10px;">
+                                <div class="form-group" style="flex: 1;">
+                                    <label>Typ</label>
+                                    <select id="finType"
+                                        style="width: 100%; border-radius: 12px; padding: 12px; background: rgba(var(--bg-solid-2-rgb), 0.5); border: 1px solid var(--glass-border); color: var(--text-main);">
+                                        <option value="expense">Ausgabe 🔻</option>
+                                        <option value="income">Einnahme 🔼</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label>Beschreibung / Zweck</label>
+                                    <input type="text" id="finSource" placeholder="z.B. Gehalt, Miete, Hobby..."
+                                        required>
+                                </div>
                             </div>
-                            <button type="submit" class="btn-primary w-full">Eintragen</button>
+                            <button type="submit" class="btn-primary w-full"
+                                style="margin-top: 15px;">Eintragen</button>
                         </form>
                     </div>
 
@@ -1499,12 +1519,22 @@
                                 style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
                         </div>
                     </div>
-                    <div class="input-group">
-                        <label
-                            style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Beschreibung
-                            / Zweck</label>
-                        <input type="text" id="quickFinSource" placeholder="z.B. Lebensmittel, Miete, Hobby..." required
-                            style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="input-group">
+                            <label
+                                style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Typ</label>
+                            <select id="quickFinType"
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                                <option value="expense">Ausgabe</option>
+                                <option value="income">Einnahme</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label
+                                style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Beschreibung</label>
+                            <input type="text" id="quickFinSource" placeholder="z.B. Gehalt, Miete..." required
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                        </div>
                     </div>
                     <button type="submit" class="btn-primary"
                         style="padding: 16px; font-weight: 700; font-size: 1.1rem; border-radius: 15px; margin-top: 10px; background: #002a46; color: #ffffff; border: none; box-shadow: 0 4px 12px rgba(0,42,70,0.2);">

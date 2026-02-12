@@ -337,6 +337,9 @@ const app = {
         this.state.contacts = safeLoad('moltbot_contacts', []);
         this.state.alarms = safeLoad('moltbot_alarms', []);
         this.state.finance = safeLoad('moltbot_finance', []);
+        this.state.finance.forEach(f => {
+            if (!f.type) f.type = 'expense'; // Migration: Existing entries are expenses
+        });
         this.state.todoCategories = safeLoad('moltbot_todo_categories', ['🛒 Einkauf', '💼 Arbeit', '🏠 Zuhause', '👤 Privat']);
         this.state.teamHistory = safeLoad('moltbot_team_history', []);
 
@@ -1958,6 +1961,7 @@ const app = {
             const amount = parseFloat(document.getElementById('quickFinAmount').value);
             const date = document.getElementById('quickFinDate').value;
             const source = document.getElementById('quickFinSource').value || 'Ausgabe';
+            const type = document.getElementById('quickFinType').value || 'expense';
 
             if (isNaN(amount)) return;
 
@@ -1965,6 +1969,7 @@ const app = {
                 id: Date.now().toString(),
                 amount,
                 date,
+                type,
                 source,
                 createdAt: Date.now()
             };
@@ -1979,14 +1984,16 @@ const app = {
             if (app.state.view === 'dashboard') app.renderDashboard();
             if (app.state.view === 'finance') this.render();
 
-            app.notify("Ausgabe gespeichert", `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} für ${source} erfasst.`);
+            app.notify(type === 'income' ? "Einnahme gespeichert" : "Ausgabe gespeichert",
+                `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} für ${source} erfasst.`);
         },
 
         addEntry(e) {
             e.preventDefault();
             const amount = parseFloat(document.getElementById('finAmount').value);
             const date = document.getElementById('finDate').value;
-            const source = document.getElementById('finSource').value || 'Ausgabe';
+            const source = document.getElementById('finSource').value || 'Eintrag';
+            const type = document.getElementById('finType').value || 'expense';
 
             if (isNaN(amount)) return;
 
@@ -1994,6 +2001,7 @@ const app = {
                 id: Date.now().toString(),
                 amount,
                 date,
+                type,
                 source,
                 createdAt: Date.now()
             };
@@ -2010,7 +2018,7 @@ const app = {
 
 
         editBudget() {
-            const newBudget = prompt('Bitte gib dein monatliches Budget ein (€):', app.state.monthlyBudget);
+            const newBudget = prompt('Bitte gib dein monatliches Budget Limit ein (€):', app.state.monthlyBudget);
             if (newBudget !== null) {
                 const b = parseFloat(newBudget);
                 app.state.monthlyBudget = isNaN(b) ? 0 : b;
@@ -2020,7 +2028,7 @@ const app = {
         },
 
         deleteEntry(id) {
-            if (confirm("Ausgabe wirklich löschen?")) {
+            if (confirm("Eintrag wirklich löschen?")) {
                 app.state.finance = app.state.finance.filter(e => e.id !== id);
                 app.saveLocal();
                 this.render();
@@ -2052,40 +2060,42 @@ const app = {
             // Today's start
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
             // Start of this week (Monday)
-            const currentDay = now.getDay();
-            const diff = now.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
-            const weekStart = new Date(now.setDate(diff)).setHours(0, 0, 0, 0);
+            const freshNowForWeek = new Date();
+            const currentDay = freshNowForWeek.getDay();
+            const diff = freshNowForWeek.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+            const weekStart = new Date(new Date(freshNowForWeek).setDate(diff)).setHours(0, 0, 0, 0);
 
-            // Re-fetch now because setDate mutates
-            const freshNow = new Date();
-
-            // Calculate Stats (tracking expenses)
+            // Calculate Stats
             let dailyExpenses = 0;
             let weeklyExpenses = 0;
             let monthlyExpenses = 0;
-            let yearlyExpenses = 0;
+            let monthlyIncome = 0;
+            let yearlyBalance = 0;
 
             app.state.finance.forEach(e => {
                 const d = new Date(e.date);
                 const time = d.getTime();
+                const isIncome = e.type === 'income';
 
                 if (d.getFullYear() === currentYear) {
-                    yearlyExpenses += e.amount;
+                    yearlyBalance += isIncome ? e.amount : -e.amount;
                     if (d.getMonth() === currentMonth) {
-                        monthlyExpenses += e.amount;
+                        if (isIncome) monthlyIncome += e.amount;
+                        else monthlyExpenses += e.amount;
                     }
                 }
 
-                if (time >= todayStart) {
+                if (time >= todayStart && !isIncome) {
                     dailyExpenses += e.amount;
                 }
 
-                if (time >= weekStart) {
+                if (time >= weekStart && !isIncome) {
                     weeklyExpenses += e.amount;
                 }
             });
 
-            const remaining = app.state.monthlyBudget - monthlyExpenses;
+            const balance = monthlyIncome - monthlyExpenses;
+            const remainingBudget = app.state.monthlyBudget - monthlyExpenses;
 
             // Update UI
             if (document.getElementById('finTodayTotal')) {
@@ -2095,24 +2105,42 @@ const app = {
                 document.getElementById('finWeekTotal').textContent = weeklyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
             }
 
-            document.getElementById('finTotalIncome').textContent = monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            if (document.getElementById('finTotalIncome')) {
+                document.getElementById('finTotalIncome').textContent = monthlyIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+            if (document.getElementById('finTotalExpenses')) {
+                document.getElementById('finTotalExpenses').textContent = monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+            if (document.getElementById('finBalance')) {
+                const balanceEl = document.getElementById('finBalance');
+                balanceEl.textContent = (balance < 0 ? '-' : '+') + Math.abs(balance).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                balanceEl.style.color = balance < 0 ? 'var(--danger)' : 'var(--success)';
+            }
+
             document.getElementById('finTotalBudget').textContent = app.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-            document.getElementById('finRemaining').textContent = (remaining < 0 ? '-' : '') + Math.abs(remaining).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-            document.getElementById('finYearTotal').textContent = yearlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            document.getElementById('finRemaining').textContent = (remainingBudget < 0 ? '-' : '') + Math.abs(remainingBudget).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+
+            const yearTotalEl = document.getElementById('finYearTotal');
+            if (yearTotalEl) {
+                yearTotalEl.textContent = (yearlyBalance < 0 ? '-' : '+') + Math.abs(yearlyBalance).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                yearTotalEl.style.color = yearlyBalance < 0 ? 'var(--danger)' : 'var(--success)';
+            }
 
             // Apply warning color if budget is exceeded
             const remainingEl = document.getElementById('finRemaining');
             if (remainingEl) {
-                remainingEl.style.color = remaining < 0 ? 'var(--danger)' : 'var(--text-bright)';
+                remainingEl.style.color = remainingBudget < 0 ? 'var(--danger)' : 'var(--text-bright)';
             }
 
-            // Render Table (Expenses)
+            // Render Table
             const sorted = [...app.state.finance].sort((a, b) => new Date(b.date) - new Date(a.date));
             tableBody.innerHTML = sorted.map(e => `
                 <tr class="contact-row">
                     <td>${new Date(e.date).toLocaleDateString('de-DE')}</td>
                     <td>${e.source}</td>
-                    <td class="text-danger" style="font-weight:600;">- ${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</td>
+                    <td class="${e.type === 'income' ? 'text-success' : 'text-danger'}" style="font-weight:600;">
+                        ${e.type === 'income' ? '+' : '-'} ${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                    </td>
                     <td>
                         <button class="btn-icon-danger" onclick="app.finance.deleteEntry('${e.id}')">
                             <i data-lucide="trash-2" size="16"></i>
@@ -2129,10 +2157,6 @@ const app = {
             const ctx = document.getElementById('financeChart');
             if (!ctx) return;
 
-            // Simplified data for a round (doughnut) chart
-            // Categories: Needs, Wants, Savings (or based on source)
-            // For now, let's group by source or just show a breakdown of expenses vs budget
-
             const now = new Date();
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
@@ -2142,7 +2166,7 @@ const app = {
 
             app.state.finance.forEach(e => {
                 const d = new Date(e.date);
-                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth && e.type !== 'income') {
                     monthlyExpenses += e.amount;
                     sourceTotals[e.source] = (sourceTotals[e.source] || 0) + e.amount;
                 }
@@ -2154,7 +2178,7 @@ const app = {
 
             // Add remaining budget as a segment
             if (remaining > 0) {
-                labels.push('Verbleibend');
+                labels.push('Budget Frei');
                 values.push(remaining);
             }
 
@@ -2168,7 +2192,7 @@ const app = {
                         data: values,
                         backgroundColor: [
                             '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6',
-                            '#ec4899', '#64748b', '#22c55e', '#eab308'
+                            '#ec4899', '#64748b', '#22c55e', '#eab308', '#a1a1aa'
                         ],
                         borderWidth: 0,
                         hoverOffset: 10
@@ -2185,6 +2209,14 @@ const app = {
                                 color: '#94a3b8',
                                 usePointStyle: true,
                                 padding: 20
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    const val = context.raw;
+                                    return `${context.label}: ${val.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}`;
+                                }
                             }
                         }
                     }
@@ -2501,12 +2533,12 @@ const app = {
                 <div class="card glass collapsible-card">
                     <div class="card-header-toggle" onclick="app.toggleCard(this)">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <h3>Ausgabe hinzufügen</h3>
+                            <h3>Eintrag hinzufügen</h3>
                             <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
                         </div>
                     </div>
                     <div class="card-content">
-                        <form onsubmit="app.finance.addQuick(event)" style="display: flex; flex-direction: column; gap: 12px;">
+                        <form onsubmit="app.finance.saveQuickAdd(event)" style="display: flex; flex-direction: column; gap: 12px;">
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                                 <div class="form-group" style="margin: 0;">
                                     <label style="font-size: 0.85rem; margin-bottom: 4px; display: block;">Betrag (€)</label>
@@ -2519,10 +2551,20 @@ const app = {
                                         style="width: 100%; padding: 10px; background: var(--bg-solid-2); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main);">
                                 </div>
                             </div>
-                            <div class="form-group" style="margin: 0;">
-                                <label style="font-size: 0.85rem; margin-bottom: 4px; display: block;">Beschreibung / Zweck</label>
-                                <input type="text" id="quickFinDesc" placeholder="z.B. Lebensmittel, Miete, Hobby..." required
-                                    style="width: 100%; padding: 10px; background: var(--bg-solid-2); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main);">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div class="form-group" style="margin: 0;">
+                                    <label style="font-size: 0.85rem; margin-bottom: 4px; display: block;">Typ</label>
+                                    <select id="quickFinType" 
+                                        style="width: 100%; padding: 10px; background: var(--bg-solid-2); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main);">
+                                        <option value="expense">Ausgabe</option>
+                                        <option value="income">Einnahme</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin: 0;">
+                                    <label style="font-size: 0.85rem; margin-bottom: 4px; display: block;">Beschreibung</label>
+                                    <input type="text" id="quickFinSource" placeholder="z.B. Miete..." required
+                                        style="width: 100%; padding: 10px; background: var(--bg-solid-2); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main);">
+                                </div>
                             </div>
                             <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700;">
                                 <i data-lucide="plus" size="18"></i> Eintragen
@@ -2580,58 +2622,76 @@ const app = {
             const now = new Date();
             const todayStr = now.toISOString().split('T')[0];
 
-            // 1. Daily Expenses
+            // 1. Daily Expenses (only expenses)
             let dailyExpenses = 0;
-            this.state.finance.forEach(e => { if (e.date === todayStr) dailyExpenses += e.amount; });
+            this.state.finance.forEach(e => {
+                if (e.date === todayStr && e.type !== 'income') dailyExpenses += e.amount;
+            });
 
-            // 2. Budget Progress
+            // 2. Budget Progress (only expenses)
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
             let monthlyExpenses = 0;
             this.state.finance.forEach(e => {
                 const d = new Date(e.date);
-                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) monthlyExpenses += e.amount;
+                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth && e.type !== 'income') {
+                    monthlyExpenses += e.amount;
+                }
             });
-            const budgetPercent = Math.min(100, Math.round((monthlyExpenses / this.state.monthlyBudget) * 100));
-            const isOverBudget = monthlyExpenses > this.state.monthlyBudget;
+            const budgetPercent = this.state.monthlyBudget > 0 ? Math.min(100, Math.round((monthlyExpenses / this.state.monthlyBudget) * 100)) : 0;
+            const isOverBudget = this.state.monthlyBudget > 0 && monthlyExpenses > this.state.monthlyBudget;
 
             // 3. Next Appointment
             const futureEvents = this.getFilteredEvents().filter(e => e.date >= todayStr && e.category !== 'holiday').sort((a, b) => a.date.localeCompare(b.date) || (a.time || '00:00').localeCompare(b.time || '00:00'));
             const nextEvent = futureEvents[0];
 
             budgetWidget.innerHTML = `
-            <div class="metric-container animate-in">
-                <!-- KPI 1: Expenses Today -->
-                <div class="metric-card" onclick="app.navigateTo('finance')">
-                    <div class="metric-label"><i data-lucide="credit-card" size="14"></i> Ausgaben Heute</div>
-                    <div class="metric-value">${dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
-                    <div class="metric-trend ${dailyExpenses > 0 ? 'down' : ''}">
-                        <i data-lucide="${dailyExpenses > 0 ? 'trending-up' : 'check'}" size="14"></i>
-                        ${dailyExpenses > 0 ? 'Erfasst am ' + now.toLocaleDateString('de-DE') : 'Alles im Griff'}
+            <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOverBudget ? 'rgba(239, 68, 68, 0.4)' : 'var(--glass-border)'}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
+                <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="icon-circle" style="background: ${isOverBudget ? 'rgba(239,68,68,0.1)' : 'rgba(var(--primary-rgb), 0.1)'}; color: ${isOverBudget ? '#ef4444' : 'var(--primary)'}; width: 36px; height: 36px; border-radius: 10px;">
+                            <i data-lucide="wallet" size="18"></i>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 1rem; margin: 0;">Finanz-Status</h3>
+                            <small style="color: var(--text-muted);">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <button class="btn-text highlight" style="font-size: 0.75rem; padding: 5px 10px; background: rgba(var(--primary-rgb), 0.1); border-radius: 8px;" onclick="event.stopPropagation(); app.finance.openQuickAdd()">
+                            <i data-lucide="plus-circle" size="14"></i> Eintrag
+                        </button>
+                        <div style="text-align: right;" class="hide-on-collapse">
+                            <div style="font-size: 1.1rem; font-weight: 800; color: ${isOverBudget ? '#ef4444' : 'var(--text-main)'};">
+                                ${(this.state.monthlyBudget - monthlyExpenses).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
                     </div>
                 </div>
+                
+                <div class="card-content">
+                    <!-- Additional KPIs Row -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; margin-bottom: 15px;">
+                        <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Ausgaben Heute</small>
+                            <div style="font-weight: 700; color: var(--danger);">${dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Nächster Termin</small>
+                            <div style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.85rem; color: var(--primary);">
+                                ${nextEvent ? nextEvent.title : 'Keine Termine'}
+                            </div>
+                        </div>
+                    </div>
 
-                <!-- KPI 2: Next Event -->
-                <div class="metric-card" onclick="app.navigateTo('calendar')">
-                    <div class="metric-label"><i data-lucide="calendar" size="14"></i> Nächster Termin</div>
-                    <div class="metric-value" style="font-size: 1.1rem; min-height: 2.22rem; display: flex; align-items: center; color: var(--primary);">
-                        ${nextEvent ? nextEvent.title : 'Keine Termine'}
+                    <!-- Progress Section -->
+                    <div style="height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden;">
+                        <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? '#ef4444' : 'var(--primary)'}; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
                     </div>
-                    <div class="metric-trend">
-                        <i data-lucide="clock" size="14"></i>
-                        ${nextEvent ? (nextEvent.date === todayStr ? 'Heute' : new Date(nextEvent.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })) + (nextEvent.time ? ' um ' + nextEvent.time : '') : 'Entspanne dich'}
-                    </div>
-                </div>
-
-                <!-- KPI 3: Budget Usage -->
-                <div class="metric-card" onclick="app.navigateTo('finance')">
-                    <div class="metric-label"><i data-lucide="pie-chart" size="14"></i> Budget-Nutzung</div>
-                    <div class="metric-value">${budgetPercent}%</div>
-                    <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin: 4px 0;">
-                        <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? 'var(--danger)' : 'var(--primary)'}; transition: width 1s ease;"></div>
-                    </div>
-                    <div class="metric-trend ${isOverBudget ? 'down' : 'up'}" style="font-size: 0.75rem;">
-                         ${isOverBudget ? 'Über Limit!' : (this.state.monthlyBudget - monthlyExpenses).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }) + ' übrig'}
+                    <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted);">
+                        <span>Ausgegeben: ${monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        <span>Ziel: ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
                     </div>
                 </div>
             </div>
@@ -5621,57 +5681,6 @@ const app = {
                 utterance.rate = 1.0;
                 window.speechSynthesis.speak(utterance);
             }
-        }
-    },
-
-    finance: {
-        addQuick(event) {
-            event.preventDefault();
-
-            const amount = parseFloat(document.getElementById('quickFinAmount').value);
-            const date = document.getElementById('quickFinDate').value;
-            const desc = document.getElementById('quickFinDesc').value;
-
-            if (!amount || !date || !desc) {
-                alert('Bitte alle Felder ausfüllen!');
-                return;
-            }
-
-            const entry = {
-                id: Date.now().toString(),
-                amount: -Math.abs(amount), // Negative for expense
-                date: date,
-                description: desc,
-                timestamp: new Date().toISOString()
-            };
-
-            app.state.finance.push(entry);
-            app.saveLocal();
-            app.sync.push();
-
-            // Reset form
-            document.getElementById('quickFinAmount').value = '';
-            document.getElementById('quickFinDate').value = new Date().toISOString().split('T')[0];
-            document.getElementById('quickFinDesc').value = '';
-
-            // Show success feedback
-            const btn = event.target.querySelector('button[type="submit"]');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i data-lucide="check" size="18"></i> Gespeichert!';
-            btn.style.background = 'var(--success)';
-
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.style.background = '';
-                if (window.lucide) lucide.createIcons();
-            }, 2000);
-
-            // Refresh dashboard if visible
-            if (app.state.view === 'dashboard') {
-                app.renderDashboard();
-            }
-
-            if (window.lucide) lucide.createIcons();
         }
     },
 
