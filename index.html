@@ -134,7 +134,14 @@
             <!-- Mobile Header (Minimalist) -->
             <header class="top-bar mobile-only"
                 style="justify-content: space-between; align-items: center; display: flex; padding: 10px 20px;">
-                <div style="font-weight: 800; font-size: 1.2rem; color: var(--primary);">Pear</div>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button id="mobileMenuBtn" class="icon-btn" title="Menü öffnen"
+                        onclick="document.getElementById('sidebar').classList.add('active')"
+                        style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 38px; height: 38px;">
+                        <i data-lucide="menu" size="20"></i>
+                    </button>
+                    <div style="font-weight: 800; font-size: 1.2rem; color: var(--primary);">Pear</div>
+                </div>
 
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <button id="mobileSyncBtn" class="icon-btn hidden" title="Jetzt synchronisieren"
