@@ -1042,6 +1042,37 @@
                     </div>
                 </div>
 
+                <div class="card glass animate-in collapsible-card" style="margin-bottom: 25px;">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <h3>App installieren & Teilen 📱</h3>
+                        <i data-lucide="chevron-down" class="toggle-icon"></i>
+                    </div>
+                    <div class="card-content">
+                        <p class="text-muted" style="margin-bottom: 20px;">Installiere Pear als App auf deinem Startbildschirm oder sende sie an Freunde & Familie.</p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <button id="pwaInstallBtn" class="btn-primary w-full" onclick="app.installApp()" style="display: none; height: 55px; border-radius: 16px; font-weight: 700;">
+                                <i data-lucide="download"></i> PEAR APP INSTALLIEREN
+                            </button>
+
+                            <button class="btn-outline w-full" onclick="app.shareApp()" style="height: 55px; border-radius: 16px; font-weight: 600; background: rgba(var(--primary-rgb), 0.1);">
+                                <i data-lucide="share-2"></i> App mit anderen teilen
+                            </button>
+
+                            <div style="background: rgba(var(--secondary-rgb), 0.05); padding: 15px; border-radius: 16px; border: 1px solid var(--glass-border);">
+                                <h4 style="font-size: 0.9rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                                    <i data-lucide="smartphone"></i> Manuelle Installation
+                                </h4>
+                                <ol style="padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 5px;">
+                                    <li>Öffne Pear in deinem Browser (Chrome/Safari).</li>
+                                    <li>Tippe auf das <b>Teilen-Icon</b> (iOS) oder die <b>drei Punkte</b> (Android).</li>
+                                    <li>Wähle <b>"Zum Home-Bildschirm hinzufügen"</b>.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Copyright Notice -->
                 <div class="card glass animate-in"
                     style="margin-bottom: 25px; border: 2px solid rgba(var(--primary-rgb), 0.3); background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(var(--secondary-rgb), 0.05));">

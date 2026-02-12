@@ -66,7 +66,8 @@ const app = {
             'quick_finance': true,
             'events': true,
             'mini_calendar': true
-        }
+        },
+        deferredPrompt: null
     },
 
 
@@ -139,6 +140,15 @@ const app = {
                     }, 600);
                 }
             }, 2000);
+
+            // Listen for PWA installation prompt
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                this.state.deferredPrompt = e;
+                console.log("PWA Prompt saved. Ready for installation.");
+                const installBtn = document.getElementById('pwaInstallBtn');
+                if (installBtn) installBtn.style.display = 'flex';
+            });
         }
     },
 
@@ -164,14 +174,45 @@ const app = {
             navigator.serviceWorker.ready.then(registration => {
                 registration.showNotification(title, {
                     body: body,
-                    icon: 'icon.png',
-                    badge: 'icon.png',
+                    icon: 'icon-192.png',
+                    badge: 'icon-192.png',
                     data: { url: url }
                 });
             });
         } else {
             // Fallback to simple browser notification
-            new Notification(title, { body: body, icon: 'icon.png' });
+            new Notification(title, { body: body, icon: 'icon-192.png' });
+        }
+    },
+
+    async installApp() {
+        if (!this.state.deferredPrompt) {
+            alert("Die App kann momentan nicht direkt installiert werden. Nutze 'Zum Home-Bildschirm hinzufügen' in deinem Browser-Menü.");
+            return;
+        }
+        this.state.deferredPrompt.prompt();
+        const { outcome } = await this.state.deferredPrompt.userChoice;
+        console.log(`User response to install prompt: ${outcome}`);
+        this.state.deferredPrompt = null;
+        const installBtn = document.getElementById('pwaInstallBtn');
+        if (installBtn) installBtn.style.display = 'none';
+    },
+
+    async shareApp() {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Pear Organizer',
+                    text: 'Schau dir diesen genialen Team-Organizer an!',
+                    url: window.location.href
+                });
+            } catch (err) {
+                console.error('Sharing failed', err);
+            }
+        } else {
+            // Fallback: Copy to clipboard
+            navigator.clipboard.writeText(window.location.href);
+            alert("Link in die Zwischenablage kopiert! Du kannst ihn jetzt versenden.");
         }
     },
 
