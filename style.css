@@ -5122,7 +5122,8 @@ body {
     align-items: center;
     justify-content: center;
     color: var(--primary);
-    transition: var(--transition);
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
 }
 
 .night-overlay.hidden {
@@ -5130,19 +5131,22 @@ body {
 }
 
 .night-clock-large {
-    font-size: 25vw;
+    font-size: 28vw;
     font-weight: 800;
     line-height: 1;
     font-variant-numeric: tabular-nums;
     text-shadow: 0 0 30px rgba(var(--primary-rgb), 0.3);
     cursor: default;
+    white-space: nowrap;
+    /* Prevent wrapping */
 }
 
 .night-clock-date {
-    font-size: 3vw;
+    font-size: 5vw;
     font-weight: 500;
     opacity: 0.6;
     margin-top: 20px;
+    white-space: nowrap;
 }
 
 .night-close-btn {
@@ -5179,15 +5183,16 @@ body {
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 25px;
+    gap: 20px;
     align-items: center;
     background: rgba(255, 255, 255, 0.05);
-    padding: 12px 25px;
+    padding: 10px 20px;
     border-radius: 40px;
     opacity: 0;
     transition: all 0.3s ease;
     border: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
+    z-index: 10002;
 }
 
 .night-overlay:hover .night-controls,
@@ -5198,7 +5203,7 @@ body {
 .control-group {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     color: white;
 }
 
@@ -5211,36 +5216,28 @@ body {
 
 /* --- NIGHT CLOCK ORIENTATION MODES --- */
 
-/* 1. Base Portrait Mode (Default) */
-.night-clock-large {
-    font-size: 28vw;
-    transition: font-size 0.3s ease;
-}
+/* 1. Base Portrait Mode (Default) - Handled above */
 
-.night-clock-date {
-    font-size: 5vw;
-    white-space: nowrap;
-}
-
-/* 2. Physical Landscape Mode */
+/* 2. Physical Landscape Mode (When phone is actually rotated) */
 @media (orientation: landscape) {
     .night-overlay {
         flex-direction: row;
-        gap: 5vw;
+        gap: 8vw;
     }
 
     .night-clock-large {
-        font-size: 30vh;
+        font-size: 35vh;
+        /* Bigger in landscape */
     }
 
     .night-clock-date {
         font-size: 6vh;
         margin-top: 0;
+        writing-mode: horizontal-tb;
     }
 
     .night-controls {
         bottom: 20px;
-        padding: 8px 20px;
     }
 
     .night-close-btn {
@@ -5251,32 +5248,59 @@ body {
     }
 }
 
-/* 3. Manual Wide/Bedside Mode (User Preference) */
+/* 3. Manual Bedside (Nachttisch) Mode - Forced Landscape */
 .night-overlay.is-landscape-forced {
-    /* We no longer rotate the whole screen as it disrupts OS behavior and layout */
-    /* Instead, we optimize the layout for a "Bedside" experience */
     flex-direction: column;
     justify-content: center;
+    gap: 3vh;
 }
 
-.night-overlay.is-landscape-forced .night-clock-large {
-    font-size: 32vw;
-    letter-spacing: -2px;
+/* On Mobile portrait, rotate the content 90deg for bedside placement */
+@media (max-width: 600px) and (orientation: portrait) {
+    .night-overlay.is-landscape-forced {
+        width: 100vh !important;
+        height: 100vw !important;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(90deg);
+        overflow: hidden;
+    }
+
+    .night-overlay.is-landscape-forced .night-clock-large {
+        font-size: 26vh;
+        /* Scaled to fit comfortably across the width */
+        margin: 0;
+        line-height: 1;
+    }
+
+    .night-overlay.is-landscape-forced .night-clock-date {
+        font-size: 7vh;
+        margin-top: 2vh;
+        opacity: 0.6;
+    }
+
+    .night-overlay.is-landscape-forced .night-hint {
+        display: none;
+    }
+
+    .night-overlay.is-landscape-forced .night-close-btn {
+        top: 20px;
+        right: 20px;
+        width: 44px;
+        height: 44px;
+    }
 }
 
-.night-overlay.is-landscape-forced .night-clock-date {
-    font-size: 6vw;
-    color: var(--primary);
-    opacity: 0.8;
-}
+
 
 /* Special fix for very small phones */
 @media (max-width: 400px) {
     .night-clock-large {
-        font-size: 35vw;
+        font-size: 26vw;
     }
 
     .night-clock-date {
-        font-size: 6vw;
+        font-size: 5vw;
     }
 }
