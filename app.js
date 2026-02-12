@@ -1159,6 +1159,7 @@ const app = {
 
             incoming.finance.forEach(incFin => {
                 const local = localFinMap.get(incFin.id);
+                // Respect soft deletes: don't re-add if we have a newer local tombstone
                 const incUpd = incFin.updatedAt || incFin.createdAt || 1;
                 const localUpd = local ? (local.updatedAt || local.createdAt || 0) : -1;
 
@@ -1168,7 +1169,7 @@ const app = {
                 }
             });
 
-            // Remove local items missing in incoming
+            // Remove local items missing in incoming (Hard delete propagation)
             this.state.finance.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -2029,19 +2030,27 @@ const app = {
 
         deleteEntry(id) {
             if (confirm("Eintrag wirklich löschen?")) {
-                app.state.finance = app.state.finance.filter(e => e.id !== id);
-                app.saveLocal();
-                this.render();
-                if (app.sync && app.sync.push) app.sync.push();
+                const entry = app.state.finance.find(e => e.id === id);
+                if (entry) {
+                    entry.deleted = true;
+                    entry.updatedAt = Date.now();
+                    app.saveLocal();
+                    if (app.sync && app.sync.push) app.sync.push();
+                    this.render();
+                }
             }
         },
 
         clearAll() {
             if (confirm('Möchtest du wirklich den gesamten Finanzverlauf löschen?')) {
-                app.state.finance = [];
+                const now = Date.now();
+                app.state.finance.forEach(e => {
+                    e.deleted = true;
+                    e.updatedAt = now;
+                });
                 app.saveLocal();
-                this.render();
                 if (app.sync && app.sync.push) app.sync.push();
+                this.render();
             }
         },
 
@@ -2073,6 +2082,7 @@ const app = {
             let yearlyBalance = 0;
 
             app.state.finance.forEach(e => {
+                if (e.deleted) return;
                 const d = new Date(e.date);
                 const time = d.getTime();
                 const isIncome = e.type === 'income';
@@ -2132,8 +2142,10 @@ const app = {
                 remainingEl.style.color = remainingBudget < 0 ? 'var(--danger)' : 'var(--text-bright)';
             }
 
-            // Render Table
-            const sorted = [...app.state.finance].sort((a, b) => new Date(b.date) - new Date(a.date));
+            // Render Table (Filter out deleted entries)
+            const sorted = [...app.state.finance]
+                .filter(e => !e.deleted)
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
             tableBody.innerHTML = sorted.map(e => `
                 <tr class="contact-row">
                     <td>${new Date(e.date).toLocaleDateString('de-DE')}</td>
@@ -2165,6 +2177,7 @@ const app = {
             const sourceTotals = {};
 
             app.state.finance.forEach(e => {
+                if (e.deleted) return;
                 const d = new Date(e.date);
                 if (d.getFullYear() === currentYear && d.getMonth() === currentMonth && e.type !== 'income') {
                     monthlyExpenses += e.amount;
@@ -2488,12 +2501,14 @@ const app = {
             'events': `
                 <div class="card glass next-events collapsible-card is-collapsed">
                     <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <h3>Termine & Wichtiges</h3>
-                            <span id="eventCountBadge" style="background: rgba(var(--primary-rgb), 0.15); color: var(--primary); padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;">0</span>
+                        <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+                            <h3 style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin:0;">Termine & Wichtiges</h3>
+                            <span id="eventCountBadge" style="background: rgba(var(--primary-rgb), 0.15); color: var(--primary); padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; flex-shrink:0;">0</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                            <button class="btn-text" style="font-size: 0.75rem; padding: 4px 8px;" onclick="event.stopPropagation(); app.navigateTo('calendar')">Alle ansehen</button>
                             <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
                         </div>
-                        <button class="btn-text" onclick="event.stopPropagation(); app.navigateTo('calendar')">Alle ansehen</button>
                     </div>
                     <div class="card-content" style="display: flex; flex-direction: column; gap: 15px;">
                         <!-- Urgent Section -->
@@ -2625,7 +2640,7 @@ const app = {
             // 1. Daily Expenses (only expenses)
             let dailyExpenses = 0;
             this.state.finance.forEach(e => {
-                if (e.date === todayStr && e.type !== 'income') dailyExpenses += e.amount;
+                if (!e.deleted && e.date === todayStr && e.type !== 'income') dailyExpenses += e.amount;
             });
 
             // 2. Budget Progress (only expenses)
@@ -2633,6 +2648,7 @@ const app = {
             const currentYear = now.getFullYear();
             let monthlyExpenses = 0;
             this.state.finance.forEach(e => {
+                if (e.deleted) return;
                 const d = new Date(e.date);
                 if (d.getFullYear() === currentYear && d.getMonth() === currentMonth && e.type !== 'income') {
                     monthlyExpenses += e.amount;
@@ -2648,21 +2664,21 @@ const app = {
             budgetWidget.innerHTML = `
             <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOverBudget ? 'rgba(239, 68, 68, 0.4)' : 'var(--glass-border)'}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
                 <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="icon-circle" style="background: ${isOverBudget ? 'rgba(239,68,68,0.1)' : 'rgba(var(--primary-rgb), 0.1)'}; color: ${isOverBudget ? '#ef4444' : 'var(--primary)'}; width: 36px; height: 36px; border-radius: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+                        <div class="icon-circle" style="background: ${isOverBudget ? 'rgba(239,68,68,0.1)' : 'rgba(var(--primary-rgb), 0.1)'}; color: ${isOverBudget ? '#ef4444' : 'var(--primary)'}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;">
                             <i data-lucide="wallet" size="18"></i>
                         </div>
-                        <div>
-                            <h3 style="font-size: 1rem; margin: 0;">Finanz-Status</h3>
-                            <small style="color: var(--text-muted);">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
+                        <div style="overflow: hidden;">
+                            <h3 style="font-size: 0.95rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Finanz-Status</h3>
+                            <small style="color: var(--text-muted); white-space: nowrap; font-size: 0.75rem;">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
                         </div>
                     </div>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <button class="btn-text highlight" style="font-size: 0.75rem; padding: 5px 10px; background: rgba(var(--primary-rgb), 0.1); border-radius: 8px;" onclick="event.stopPropagation(); app.finance.openQuickAdd()">
-                            <i data-lucide="plus-circle" size="14"></i> Eintrag
+                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                        <button class="btn-text highlight" style="font-size: 0.7rem; padding: 5px 10px; background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; white-space: nowrap; display: flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); app.finance.openQuickAdd()">
+                            <i data-lucide="plus-circle" size="12"></i> <span class="mobile-hide-text">Eintrag</span>
                         </button>
                         <div style="text-align: right;" class="hide-on-collapse">
-                            <div style="font-size: 1.1rem; font-weight: 800; color: ${isOverBudget ? '#ef4444' : 'var(--text-main)'};">
+                            <div style="font-size: 1rem; font-weight: 800; color: ${isOverBudget ? '#ef4444' : 'var(--text-main)'}; white-space: nowrap;">
                                 ${(this.state.monthlyBudget - monthlyExpenses).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                             </div>
                         </div>
