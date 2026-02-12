@@ -57,6 +57,7 @@ const app = {
         isNightLandscape: localStorage.getItem('moltbot_night_landscape') === 'true',
         isAutoNightclockEnabled: localStorage.getItem('moltbot_auto_nightclock') === 'true',
         isWakeLockPersistent: localStorage.getItem('moltbot_wakelock_persistent') === 'true',
+        isWakeWordEnabled: localStorage.getItem('moltbot_wake_word_enabled') === 'true',
         widgetOrder: JSON.parse(localStorage.getItem('moltbot_widget_order')) || ['special', 'drive', 'kpis', 'quick_finance', 'events', 'mini_calendar'],
         widgetVisibility: JSON.parse(localStorage.getItem('moltbot_widgets')) || {
             'special': true,
@@ -112,6 +113,12 @@ const app = {
 
             // Initial Render & Navigation
             this.handleInitialNavigation();
+
+            // Start Wake Word if enabled
+            if (this.state.isWakeWordEnabled) {
+                this.voice.init();
+                this.voice.startWakeWord();
+            }
 
             // Start Departure Reminders Check (every minute)
             setInterval(() => this.checkDepartureReminders(), 60000);
@@ -1625,7 +1632,15 @@ const app = {
                 addContactBtn.style.display = (page === 'contacts') ? 'flex' : 'none';
             }
 
-            if (page === 'settings') this.renderWidgetSettings();
+            if (page === 'settings') {
+                this.renderWidgetSettings();
+
+                // Update wake word toggle state
+                const wakeWordToggle = document.getElementById('wakeWordToggle');
+                if (wakeWordToggle) {
+                    wakeWordToggle.checked = this.state.isWakeWordEnabled;
+                }
+            }
 
             this.render();
 
@@ -5207,7 +5222,9 @@ const app = {
     // --- VOICE CONTROL MODULE ---
     voice: {
         recognition: null,
+        wakeWordRecognition: null,
         isListening: false,
+        isWakeWordActive: false,
 
         init() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -5216,6 +5233,7 @@ const app = {
                 return;
             }
 
+            // Main recognition for commands
             this.recognition = new SpeechRecognition();
             this.recognition.lang = 'de-DE';
             this.recognition.interimResults = true;
@@ -5249,7 +5267,101 @@ const app = {
 
             this.recognition.onend = () => {
                 this.isListening = false;
+                // Restart wake word listening after command is done
+                if (this.isWakeWordActive) {
+                    setTimeout(() => this.startWakeWord(), 500);
+                }
             };
+
+            // Wake Word Recognition (continuous listening for "Pear")
+            this.wakeWordRecognition = new SpeechRecognition();
+            this.wakeWordRecognition.lang = 'de-DE';
+            this.wakeWordRecognition.interimResults = true;
+            this.wakeWordRecognition.continuous = true; // Keep listening
+
+            this.wakeWordRecognition.onresult = (event) => {
+                const transcript = Array.from(event.results)
+                    .map(result => result[0])
+                    .map(result => result.transcript)
+                    .join('').toLowerCase();
+
+                // Check for wake word "pear" or "peer" or "pir"
+                if (transcript.includes('pear') || transcript.includes('peer') || transcript.includes('pir') || transcript.includes('pia')) {
+                    console.log("Wake word detected:", transcript);
+                    this.wakeWordRecognition.stop();
+
+                    // Play activation sound
+                    this.playActivationSound();
+
+                    // Start main recognition
+                    setTimeout(() => this.start(), 300);
+                }
+            };
+
+            this.wakeWordRecognition.onerror = (e) => {
+                if (e.error !== 'no-speech' && e.error !== 'aborted') {
+                    console.error("Wake Word Recognition Error:", e);
+                }
+                // Auto-restart on error
+                if (this.isWakeWordActive) {
+                    setTimeout(() => this.startWakeWord(), 1000);
+                }
+            };
+
+            this.wakeWordRecognition.onend = () => {
+                // Auto-restart wake word listening
+                if (this.isWakeWordActive && !this.isListening) {
+                    setTimeout(() => this.startWakeWord(), 500);
+                }
+            };
+        },
+
+        startWakeWord() {
+            if (!this.wakeWordRecognition) this.init();
+            if (this.wakeWordRecognition && !this.isListening) {
+                try {
+                    this.isWakeWordActive = true;
+                    app.state.isWakeWordEnabled = true;
+                    localStorage.setItem('moltbot_wake_word_enabled', 'true');
+                    this.wakeWordRecognition.start();
+                    console.log("Wake word listening started...");
+                } catch (e) {
+                    console.error("Wake word start error:", e);
+                }
+            }
+        },
+
+        stopWakeWord() {
+            this.isWakeWordActive = false;
+            app.state.isWakeWordEnabled = false;
+            localStorage.setItem('moltbot_wake_word_enabled', 'false');
+            if (this.wakeWordRecognition) {
+                try {
+                    this.wakeWordRecognition.stop();
+                    console.log("Wake word listening stopped.");
+                } catch (e) {
+                    console.error("Wake word stop error:", e);
+                }
+            }
+        },
+
+        playActivationSound() {
+            // Play a short beep to indicate activation
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
         },
 
         start() {

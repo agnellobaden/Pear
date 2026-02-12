@@ -991,6 +991,29 @@
                                     style="width: 100%;">
                             </div>
 
+                            <div
+                                style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--glass-border);">
+                                <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                                    <i data-lucide="mic" size="18"></i> Sprachsteuerung
+                                </h4>
+                                <label
+                                    style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255,255,255,0.03); border-radius: 12px; cursor: pointer; border: 1px solid var(--glass-border);">
+                                    <div>
+                                        <div style="font-weight: 600; margin-bottom: 4px;">"Hey Pear" Aktivierung</div>
+                                        <div style="font-size: 0.85rem; color: var(--text-muted);">Kontinuierliches
+                                            Hören auf das Wake Word</div>
+                                    </div>
+                                    <input type="checkbox" id="wakeWordToggle"
+                                        onchange="if(this.checked) { app.voice.startWakeWord(); } else { app.voice.stopWakeWord(); }"
+                                        style="width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer;">
+                                </label>
+                                <p
+                                    style="font-size: 0.75rem; color: var(--text-muted); margin-top: 10px; font-style: italic;">
+                                    💡 Wenn aktiviert, hört die App kontinuierlich auf "Pear" und aktiviert dann die
+                                    Sprachsteuerung automatisch.
+                                </p>
+                            </div>
+
                             <button class="btn-outline" onclick="app.resetVisuals()"
                                 style="margin-top: 15px; border-color: var(--danger); color: var(--danger);">
                                 <i data-lucide="rotate-ccw"></i> Einstellungen zurücksetzen
