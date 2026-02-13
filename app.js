@@ -2592,11 +2592,12 @@ const app = {
                 else plannedFixedExpenses += f.amount;
             });
 
-            // "Netto" calculation: Actual Income - Planned Fixed Expenses
-            const nettoRemaining = monthlyIncome - plannedFixedExpenses;
+            // "Netto" calculation based on MASTER PLAN (Templates)
+            const nettoPlan = plannedFixedIncome - plannedFixedExpenses;
 
-            // "Verfügbar" calculation: Netto - Already spent variable costs - Savings Goal
-            const totalAvailable = nettoRemaining - variableExpenses - app.state.savingsGoal;
+            // "Verfügbar" calculation: Planned Netto - Already spent variable costs - Savings Goal
+            // This tells the user how much of their PLANNED profit is still left after daily spending
+            const totalAvailable = nettoPlan - variableExpenses - app.state.savingsGoal;
 
             // Intelligent Daily Budget Calculation
             const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -2612,7 +2613,8 @@ const app = {
             }
 
             if (document.getElementById('finTotalIncome')) {
-                document.getElementById('finTotalIncome').textContent = monthlyIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                // Now showing the PLANNED income from fixed costs list
+                document.getElementById('finTotalIncome').textContent = plannedFixedIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
             }
             if (document.getElementById('finTotalExpenses')) {
                 document.getElementById('finTotalExpenses').textContent = monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -2620,14 +2622,15 @@ const app = {
             if (document.getElementById('finVariableExpenses')) {
                 document.getElementById('finVariableExpenses').textContent = variableExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
             }
-            if (document.getElementById('finFixedPlan')) {
-                document.getElementById('finFixedPlan').textContent = '-' + plannedFixedExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-                document.getElementById('finFixedPlan').style.color = 'var(--danger)';
+            if (document.getElementById('finFixedPlanDisplay')) {
+                document.getElementById('finFixedPlanDisplay').textContent = '-' + plannedFixedExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                document.getElementById('finFixedPlanDisplay').style.color = 'var(--danger)';
             }
             if (document.getElementById('finNetto')) {
                 const nettoEl = document.getElementById('finNetto');
-                nettoEl.textContent = (nettoRemaining < 0 ? '-' : '+') + Math.abs(nettoRemaining).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-                nettoEl.style.color = nettoRemaining < 0 ? 'var(--danger)' : 'var(--success)';
+                // Now showing the fixed Netto from the plan
+                nettoEl.textContent = (nettoPlan < 0 ? '-' : '+') + Math.abs(nettoPlan).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                nettoEl.style.color = nettoPlan < 0 ? 'var(--danger)' : 'var(--success)';
             }
             if (document.getElementById('finSavingsGoal')) {
                 document.getElementById('finSavingsGoal').textContent = app.state.savingsGoal.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -2797,11 +2800,24 @@ const app = {
 
             if (!name || isNaN(amount)) return;
 
+            // 1. Vorlage erstellen
             app.state.fixedCosts.push({
                 id: Date.now().toString(),
                 name,
                 amount,
                 type
+            });
+
+            // 2. Sofort für den aktuellen Monat buchen
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            app.state.finance.push({
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                amount: amount,
+                date: dateStr,
+                type: type,
+                source: `FIX: ${name}`,
+                createdAt: Date.now()
             });
 
             app.saveLocal();
@@ -2811,7 +2827,7 @@ const app = {
             document.getElementById('fixedCostAmount').value = '';
 
             app.render();
-            app.notify("Fixkosten-Vorlage gespeichert", "Die Vorlage wurde erstellt.", "success");
+            app.notify("Fixkosten gespeichert", "Vorlage erstellt und für diesen Monat gebucht.", "success");
         },
 
         createBaseTemplates() {
@@ -2953,30 +2969,52 @@ const app = {
                 return;
             }
 
-            if (!confirm(`Möchtest du alle ${app.state.fixedCosts.length} Fixkosten für den aktuellen Monat buchen?`)) return;
+            if (!confirm(`Möchtest du deinen Finanzplan für diesen Monat aktualisieren? Bestehende Buchungen werden aktualisiert, fehlende werden hinzugefügt.`)) return;
 
             const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
             const dateStr = now.toISOString().split('T')[0];
-            const entriesAdded = [];
+
+            let updatedCount = 0;
+            let addedCount = 0;
 
             app.state.fixedCosts.forEach(f => {
-                const entry = {
-                    id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-                    amount: f.amount,
-                    date: dateStr,
-                    type: f.type,
-                    source: `FIX: ${f.name}`,
-                    createdAt: Date.now()
-                };
-                app.state.finance.push(entry);
-                entriesAdded.push(entry);
+                const sourceName = `FIX: ${f.name}`;
+                // Suche nach bestehendem Eintrag diesen Monat
+                const existingEntry = app.state.finance.find(e => {
+                    if (e.deleted) return false;
+                    const d = new Date(e.date);
+                    return d.getMonth() === currentMonth &&
+                        d.getFullYear() === currentYear &&
+                        e.source === sourceName;
+                });
+
+                if (existingEntry) {
+                    // Update
+                    existingEntry.amount = f.amount;
+                    existingEntry.type = f.type;
+                    existingEntry.updatedAt = Date.now();
+                    updatedCount++;
+                } else {
+                    // Neu hinzufügen
+                    app.state.finance.push({
+                        id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                        amount: f.amount,
+                        date: dateStr,
+                        type: f.type,
+                        source: sourceName,
+                        createdAt: Date.now()
+                    });
+                    addedCount++;
+                }
             });
 
             app.saveLocal();
             if (app.sync && app.sync.push) app.sync.push();
 
             app.render();
-            app.notify("Fixkosten gebucht", `${entriesAdded.length} Fixkosten wurden erfolgreich für heute gebucht.`, "success");
+            app.notify("Finanzplan aktualisiert", `${updatedCount} Positionen aktualisiert, ${addedCount} neu hinzugefügt.`, "success");
         },
 
         renderFixedCosts() {
