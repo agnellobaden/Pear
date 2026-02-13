@@ -3604,8 +3604,8 @@ body {
 
 .card-content {
     transition: var(--transition);
-    max-height: 1000px;
-    overflow: hidden;
+    max-height: 5000px;
+    overflow: auto;
     margin-top: 15px;
     opacity: 1;
 }
@@ -3614,6 +3614,7 @@ body {
     max-height: 0;
     margin-top: 0;
     opacity: 0;
+    overflow: hidden;
     pointer-events: none;
 }
 

@@ -2369,7 +2369,7 @@ const app = {
             if (app.sync && app.sync.push) app.sync.push();
 
             document.getElementById('quickExpenseModal').classList.add('hidden');
-            this.render();
+            app.render();
             this.checkBudget(); // Trigger Warning Check
             app.notify(type === 'income' ? "Einnahme gespeichert" : "Ausgabe gespeichert",
                 `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} für ${source} erfasst.`);
@@ -2400,7 +2400,7 @@ const app = {
             document.getElementById('financeForm').reset();
             const dateInput = document.getElementById('finDate');
             if (dateInput) dateInput.valueAsDate = new Date();
-            this.render();
+            app.render();
             this.checkBudget(); // Trigger Warning Check
         },
 
@@ -2411,7 +2411,7 @@ const app = {
                 app.state.savingsGoal = parseFloat(newSavingsGoal) || 0;
                 app.saveLocal();
                 if (app.sync && app.sync.push) app.sync.push();
-                this.render();
+                app.render();
             }
         },
 
@@ -2421,7 +2421,7 @@ const app = {
                 app.state.savingsBalance = parseFloat(newBalanceValue) || 0;
                 app.saveLocal();
                 if (app.sync && app.sync.push) app.sync.push();
-                this.render();
+                app.render();
             }
         },
 
@@ -2431,7 +2431,7 @@ const app = {
                 app.state.savingsBalance += amount;
                 app.saveLocal();
                 if (app.sync && app.sync.push) app.sync.push();
-                this.render();
+                app.render();
                 app.notify("Sparkonto Update", `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} wurden eingezahlt.`);
             }
         },
@@ -2442,7 +2442,7 @@ const app = {
                 const b = parseFloat(newBudget);
                 app.state.monthlyBudget = isNaN(b) ? 0 : b;
                 localStorage.setItem('moltbot_budget', app.state.monthlyBudget);
-                this.render();
+                app.render();
             }
         },
 
@@ -2452,7 +2452,7 @@ const app = {
                 const l = parseFloat(newLimit);
                 app.state.budgetWarningLimit = isNaN(l) ? 0 : l;
                 localStorage.setItem('moltbot_budget_warning', app.state.budgetWarningLimit);
-                this.render();
+                app.render();
             }
         },
 
@@ -2482,7 +2482,7 @@ const app = {
                     entry.updatedAt = Date.now();
                     app.saveLocal();
                     if (app.sync && app.sync.push) app.sync.push();
-                    this.render();
+                    app.render();
                 }
             }
         },
@@ -2504,10 +2504,9 @@ const app = {
             e.date = newDate;
             e.type = newType;
             e.updatedAt = Date.now();
-
             app.saveLocal();
             if (app.sync && app.sync.push) app.sync.push();
-            this.render();
+            app.render();
         },
 
         clearAll() {
@@ -2519,7 +2518,7 @@ const app = {
                 });
                 app.saveLocal();
                 if (app.sync && app.sync.push) app.sync.push();
-                this.render();
+                app.render();
             }
         },
 
@@ -2617,6 +2616,9 @@ const app = {
             }
             if (document.getElementById('finTotalExpenses')) {
                 document.getElementById('finTotalExpenses').textContent = monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+            if (document.getElementById('finVariableExpenses')) {
+                document.getElementById('finVariableExpenses').textContent = variableExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
             }
             if (document.getElementById('finFixedPlan')) {
                 document.getElementById('finFixedPlan').textContent = '-' + plannedFixedExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -2808,8 +2810,8 @@ const app = {
             document.getElementById('fixedCostName').value = '';
             document.getElementById('fixedCostAmount').value = '';
 
-            this.renderFixedCosts();
-            this.showToast("Fixkosten-Vorlage gespeichert", "var(--primary)");
+            app.render();
+            app.notify("Fixkosten-Vorlage gespeichert", "Die Vorlage wurde erstellt.", "success");
         },
 
         createBaseTemplates() {
@@ -2846,7 +2848,7 @@ const app = {
                 app.state.fixedCosts.splice(index, 1);
                 app.saveLocal();
                 if (app.sync && app.sync.push) app.sync.push();
-                this.renderFixedCosts();
+                app.render();
             }
         },
 
@@ -2864,8 +2866,7 @@ const app = {
 
             app.saveLocal();
             if (app.sync && app.sync.push) app.sync.push();
-            this.renderFixedCosts();
-            this.render();
+            app.render();
         },
 
         checkAndApplyAutoFixedCosts() {
@@ -2974,9 +2975,8 @@ const app = {
             app.saveLocal();
             if (app.sync && app.sync.push) app.sync.push();
 
-            this.render();
-            this.renderFixedCosts();
-            alert(`${entriesAdded.length} Fixkosten wurden erfolgreich für heute gebucht.`);
+            app.render();
+            app.notify("Fixkosten gebucht", `${entriesAdded.length} Fixkosten wurden erfolgreich für heute gebucht.`, "success");
         },
 
         renderFixedCosts() {
@@ -3537,10 +3537,10 @@ const app = {
                     </button>
                     
                     <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-                         <div style="text-align: right; margin-right: 5px;">
-                            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">Verfügbar:</div>
+                        <div style="text-align: right; margin-right: 5px;">
+                            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">Verf. für restl. Monat 🗓️:</div>
                             <div style="font-size: 1.1rem; font-weight: 800; color: ${isOverBudget ? '#ef4444' : (isWarning ? '#f59e0b' : 'var(--success)')};">
-                                ${remainingBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                ${totalAvailable.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                             </div>
                         </div>
                         <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
