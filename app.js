@@ -70,7 +70,8 @@ const app = {
         },
         deferredPrompt: null,
         fixedCosts: [],
-        lastFixedCostsMonth: localStorage.getItem('moltbot_last_fixed_month') || ''
+        lastFixedCostsMonth: localStorage.getItem('moltbot_last_fixed_month') || '',
+        savingsBalance: parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0
     },
 
 
@@ -402,6 +403,7 @@ const app = {
         this.state.fixedCosts = safeLoad('moltbot_fixed_costs', []);
         this.state.lastFixedCostsMonth = localStorage.getItem('moltbot_last_fixed_month') || '';
         this.state.savingsGoal = parseFloat(localStorage.getItem('moltbot_savings_goal')) || 0;
+        this.state.savingsBalance = parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0;
         this.state.lastRemoteSync = parseInt(localStorage.getItem('moltbot_last_sync')) || 0;
 
         this.state.theme = localStorage.getItem('moltbot_theme') || 'dark';
@@ -453,6 +455,7 @@ const app = {
         localStorage.setItem('moltbot_fixed_costs', JSON.stringify(this.state.fixedCosts));
         localStorage.setItem('moltbot_last_fixed_month', this.state.lastFixedCostsMonth);
         localStorage.setItem('moltbot_savings_goal', this.state.savingsGoal);
+        localStorage.setItem('moltbot_savings_balance', this.state.savingsBalance);
     },
 
     updateTheme(theme) {
@@ -892,7 +895,8 @@ const app = {
                 pin: app.state.user.teamPin,
                 fixedCosts: app.state.fixedCosts,
                 lastFixedCostsMonth: app.state.lastFixedCostsMonth,
-                savingsGoal: app.state.savingsGoal
+                savingsGoal: app.state.savingsGoal,
+                savingsBalance: app.state.savingsBalance
             };
 
             this.db.collection('moltbot_private_sync').doc(app.state.user.teamName).set({
@@ -1279,6 +1283,10 @@ const app = {
         }
         if (incoming.savingsGoal !== undefined && incoming.savingsGoal !== this.state.savingsGoal) {
             this.state.savingsGoal = incoming.savingsGoal;
+            changed = true;
+        }
+        if (incoming.savingsBalance !== undefined && incoming.savingsBalance !== this.state.savingsBalance) {
+            this.state.savingsBalance = incoming.savingsBalance;
             changed = true;
         }
 
@@ -2131,6 +2139,27 @@ const app = {
             }
         },
 
+        editSavingsBalance() {
+            const newBalanceValue = prompt("Aktueller Stand deines Sparkontos (€):", app.state.savingsBalance);
+            if (newBalanceValue !== null) {
+                app.state.savingsBalance = parseFloat(newBalanceValue) || 0;
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                this.render();
+            }
+        },
+
+        depositToSavings(amount, source = "Monats-Überschuss") {
+            if (amount <= 0) return;
+            if (confirm(`Möchtest du ${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} auf dein Sparkonto einzahlen?`)) {
+                app.state.savingsBalance += amount;
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                this.render();
+                app.notify("Sparkonto Update", `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} wurden eingezahlt.`);
+            }
+        },
+
         editBudget() {
             const newBudget = prompt('Bitte gib dein monatliches Budget Limit ein (€):', app.state.monthlyBudget);
             if (newBudget !== null) {
@@ -2297,6 +2326,15 @@ const app = {
             if (document.getElementById('finSavingsGoal')) {
                 document.getElementById('finSavingsGoal').textContent = app.state.savingsGoal.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
             }
+
+            // Automatic Savings Calculation: Historical Balance + Current Month Balance
+            const currentMonthBalance = monthlyIncome - monthlyExpenses;
+            const totalSavingsAutomatic = app.state.savingsBalance + currentMonthBalance;
+
+            if (document.getElementById('finSavingsBalance')) {
+                document.getElementById('finSavingsBalance').textContent = totalSavingsAutomatic.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+
             if (document.getElementById('finDailyAvailable')) {
                 const dailyEl = document.getElementById('finDailyAvailable');
                 dailyEl.textContent = (totalAvailable < 0 ? '-' : '+') + Math.abs(totalAvailable).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -2520,6 +2558,28 @@ const app = {
 
             // 1. Check if already marked as applied via Month-Key
             if (app.state.lastFixedCostsMonth === currentMonthKey) return;
+
+            // NEW: Auto-Harvest Savings from Previous Month before starting new one
+            if (app.state.lastFixedCostsMonth) {
+                const [y, m] = app.state.lastFixedCostsMonth.split('-').map(Number);
+                let prevMonthIncome = 0;
+                let prevMonthExpenses = 0;
+
+                app.state.finance.forEach(e => {
+                    if (e.deleted) return;
+                    const d = new Date(e.date);
+                    if (d.getFullYear() === y && d.getMonth() === (m - 1)) {
+                        if (e.type === 'income') prevMonthIncome += e.amount;
+                        else prevMonthExpenses += e.amount;
+                    }
+                });
+
+                const prevBalance = prevMonthIncome - prevMonthExpenses;
+                if (prevBalance > 0) {
+                    console.log(`Auto-Harvesting ${prevBalance} € from last month into Savings Account.`);
+                    app.state.savingsBalance += prevBalance;
+                }
+            }
 
             // 2. Extra Safety: Check if entries starting with "FIX:" already exist for this month
             const currentYear = now.getFullYear();

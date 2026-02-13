@@ -355,72 +355,105 @@
                     <p>Behalte deine Ausgaben und dein Budget im Griff.</p>
                 </div>
 
-                <div class="dashboard-grid" style="margin-bottom: 25px;">
-                    <div class="card glass">
-                        <small class="text-muted">Monatseinnahmen</small>
+                <!-- Hero Stats (Actionable Reality) -->
+                <div class="dashboard-grid" style="margin-bottom: 30px;">
+                    <div class="card glass"
+                        style="background: rgba(var(--primary-rgb), 0.08); border: 2px solid var(--primary); grid-column: 1 / -1; padding: 25px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <small class="text-muted"
+                                    style="text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Heute
+                                    verfügbar (Tageslimit) ⚡</small>
+                                <h2 id="finDailyLimit"
+                                    style="font-weight: 900; font-size: 2.8rem; color: var(--primary); margin: 10px 0;">
+                                    0,00 €</h2>
+                                <small id="finDaysLeft" class="text-muted"
+                                    style="font-size: 0.85rem; font-style: italic;">noch X Tage im Monat</small>
+                            </div>
+                            <div class="icon-circle"
+                                style="width: 70px; height: 70px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary);">
+                                <i data-lucide="zap" size="32"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card glass"
+                        style="background: rgba(var(--success-rgb), 0.05); border: 1px solid rgba(var(--success-rgb), 0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <small class="text-muted">Verf. für restl. Monat 🗓️</small>
+                            <button class="btn-text highlight"
+                                style="font-size: 0.65rem; padding: 2px 8px; background: rgba(var(--success-rgb), 0.1); border-radius: 6px; color: var(--success);"
+                                onclick="app.finance.depositToSavings(parseFloat(document.getElementById('finDailyAvailable').textContent.replace(/[^-0-9,]/g, '').replace(',', '.')))">
+                                <i data-lucide="arrow-up-right" size="10"></i> Sparen
+                            </button>
+                        </div>
+                        <h2 id="finDailyAvailable" style="font-weight: 800; color: var(--success);">0,00 €</h2>
+                    </div>
+
+                    <div class="card glass"
+                        style="background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.1), rgba(0,0,0,0)); border: 1px solid var(--primary);">
+                        <small class="text-muted">Virtuelles Sparkonto 🏦</small>
                         <div style="display:flex; align-items:center; gap:10px;">
-                            <h2 id="finTotalIncome" style="color: var(--success);">0,00 €</h2>
-                            <button class="btn-icon" onclick="app.finance.openIncomeAdd()" title="Einnahme hinzufügen">
+                            <h2 id="finSavingsBalance" style="color: var(--primary); font-weight: 800;">0,00 €</h2>
+                            <button class="btn-icon" onclick="app.finance.editSavingsBalance()"
+                                title="Kontostand anpassen">
                                 <i data-lucide="edit-3" size="14"></i>
                             </button>
                         </div>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Monatsausgaben</small>
-                        <h2 id="finTotalExpenses" style="color: var(--danger);">0,00 €</h2>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Bilanz (Rest)</small>
-                        <h2 id="finBalance">0,00 €</h2>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Monatsbudget (Limit)</small>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <h2 id="finTotalBudget">0,00 €</h2>
-                            <button class="btn-icon" onclick="app.finance.editBudget()"><i data-lucide="edit-3"
-                                    size="14"></i></button>
-                        </div>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Verbleibendes Budget</small>
-                        <h2 id="finRemaining">0,00 €</h2>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Jahresbilanz</small>
-                        <h2 id="finYearTotal">0,00 €</h2>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Fixkosten (Plan)</small>
-                        <h2 id="finFixedPlan" style="color: var(--secondary);">0,00 €</h2>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Netto (nach Fixkosten)</small>
-                        <h2 id="finNetto" style="font-weight: 800;">0,00 €</h2>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Sparziel (Reserve)</small>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <h2 id="finSavingsGoal" style="color: var(--warning);">0,00 €</h2>
-                            <button class="btn-icon" onclick="app.finance.editSavingsGoal()" title="Sparziel anpassen">
-                                <i data-lucide="edit-3" size="14"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card glass"
-                        style="background: rgba(var(--success-rgb), 0.05); border: 2px solid rgba(var(--success-rgb), 0.2);">
-                        <small class="text-muted">Verf. für restl. Monat 🗓️</small>
-                        <h2 id="finDailyAvailable" style="font-weight: 800; color: var(--success);">
-                            0,00 €</h2>
-                    </div>
-                    <div class="card glass"
-                        style="background: rgba(var(--primary-rgb), 0.05); border: 2px solid rgba(var(--primary-rgb), 0.2);">
-                        <small class="text-muted">Heute verfügbar (Tageslimit) ⚡</small>
-                        <h2 id="finDailyLimit" style="font-weight: 900; font-size: 1.8rem; color: var(--primary);">
-                            0,00 €</h2>
-                        <small id="finDaysLeft" class="text-muted" style="font-size: 0.7rem;">noch X Tage im
-                            Monat</small>
                     </div>
                 </div>
+
+                <!-- Strategic Planning & Details (Collapsible to reduce clutter) -->
+                <div class="card glass collapsible-card is-collapsed"
+                    style="margin-bottom: 25px; border: 1px solid var(--glass-border);">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <i data-lucide="line-chart" size="18" class="text-primary"></i>
+                            <span style="font-weight: 600;">Planung & Monats-Details</span>
+                        </div>
+                        <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="dashboard-grid"
+                            style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px;">
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Netto (nach Fixkosten)</small>
+                                <h3 id="finNetto" style="font-weight: 700; margin-top: 5px;">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Sparziel (Reserve)</small>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <h3 id="finSavingsGoal" style="color: var(--warning); margin-top: 5px;">0,00 €</h3>
+                                    <button class="btn-icon" onclick="app.finance.editSavingsGoal()"
+                                        style="width: 24px; height: 24px;"><i data-lucide="edit-3"
+                                            size="12"></i></button>
+                                </div>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Fixkosten (Plan)</small>
+                                <h3 id="finFixedPlan" style="color: var(--secondary); margin-top: 5px;">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Monatsbudget (Limit)</small>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <h3 id="finTotalBudget" style="margin-top: 5px;">0,00 €</h3>
+                                    <button class="btn-icon" onclick="app.finance.editBudget()"
+                                        style="width: 24px; height: 24px;"><i data-lucide="edit-3"
+                                            size="12"></i></button>
+                                </div>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Verbl. Budget-Limit</small>
+                                <h3 id="finRemaining" style="margin-top: 5px;">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Jahresbilanz</small>
+                                <h3 id="finYearTotal" style="margin-top: 5px;">0,00 €</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
 
                 <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 25px;">
                     <div class="card-header-toggle" onclick="app.toggleCard(this)">
