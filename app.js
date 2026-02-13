@@ -1906,10 +1906,23 @@ const app = {
         const headerName = document.getElementById('headerUserName');
         if (headerName) headerName.textContent = this.state.user.name;
 
+        const userAvatar = this.state.user.avatar || 'logo.svg';
         const headerAvatar = document.getElementById('headerUserAvatar');
-        if (headerAvatar) {
-            headerAvatar.src = this.state.user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${this.state.user.name}`;
-        }
+        const headerAvatarMob = document.getElementById('headerUserAvatarMobile');
+        const headerAvatarSettings = document.getElementById('settingsUserAvatarPreview');
+
+        const updateAv = (el) => {
+            if (el) {
+                el.src = userAvatar;
+                el.style.border = `2px solid var(--primary)`;
+                el.style.borderRadius = '50%';
+                el.style.objectFit = 'cover';
+            }
+        };
+
+        updateAv(headerAvatar);
+        updateAv(headerAvatarMob);
+        updateAv(headerAvatarSettings);
 
 
 
@@ -3175,8 +3188,9 @@ const app = {
         });
 
         const title = document.getElementById('dashboardWelcomeTitle');
+        const userAvatar = this.state.user.avatar || 'logo.svg';
         const pearLogo = `
-        <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="vertical-align: bottom; margin-left: 5px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
+        <svg width="24" height="24" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-left: 2px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
             <defs>
                 <linearGradient id="rainbowGradDash" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" style="stop-color:#FF0000;stop-opacity:1" />
@@ -3197,7 +3211,28 @@ const app = {
             <path d="M50,10 Q50,0 60,5 C55,8 52,10 50,10" fill="url(#rainbowGradDash)" />
         </svg>`;
 
-        if (title) title.innerHTML = `Hallo, ${this.state.user.name.split(' ')[0]}! ${pearLogo}`;
+        if (title) {
+            title.style.display = 'flex';
+            title.style.alignItems = 'center';
+            title.style.gap = '15px';
+            title.innerHTML = `
+                <div class="avatar-hero-container" onclick="app.navigateTo('settings')" style="cursor: pointer; position: relative; flex-shrink: 0;">
+                    <div style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--primary); padding: 3px; background: rgba(var(--primary-rgb), 0.1); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
+                        <img src="${userAvatar}" alt="Profil" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                    </div>
+                    <div style="position: absolute; bottom: 0; right: 0; width: 16px; height: 16px; background: var(--success); border: 2px solid #0a0c10; border-radius: 50%; box-shadow: 0 0 10px var(--success);"></div>
+                </div>
+                <div style="display: flex; flex-direction: column;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500; margin-bottom: -4px;">Willkommen zurück,</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-weight: 800; font-size: 1.8rem; background: linear-gradient(to right, #fff, var(--text-muted)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                            ${this.state.user.name.split(' ')[0]}
+                        </span>
+                        ${pearLogo}
+                    </div>
+                </div>
+            `;
+        }
 
         // CALCULATE METRICS FOR DASHBOARD KPI GRID
         const budgetWidget = document.getElementById('dashboardBudgetWidget');
