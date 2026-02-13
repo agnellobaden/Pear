@@ -4029,11 +4029,16 @@ const app = {
             }
         });
 
-        // Update headers and grid classes
-        grid.className = `calendar-grid-large view-${this.state.calendarView}`;
+        // Show/Hide Toggle Button
+        const toggleBtn = document.getElementById('monthLayoutToggle');
+        if (toggleBtn) {
+            const isYear = this.state.calendarView === 'year';
+            toggleBtn.style.display = isYear ? 'none' : 'inline-flex';
 
-        // Show weekday header only in month view
-        weekdayHeader.style.display = (this.state.calendarView === 'month') ? 'grid' : 'none';
+            const mode = this.state.calendarLayoutMode || 'modern';
+            toggleBtn.innerHTML = mode === 'modern' ? '<i data-lucide="list"></i>' : '<i data-lucide="layout"></i>';
+            toggleBtn.title = mode === 'modern' ? 'Listenansicht' : 'Kartenansicht';
+        }
 
         if (this.state.calendarView === 'year') {
             monthHeader.textContent = year;
@@ -4079,23 +4084,16 @@ const app = {
         return html;
     },
 
-    toggleMonthLayout() {
-        this.state.monthViewMode = this.state.monthViewMode === 'grid' ? 'list' : 'grid';
+    toggleCalendarLayout() {
+        this.state.calendarLayoutMode = this.state.calendarLayoutMode === 'modern' ? 'classic' : 'modern';
+        localStorage.setItem('moltbot_calendar_layout', this.state.calendarLayoutMode);
         this.render();
     },
 
     renderMonthView(grid, year, month, filteredEvents) {
-        const mode = this.state.monthViewMode || 'list';
+        const mode = this.state.calendarLayoutMode || 'modern';
 
-        // Show/Hide Toggle Button
-        const toggleBtn = document.getElementById('monthLayoutToggle');
-        if (toggleBtn) {
-            toggleBtn.style.display = 'inline-flex';
-            toggleBtn.innerHTML = mode === 'grid' ? '<i data-lucide="list"></i>' : '<i data-lucide="grid"></i>';
-            toggleBtn.title = mode === 'grid' ? 'Listenansicht' : 'Kalenderansicht';
-        }
-
-        if (mode === 'grid') {
+        if (mode === 'modern') {
             this.renderMonthGridView(grid, year, month, filteredEvents);
         } else {
             this.renderMonthListView(grid, year, month, filteredEvents);
@@ -4279,16 +4277,74 @@ const app = {
     },
 
     renderWeekView(grid, startOfWeek, filteredEvents) {
-        // Generate array of 7 days
-        const days = [];
+        const mode = this.state.calendarLayoutMode || 'modern';
+
+        if (mode === 'modern') {
+            this.renderWeekMosaicView(grid, startOfWeek, filteredEvents);
+        } else {
+            this.renderWeekListView(grid, startOfWeek, filteredEvents);
+        }
+    },
+
+    renderWeekListView(grid, startOfWeek, filteredEvents) {
+        grid.className = 'calendar-list-view';
+        let html = '<div class="agenda-view-container">';
         for (let i = 0; i < 7; i++) {
             const date = new Date(startOfWeek);
             date.setDate(startOfWeek.getDate() + i);
-            days.push(date);
+            const dateStr = date.toISOString().split('T')[0];
+            const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+            const isToday = date.toDateString() === new Date().toDateString();
+            html += this.renderDayListRow(date, dayEvents, isToday, dateStr);
         }
+        html += '</div>';
+        grid.innerHTML = html;
+        if (window.lucide) lucide.createIcons();
+    },
 
-        // Use the vertical Time Grid (same as Day View)
-        this.renderTimeGrid(grid, days, filteredEvents, 'week');
+    renderWeekMosaicView(grid, startOfWeek, filteredEvents) {
+        grid.className = 'lifestyle-week-grid';
+        let html = '';
+
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(startOfWeek);
+            date.setDate(startOfWeek.getDate() + i);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const dateStr = date.toISOString().split('T')[0];
+            const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+
+            // Sort events by time
+            dayEvents.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+
+            const intensity = Math.min(100, dayEvents.length * 20);
+
+            html += `
+                <div class="mosaic-day-card ${isToday ? 'today' : ''}" onclick="app.goToDay('${dateStr}')">
+                    <div class="mosaic-header">
+                        <div style="display:flex; flex-direction:column;">
+                            <span class="mosaic-day-name">${date.toLocaleDateString('de-DE', { weekday: 'short' })}</span>
+                            <span class="mosaic-date-label">${date.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}</span>
+                        </div>
+                        ${dayEvents.length > 0 ? `<div class="status-dot" style="background:var(--primary); width:10px; height:10px; border-radius:50%;"></div>` : ''}
+                    </div>
+                    <div class="mosaic-events-stack">
+                        ${dayEvents.slice(0, 3).map(e => `
+                            <div class="mosaic-event-item" style="border-left-color: ${e.color || 'var(--primary)'}">
+                                <span class="m-time">${e.time || '--:--'}</span>
+                                <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.title}</span>
+                            </div>
+                        `).join('')}
+                        ${dayEvents.length > 3 ? `<div class="text-muted" style="font-size:0.75rem; padding-left:14px;">+ ${dayEvents.length - 3} weitere</div>` : ''}
+                        ${dayEvents.length === 0 ? `<div style="padding:20px 0; font-size:0.8rem; opacity:0.5; text-align:center;">Freier Tag 🕊️</div>` : ''}
+                    </div>
+                    <div class="mosaic-intensity-bar">
+                        <div class="intensity-fill" style="width:${intensity}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+        grid.innerHTML = html;
+        if (window.lucide) lucide.createIcons();
     },
 
     renderDayListRow(date, events, isToday, dateStr) {
@@ -4332,7 +4388,7 @@ const app = {
 
         return `
             <div class="agenda-day-card ${isToday ? 'today-highlight' : ''}">
-                <div class="agenda-day-header" onclick="app.openCreateAt('${dateStr}')">
+                <div class="agenda-day-header" onclick="app.goToDay('${dateStr}')">
                     <span class="agenda-day-name">${dayName}</span>
                     <span class="agenda-day-date">${dayDate}</span>
                     <button class="btn-icon-small"><i data-lucide="plus"></i></button>
@@ -4344,8 +4400,94 @@ const app = {
         `;
     },
 
+    goToDay(dateStr) {
+        if (!dateStr) return;
+        const parts = dateStr.split('-');
+        const date = new Date(parts[0], parts[1] - 1, parts[2]);
+        this.state.currentDate = date;
+        this.state.calendarView = 'day';
+
+        // Update View Selector
+        const selector = document.getElementById('calendarViewSelector');
+        if (selector) {
+            selector.querySelectorAll('button').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-view') === 'day');
+            });
+        }
+
+        this.render();
+    },
+
     renderDayView(grid, date, filteredEvents) {
-        this.renderTimeGrid(grid, [date], filteredEvents, 'day');
+        const mode = this.state.calendarLayoutMode || 'modern';
+        if (mode === 'modern') {
+            this.renderDayTimelineView(grid, date, filteredEvents);
+        } else {
+            this.renderDayListView(grid, date, filteredEvents);
+        }
+    },
+
+    renderDayListView(grid, date, filteredEvents) {
+        grid.className = 'calendar-list-view';
+        const dateStr = date.toISOString().split('T')[0];
+        const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+        const isToday = date.toDateString() === new Date().toDateString();
+        grid.innerHTML = `<div class="agenda-view-container">${this.renderDayListRow(date, dayEvents, isToday, dateStr)}</div>`;
+        if (window.lucide) lucide.createIcons();
+    },
+
+    renderDayTimelineView(grid, date, filteredEvents) {
+        grid.className = 'lifestyle-day-container';
+        const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+
+        if (dayEvents.length === 0) {
+            grid.innerHTML = `
+                <div class="lifestyle-empty-day">
+                    <i data-lucide="calendar-off" size="48" style="opacity:0.2; margin-bottom:20px;"></i>
+                    <h2 style="font-size:2rem; font-weight:800;">Alles entspannt! 🕊️</h2>
+                    <p>Keine festen Termine für diesen Tag.</p>
+                    <button class="btn-primary" onclick="app.editEvent()" style="margin:20px auto; width:fit-content;">
+                        <i data-lucide="plus"></i> Termin planen
+                    </button>
+                </div>`;
+            if (window.lucide) lucide.createIcons();
+            return;
+        }
+
+        // Sort by time
+        dayEvents.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+
+        grid.innerHTML = dayEvents.map((e, idx) => `
+            <div class="timeline-entry" style="animation-delay: ${idx * 0.1}s">
+                <div class="timeline-time-col">
+                    <div class="time-bubble">${e.time || 'Alle'}</div>
+                    <div class="timeline-dot" style="background: ${e.color || 'var(--primary)'}"></div>
+                </div>
+                <div class="timeline-content-col">
+                    <div class="lifestyle-event-card" onclick="app.editEvent('${e.id}')">
+                        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: ${e.color || 'var(--primary)'}; font-weight: 800; margin-bottom: 4px;">
+                            ${e.category || 'Termin'}
+                        </div>
+                        <h3>${e.title}</h3>
+                        <div class="event-meta-row">
+                            ${e.location ? `
+                                <div class="event-meta-item">
+                                    <i data-lucide="map-pin" size="14"></i>
+                                    <span>${e.location}</span>
+                                </div>` : ''}
+                            ${e.time ? `
+                                <div class="event-meta-item">
+                                    <i data-lucide="clock" size="14"></i>
+                                    <span>${e.time} Uhr</span>
+                                </div>` : ''}
+                        </div>
+                        ${e.notes ? `<div class="event-notes-preview">${e.notes}</div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        if (window.lucide) lucide.createIcons();
     },
 
 
