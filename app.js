@@ -2154,6 +2154,29 @@ const app = {
             }
         },
 
+        editEntry(id) {
+            const e = app.state.finance.find(entry => entry.id === id);
+            if (!e) return;
+
+            const newSource = prompt("Beschreibung:", e.source);
+            if (newSource === null) return;
+            const newAmountStr = prompt("Betrag in €:", e.amount);
+            if (newAmountStr === null) return;
+            const newDate = prompt("Datum (JJJJ-MM-TT):", e.date);
+            if (newDate === null) return;
+            const newType = confirm(`Ist dies eine EINNAHME?\n\n(OK = Einnahme, Abbrechen = Ausgabe)`) ? 'income' : 'expense';
+
+            e.source = newSource;
+            e.amount = parseFloat(newAmountStr) || 0;
+            e.date = newDate;
+            e.type = newType;
+            e.updatedAt = Date.now();
+
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+            this.render();
+        },
+
         clearAll() {
             if (confirm('Möchtest du wirklich den gesamten Finanzverlauf löschen?')) {
                 const now = Date.now();
@@ -2193,6 +2216,7 @@ const app = {
             let monthlyExpenses = 0;
             let monthlyIncome = 0;
             let yearlyBalance = 0;
+            let bookedFixedExpenses = 0;
 
             app.state.finance.forEach(e => {
                 if (e.deleted) return;
@@ -2204,7 +2228,12 @@ const app = {
                     yearlyBalance += isIncome ? e.amount : -e.amount;
                     if (d.getMonth() === currentMonth) {
                         if (isIncome) monthlyIncome += e.amount;
-                        else monthlyExpenses += e.amount;
+                        else {
+                            monthlyExpenses += e.amount;
+                            if (e.source && e.source.startsWith('FIX:')) {
+                                bookedFixedExpenses += e.amount;
+                            }
+                        }
                     }
                 }
 
@@ -2216,6 +2245,9 @@ const app = {
                     weeklyExpenses += e.amount;
                 }
             });
+
+            // Variable Expenses = All expenses that are NOT fixed costs
+            const variableExpenses = monthlyExpenses - bookedFixedExpenses;
 
             const balance = monthlyIncome - monthlyExpenses;
             const remainingBudget = app.state.monthlyBudget - monthlyExpenses;
@@ -2231,9 +2263,13 @@ const app = {
             // "Netto" calculation: Actual Income - Planned Fixed Expenses
             const nettoRemaining = monthlyIncome - plannedFixedExpenses;
 
-            // "Verfügbar" calculation: Netto - Savings Goal
-            // This is what's left for daily expenses like food, gas, etc.
-            const totalAvailable = nettoRemaining - app.state.savingsGoal;
+            // "Verfügbar" calculation: Netto - Already spent variable costs - Savings Goal
+            const totalAvailable = nettoRemaining - variableExpenses - app.state.savingsGoal;
+
+            // Intelligent Daily Budget Calculation
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const remainingDays = lastDayOfMonth - now.getDate() + 1; // Includes today
+            const dailyLimit = totalAvailable > 0 ? (totalAvailable / remainingDays) : 0;
 
             // Update UI
             if (document.getElementById('finTodayTotal')) {
@@ -2265,6 +2301,16 @@ const app = {
                 const dailyEl = document.getElementById('finDailyAvailable');
                 dailyEl.textContent = (totalAvailable < 0 ? '-' : '+') + Math.abs(totalAvailable).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
                 dailyEl.style.color = totalAvailable < 0 ? 'var(--danger)' : 'var(--success)';
+            }
+
+            // New: Daily Intelligent Limit
+            if (document.getElementById('finDailyLimit')) {
+                const limitEl = document.getElementById('finDailyLimit');
+                limitEl.textContent = dailyLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                limitEl.style.color = dailyLimit <= 0 ? 'var(--danger)' : 'var(--primary)';
+            }
+            if (document.getElementById('finDaysLeft')) {
+                document.getElementById('finDaysLeft').textContent = `noch ${remainingDays} Tage im Monat`;
             }
 
             if (document.getElementById('finBalance')) {
@@ -2299,9 +2345,12 @@ const app = {
                     <td class="${e.type === 'income' ? 'text-success' : 'text-danger'}" style="font-weight:600;">
                         ${e.type === 'income' ? '+' : '-'} ${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                     </td>
-                    <td>
-                        <button class="btn-icon-danger" onclick="app.finance.deleteEntry('${e.id}')">
-                            <i data-lucide="trash-2" size="16"></i>
+                    <td style="display: flex; gap: 5px; justify-content: flex-end;">
+                        <button class="btn-icon" onclick="app.finance.editEntry('${e.id}')" style="width: 32px; height: 32px; background: rgba(var(--primary-rgb), 0.1);">
+                            <i data-lucide="edit-3" size="14"></i>
+                        </button>
+                        <button class="btn-icon-danger" onclick="app.finance.deleteEntry('${e.id}')" style="width: 32px; height: 32px;">
+                            <i data-lucide="trash-2" size="14"></i>
                         </button>
                     </td>
                 </tr>
@@ -3003,17 +3052,43 @@ const app = {
                 if (!e.deleted && e.date === todayStr && e.type !== 'income') dailyExpenses += e.amount;
             });
 
-            // 2. Budget Progress (only expenses)
+            // 2. Monthly Stats (Income & Expenses)
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
+            let monthlyIncome = 0;
             let monthlyExpenses = 0;
+            let bookedFixedExpenses = 0;
             this.state.finance.forEach(e => {
                 if (e.deleted) return;
                 const d = new Date(e.date);
-                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth && e.type !== 'income') {
-                    monthlyExpenses += e.amount;
+                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+                    if (e.type === 'income') monthlyIncome += e.amount;
+                    else {
+                        monthlyExpenses += e.amount;
+                        if (e.source && e.source.startsWith('FIX:')) {
+                            bookedFixedExpenses += e.amount;
+                        }
+                    }
                 }
             });
+
+            // Variable Expenses (Daily spendings)
+            const variableExpenses = monthlyExpenses - bookedFixedExpenses;
+
+            // Calculate Fixed Costs Plan for Intelligence
+            let plannedFixedExpenses = 0;
+            app.state.fixedCosts.forEach(f => {
+                if (f.type !== 'income') plannedFixedExpenses += f.amount;
+            });
+
+            const nettoRemaining = monthlyIncome - plannedFixedExpenses;
+            const totalAvailable = nettoRemaining - variableExpenses - app.state.savingsGoal;
+
+            // Intelligent Daily Budget
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const remainingDays = lastDayOfMonth - now.getDate() + 1;
+            const dailyLimit = totalAvailable > 0 ? (totalAvailable / remainingDays) : 0;
+
             const budgetPercent = this.state.monthlyBudget > 0 ? Math.min(100, Math.round((monthlyExpenses / this.state.monthlyBudget) * 100)) : 0;
             const isOverBudget = this.state.monthlyBudget > 0 && monthlyExpenses > this.state.monthlyBudget;
 
@@ -3034,12 +3109,10 @@ const app = {
                         </div>
                     </div>
                     <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-                        <button class="btn-text highlight" style="font-size: 0.7rem; padding: 5px 10px; background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; white-space: nowrap; display: flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); app.finance.openQuickAdd()">
-                            <i data-lucide="plus-circle" size="12"></i> <span class="mobile-hide-text">Eintrag</span>
-                        </button>
-                        <div style="text-align: right;" class="hide-on-collapse">
-                            <div style="font-size: 1rem; font-weight: 800; color: ${isOverBudget ? '#ef4444' : 'var(--text-main)'}; white-space: nowrap;">
-                                ${(this.state.monthlyBudget - monthlyExpenses).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                         <div style="text-align: right; margin-right: 5px;">
+                            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">Tageslimit:</div>
+                            <div style="font-size: 1.1rem; font-weight: 800; color: var(--primary);">
+                                ${dailyLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                             </div>
                         </div>
                         <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
@@ -3050,14 +3123,12 @@ const app = {
                     <!-- Additional KPIs Row -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; margin-bottom: 15px;">
                         <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border);">
-                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Ausgaben Heute</small>
-                            <div style="font-weight: 700; color: var(--danger);">${dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Netto-Rest (Monat)</small>
+                            <div style="font-weight: 700; color: var(--success);">${totalAvailable.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border);">
-                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Nächster Termin</small>
-                            <div style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.85rem; color: var(--primary);">
-                                ${nextEvent ? nextEvent.title : 'Keine Termine'}
-                            </div>
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Ausgaben Heute</small>
+                            <div style="font-weight: 700; color: var(--danger);">${dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                         </div>
                     </div>
 
@@ -3066,8 +3137,8 @@ const app = {
                         <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? '#ef4444' : 'var(--primary)'}; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted);">
-                        <span>Ausgegeben: ${monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
-                        <span>Ziel: ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        <span>Gesamt-Eingänge: ${monthlyIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        <span>Budget-Limit: ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
                     </div>
                 </div>
             </div>
