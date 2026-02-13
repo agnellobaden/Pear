@@ -3429,7 +3429,7 @@ const app = {
 
             budgetWidget.innerHTML = `
             <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOverBudget ? 'rgba(239, 68, 68, 0.4)' : (isWarning ? 'rgba(245, 158, 11, 0.4)' : 'var(--glass-border)')}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
-                <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                <div class="card-header-toggle" onclick="app.toggleCard(this)" style="position: relative;">
                     <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
                         <div class="icon-circle" style="background: ${isOverBudget ? 'rgba(239,68,68,0.1)' : (isWarning ? 'rgba(245,158,11,0.1)' : 'rgba(var(--primary-rgb), 0.1)')}; color: ${isOverBudget ? '#ef4444' : (isWarning ? '#f59e0b' : 'var(--primary)')}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;">
                             <i data-lucide="${isOverBudget ? 'alert-octagon' : (isWarning ? 'bell-ring' : 'wallet')}" size="18"></i>
@@ -3441,6 +3441,15 @@ const app = {
                             <small style="color: var(--text-muted); white-space: nowrap; font-size: 0.75rem;">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
                         </div>
                     </div>
+                    
+                    <!-- Quick Add Button -->
+                    <button onclick="event.stopPropagation(); app.finance.openQuickAdd();" 
+                        class="dashboard-finance-add-btn"
+                        title="Schnell Ausgabe/Einnahme hinzufügen"
+                        style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; color: white; font-size: 1.4rem; font-weight: 300; cursor: pointer; box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin: 0 8px;">
+                        +
+                    </button>
+                    
                     <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                          <div style="text-align: right; margin-right: 5px;">
                             <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">Verfügbar:</div>

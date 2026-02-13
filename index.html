@@ -323,6 +323,10 @@
                                     <button id="nextMonth" class="icon-btn"><i data-lucide="chevron-right"></i></button>
                                 </div>
                                 <h2 id="fullCalendarMonth">Februar 2026</h2>
+                                <button class="icon-btn" onclick="app.editEvent()" title="Termin erstellen"
+                                    style="margin-left: 15px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
+                                    <i data-lucide="plus" size="24"></i>
+                                </button>
                                 <button class="icon-btn" id="monthLayoutToggle" onclick="app.toggleMonthLayout()"
                                     title="Ansicht wechseln" style="display:none; margin-left:10px;">
                                     <i data-lucide="grid"></i>
@@ -351,9 +355,16 @@
 
             <!-- Finance View -->
             <section id="view-finance" class="page-view">
-                <div class="hero">
+                <div class="hero" style="position: relative;">
                     <h1>Finanzplaner 💰</h1>
                     <p>Behalte deine Ausgaben und dein Budget im Griff.</p>
+
+                    <!-- Quick Add Button -->
+                    <button class="finance-quick-add-btn" onclick="app.finance.openQuickAdd()"
+                        title="Schnell Ausgabe/Einnahme hinzufügen"
+                        style="position: absolute; top: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; color: white; font-size: 2rem; font-weight: 300; cursor: pointer; box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.4); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; z-index: 10;">
+                        +
+                    </button>
                 </div>
 
                 <!-- Hero Stats (Actionable Reality) -->

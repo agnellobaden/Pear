@@ -5718,3 +5718,44 @@ body {
         font-size: 5vw;
     }
 }
+
+/* Finance Quick Add Button */
+.finance-quick-add-btn:hover {
+    transform: scale(1.1) rotate(90deg);
+    box-shadow: 0 12px 30px rgba(var(--primary-rgb), 0.6);
+}
+
+.finance-quick-add-btn:active {
+    transform: scale(0.95) rotate(90deg);
+}
+
+/* Mobile adjustments for finance quick add button */
+@media (max-width: 768px) {
+    .finance-quick-add-btn {
+        width: 56px !important;
+        height: 56px !important;
+        font-size: 1.8rem !important;
+        top: 15px !important;
+        right: 15px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .finance-quick-add-btn {
+        width: 50px !important;
+        height: 50px !important;
+        font-size: 1.6rem !important;
+        top: 10px !important;
+        right: 10px !important;
+    }
+}
+
+/* Dashboard Finance Add Button */
+.dashboard-finance-add-btn:hover {
+    transform: scale(1.1) rotate(90deg);
+    box-shadow: 0 6px 18px rgba(var(--primary-rgb), 0.5);
+}
+
+.dashboard-finance-add-btn:active {
+    transform: scale(0.95) rotate(90deg);
+}
