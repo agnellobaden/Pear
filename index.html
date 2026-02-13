@@ -48,7 +48,7 @@
 <body data-theme="dark">
     <!-- SPLASH SCREEN -->
     <div id="splash-screen"
-        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #09090b; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.6s ease-out, visibility 0.6s;">
+        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #18181b; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.6s ease-out, visibility 0.6s;">
         <svg width="120" height="120" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"
             style="filter: drop-shadow(0 0 20px rgba(255,255,255,0.2)); animation: pulse-logo 2s infinite;">
             <defs>
@@ -1768,13 +1768,13 @@
 
     <!-- Quick Expense Modal -->
     <div class="modal-overlay hidden" id="quickExpenseModal"
-        style="background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 10000;">
+        style="background: rgba(24, 24, 27, 0.85); backdrop-filter: blur(8px); z-index: 10000;">
         <div class="modal-card animate-in"
-            style="max-width: 550px; background: #ffffff; border-radius: 24px; padding: 30px; border: none; box-shadow: 0 25px 60px rgba(0,0,0,0.2); margin: auto; max-height: 90vh; overflow-y: auto;">
+            style="max-width: 550px; background: var(--bg-card); border-radius: var(--radius-lg); padding: 30px; border: 1px solid var(--glass-border); box-shadow: var(--card-shadow); margin: auto; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header" style="border: none; padding: 0 0 20px 0;">
-                <h3 style="color: #1a1c1e; font-size: 1.5rem; font-weight: 800;">Ausgabe hinzufügen</h3>
+                <h3 style="color: var(--text-main); font-size: 1.5rem; font-weight: 800;">Ausgabe hinzufügen</h3>
                 <button class="btn-icon" onclick="document.getElementById('quickExpenseModal').classList.add('hidden')"
-                    style="color: #1a1c1e; background: #f1f5f9;">
+                    style="color: var(--text-main); background: var(--bg-hover);">
                     <i data-lucide="x"></i>
                 </button>
             </div>
@@ -1784,33 +1784,33 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                         <div class="input-group">
                             <label
-                                style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Betrag
+                                style="color: var(--text-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Betrag
                                 (€)</label>
                             <input type="number" id="quickFinAmount" step="0.01" required placeholder="0.00" autoFocus
-                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main); transition: border-color 0.2s;">
                         </div>
                         <div class="input-group">
                             <label
-                                style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Datum</label>
+                                style="color: var(--text-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Datum</label>
                             <input type="date" id="quickFinDate" required
-                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main); transition: border-color 0.2s;">
                         </div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                         <div class="input-group">
                             <label
-                                style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Typ</label>
+                                style="color: var(--text-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Typ</label>
                             <select id="quickFinType"
-                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main); transition: border-color 0.2s;">
                                 <option value="expense">Ausgabe</option>
                                 <option value="income">Einnahme</option>
                             </select>
                         </div>
                         <div class="input-group">
                             <label
-                                style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Beschreibung</label>
+                                style="color: var(--text-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Beschreibung</label>
                             <input type="text" id="quickFinSource" placeholder="z.B. Gehalt, Miete..." required
-                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main); transition: border-color 0.2s;">
                         </div>
                     </div>
                     <button type="submit" class="btn-primary"

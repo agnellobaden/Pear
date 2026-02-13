@@ -2647,17 +2647,17 @@ const app = {
                 .filter(e => !e.deleted)
                 .sort((a, b) => new Date(b.date) - new Date(a.date));
             tableBody.innerHTML = sorted.map(e => `
-                <tr class="contact-row">
-                    <td>${new Date(e.date).toLocaleDateString('de-DE')}</td>
-                    <td>${e.source}</td>
-                    <td class="${e.type === 'income' ? 'text-success' : 'text-danger'}" style="font-weight:600;">
+                <tr class="contact-row" style="border-bottom: 1px solid var(--glass-border);">
+                    <td style="padding: 16px; color: var(--text-muted); font-size: 0.9rem;">${new Date(e.date).toLocaleDateString('de-DE')}</td>
+                    <td style="padding: 16px; font-weight: 500;">${e.source}</td>
+                    <td class="${e.type === 'income' ? 'text-success' : 'text-danger'}" style="padding: 16px; font-weight: 700; text-align: right;">
                         ${e.type === 'income' ? '+' : '-'} ${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                     </td>
-                    <td style="display: flex; gap: 5px; justify-content: flex-end;">
-                        <button class="btn-icon" onclick="app.finance.editEntry('${e.id}')" style="width: 32px; height: 32px; background: rgba(var(--primary-rgb), 0.1);">
+                    <td style="padding: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+                        <button class="btn-icon" onclick="app.finance.editEntry('${e.id}')" style="width: 32px; height: 32px; background: var(--bg-hover); border-radius: var(--radius-sm); border: none; color: var(--text-muted);">
                             <i data-lucide="edit-3" size="14"></i>
                         </button>
-                        <button class="btn-icon-danger" onclick="app.finance.deleteEntry('${e.id}')" style="width: 32px; height: 32px;">
+                        <button class="btn-icon-danger" onclick="app.finance.deleteEntry('${e.id}')" style="width: 32px; height: 32px; border-radius: var(--radius-sm);">
                             <i data-lucide="trash-2" size="14"></i>
                         </button>
                     </td>
@@ -2943,22 +2943,22 @@ const app = {
             }
 
             list.innerHTML = app.state.fixedCosts.map(f => `
-                <div class="glass" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(var(--primary-rgb), 0.1);">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <div class="icon-circle" style="background: ${f.type === 'income' ? 'rgba(var(--success-rgb), 0.1)' : 'rgba(var(--danger-rgb), 0.1)'}; color: ${f.type === 'income' ? 'var(--success)' : 'var(--danger)'};">
-                            <i data-lucide="${f.type === 'income' ? 'trending-up' : 'trending-down'}" size="14"></i>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-radius: var(--radius-md); background: var(--bg-element); border: 1px solid var(--glass-border); margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${f.type === 'income' ? 'var(--success)' : 'var(--danger)'}; color: var(--bg-card);">
+                            <i data-lucide="${f.type === 'income' ? 'trending-up' : 'trending-down'}" size="18"></i>
                         </div>
                         <div>
-                            <div style="font-weight: 700; font-size: 0.95rem;">${f.name}</div>
-                            <div style="font-size: 0.8rem; opacity: 0.7;">${f.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                            <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${f.name}</div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">${f.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                         </div>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="btn-icon" onclick="app.finance.editFixedCost('${f.id}')" style="width: 28px; height: 28px; background: rgba(var(--primary-rgb), 0.1);">
-                            <i data-lucide="edit-3" size="14"></i>
+                        <button class="btn-icon" onclick="app.finance.editFixedCost('${f.id}')" style="width: 36px; height: 36px; background: var(--bg-hover); border-radius: var(--radius-sm); border: none; color: var(--text-muted);">
+                            <i data-lucide="edit-3" size="16"></i>
                         </button>
-                        <button class="btn-icon-danger" onclick="app.finance.deleteFixedCost('${f.id}')" style="width: 28px; height: 28px;">
-                            <i data-lucide="trash-2" size="14"></i>
+                        <button class="btn-icon-danger" onclick="app.finance.deleteFixedCost('${f.id}')" style="width: 36px; height: 36px; border-radius: var(--radius-sm);">
+                            <i data-lucide="trash-2" size="16"></i>
                         </button>
                     </div>
                 </div>
@@ -3515,21 +3515,21 @@ const app = {
                         </div>
                     ` : '')}
 
-                    <!-- Additional KPIs Row -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                        <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border);">
-                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Tageslimit (Intelligent)</small>
-                            <div style="font-weight: 700; color: var(--primary);">${dailyLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                    <!-- KPIs Row -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div style="background: var(--bg-element); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--glass-border);">
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Tageslimit</small>
+                            <div style="font-weight: 700; color: var(--primary); font-size: 1.1rem;">${dailyLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                         </div>
-                        <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border);">
-                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Ausgaben Heute</small>
-                            <div style="font-weight: 700; color: var(--danger);">${dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                        <div style="background: var(--bg-element); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--glass-border);">
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Ausgaben Heute</small>
+                            <div style="font-weight: 700; color: var(--danger); font-size: 1.1rem;">${dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                         </div>
                     </div>
 
                     <!-- Progress Section -->
-                    <div style="height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden;">
-                        <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? '#ef4444' : (isWarning ? '#f59e0b' : 'var(--primary)')}; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                    <div style="height: 10px; background: var(--bg-element); border-radius: 5px; overflow: hidden; margin-bottom: 12px;">
+                        <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? 'var(--danger)' : (isWarning ? 'var(--warning)' : 'var(--primary)')}; transition: width 1s cubic-bezier(0.2, 0, 0, 1);"></div>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted);">
                         <span>Gesamt-Eingänge: ${monthlyIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
@@ -3601,11 +3601,11 @@ const app = {
 
         if (specials.length > 0) {
             specialHtml += `
-                <div class="special-reminders animate-in" style="margin-bottom: 25px; background: linear-gradient(135deg, #ffd700, #ff9f43); padding: 20px; border-radius: 20px; color: #000; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3);">
-                    <div style="display:flex; align-items:center; gap:15px; margin-bottom:15px;">
-                        <i data-lucide="party-popper" size="32"></i>
+                <div class="special-reminders animate-in" style="margin-bottom: 24px; background: var(--bg-element); border: 2px solid var(--primary); padding: 24px; border-radius: var(--radius-lg);">
+                    <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
+                        <i data-lucide="party-popper" size="28" style="color: var(--primary);"></i>
                         <div>
-                            <h3 style="margin:0; font-size:1.4rem;">Heute ist was Besonderes!</h3>
+                            <h3 style="margin:0; font-size:1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">Besondere Anlässe</h3>
                         </div>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:10px;">
@@ -3620,11 +3620,11 @@ const app = {
                 }
 
                 return `
-                            <div style="background:rgba(255,255,255,0.2); padding:10px 15px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-weight:600; font-size:1.1rem;">${s.title} ${s.category === 'birthday' ? '🎂' : '🎊'}</span>
+                            <div style="background: var(--bg-card); padding: 14px 20px; border-radius: var(--radius-md); display: flex; border: 1px solid var(--glass-border); justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 600; font-size: 1rem; color: var(--text-main);">${s.title} ${s.category === 'birthday' ? '🎂' : '🎊'}</span>
                                 ${phone ? `
-                                    <a href="tel:${phone}" class="btn-primary" style="background:white; color:#d97706; border:none; padding:8px 15px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.1); display:flex; align-items:center; gap:5px; text-decoration:none;">
-                                        <i data-lucide="phone" size="16"></i> Anrufen
+                                    <a href="tel:${phone}" class="btn-primary" style="min-height: 40px; padding: 0 16px; font-size: 0.9rem; text-decoration: none;">
+                                        <i data-lucide="phone" size="14"></i> Anrufen
                                     </a>
                                 ` : ''}
                             </div>
@@ -3708,21 +3708,17 @@ const app = {
             if (eventCard) {
                 eventCard.style.display = 'block';
                 eventCard.style.border = '1px solid var(--glass-border)';
-                eventCard.style.boxShadow = 'none';
             }
-            list.innerHTML = `<div class="empty-state" style="text-align:center; padding:30px; color:var(--text-muted);">
-                <i data-lucide="calendar-off" size="48" style="margin-bottom:10px; opacity:0.5;"></i>
-                <p>Keine anstehenden Termine.</p>
-                <button class="btn-text" onclick="app.editEvent()" style="margin-top:10px;">+ Termin erstellen</button>
+            list.innerHTML = `<div class="empty-state" style="text-align:center; padding:40px; color:var(--text-muted);">
+                <i data-lucide="calendar-off" size="40" style="margin-bottom:12px; opacity:0.3;"></i>
+                <p style="font-size: 0.9rem;">Keine anstehenden Termine.</p>
+                <button class="btn-text" onclick="app.editEvent()" style="margin-top:12px;">+ Termin erstellen</button>
             </div>`;
         } else {
-            // Show the card and mark it green
+            // Show the card
             if (eventCard) {
                 eventCard.style.display = 'block';
-                // Green indicator that content is available
-                // Apply a distinct border and subtle glow
-                eventCard.style.border = '1px solid rgba(16, 185, 129, 0.6)';
-                eventCard.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.15)';
+                eventCard.style.border = '1px solid var(--glass-border)';
             }
 
             list.innerHTML = html + future.map(e => {
@@ -3756,7 +3752,10 @@ const app = {
                             <span class="event-month">${month}</span>
                         </div>
                         <div class="event-info">
-                            <h4 style="color:var(--text-main); font-weight:700;">${e.title}</h4>
+                            <h4 style="color:var(--text-main); font-weight:700; display: flex; align-items: center; gap: 8px;">
+                                ${e.title}
+                                ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="14" style="opacity:0.6;" title="Wiederholt sich ${e.recurrence}"></i>` : ''}
+                            </h4>
                             <p style="opacity:0.8;">${e.time || '--:--'} Uhr ${e.location ? `• ${e.location}` : ''} ${email ? `• ${email}` : ''}</p>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
@@ -4002,7 +4001,10 @@ const app = {
                     <div onclick="app.editEvent('${e.id}')" class="scale-hover" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:12px; cursor:pointer; border-left: 3px solid ${e.color || 'var(--primary)'};">
                         <span style="font-weight:700; font-size:0.9rem; min-width:45px;">${e.time || '--:--'}</span>
                         <div style="overflow:hidden;">
-                            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.title}</div>
+                            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display: flex; align-items: center; gap: 4px;">
+                                ${e.title}
+                                ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="10" style="opacity:0.6;"></i>` : ''}
+                            </div>
                         </div>
                     </div>
                  `).join('');
@@ -4196,7 +4198,10 @@ const app = {
                 }
 
                 return `<div class="month-event-pill ${e.category}" style="${style}" title="${e.title}">
-                    <span class="truncate" style="color:white;">${e.time || ''} ${e.title}</span>
+                    <span class="truncate" style="color:white; display:flex; align-items:center; gap:4px;">
+                        ${e.time || ''} ${e.title}
+                        ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="10" style="opacity:0.8;"></i>` : ''}
+                    </span>
                 </div>`;
             }).join('');
 
@@ -5656,7 +5661,7 @@ const app = {
                             ${filtered.map(c => `
                                 <tr class="contact-row">
                                     <td>
-                                        <div class="avatar-small" style="background: linear-gradient(135deg, var(--primary), var(--secondary));">
+                                        <div class="avatar-small" style="background: var(--bg-hover); color: var(--primary); border: 1px solid var(--glass-border); font-weight: 700;">
                                             ${c.name.charAt(0).toUpperCase()}
                                         </div>
                                     </td>
@@ -5692,7 +5697,7 @@ const app = {
                     ${filtered.map(c => `
                         <div class="contact-card glass">
                             <div class="card-top">
-                                <div class="avatar-large" style="background: linear-gradient(135deg, var(--primary), var(--secondary));">
+                                <div class="avatar-large" style="background: var(--bg-hover); color: var(--primary); border: 1px solid var(--glass-border); font-weight: 800;">
                                     ${c.name.charAt(0).toUpperCase()}
                                 </div>
                                 <div class="card-actions">
@@ -5935,18 +5940,22 @@ const app = {
             toast.className = 'glass animate-in';
             toast.style.cssText = `
                 position: fixed; 
-                top: 20px; 
-                right: 20px; 
-                background: ${color || 'var(--primary)'}; 
-                color: white; 
-                padding: 15px 20px; 
-                border-radius: 12px; 
+                top: 24px; 
+                right: 24px; 
+                background: var(--bg-card); 
+                color: var(--text-main); 
+                padding: 16px 24px; 
+                border-radius: var(--radius-md); 
                 z-index: 10000; 
-                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                display: flex; align-items: center; gap: 10px;
-                min-width: 250px;
+                box-shadow: var(--card-shadow);
+                display: flex; 
+                align-items: center; 
+                gap: 12px;
+                min-width: 320px;
+                border: 1px solid var(--primary);
+                animation: slideInRight 0.4s cubic-bezier(0.2, 0, 0, 1);
             `;
-            toast.innerHTML = `<i data-lucide="bell" size="20"></i> <div style="font-weight:600;">${text}</div>`;
+            toast.innerHTML = `<i data-lucide="bell" size="20" style="color: var(--primary);"></i> <div style="font-weight:600; font-size: 0.95rem;">${text}</div>`;
             document.body.appendChild(toast);
 
             if (window.lucide) lucide.createIcons();

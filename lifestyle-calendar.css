@@ -24,10 +24,10 @@
 
 .timeline-entry {
     display: flex;
-    gap: 30px;
+    gap: 32px;
     position: relative;
     z-index: 2;
-    animation: slideInUp 0.4s ease-out both;
+    animation: fadeIn 0.6s cubic-bezier(0.2, 0, 0, 1) both;
 }
 
 .timeline-time-col {
@@ -50,12 +50,11 @@
 }
 
 .timeline-dot {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    background: var(--primary);
-    border: 3px solid var(--bg-dark);
-    box-shadow: 0 0 10px var(--primary-glow);
+    background: var(--bg-element);
+    border: 2px solid var(--primary);
 }
 
 .timeline-content-col {
@@ -63,19 +62,15 @@
 }
 
 .lifestyle-event-card {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(10px);
+    background: var(--bg-card);
     border: 1px solid var(--glass-border);
-    border-radius: 20px;
-    padding: 20px;
-    transition: all 0.3s ease;
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    transition: var(--transition-fast);
     position: relative;
-    overflow: hidden;
 }
 
 .lifestyle-event-card:hover {
-    transform: scale(1.02) translateX(10px);
-    background: rgba(var(--primary-rgb), 0.05);
     border-color: var(--primary);
 }
 
@@ -137,27 +132,24 @@
 .mosaic-day-card {
     background: var(--bg-card);
     border: 1px solid var(--glass-border);
-    border-radius: 24px;
-    padding: 20px;
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    height: 300px;
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    gap: 16px;
+    height: 320px;
+    transition: var(--transition-fast);
     cursor: pointer;
     position: relative;
-    overflow: hidden;
 }
 
 .mosaic-day-card:hover {
-    transform: translateY(-5px);
     border-color: var(--primary);
-    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
 }
 
 .mosaic-day-card.today {
-    border: 2px solid var(--primary);
-    background: rgba(var(--primary-rgb), 0.05);
+    border: 1px solid var(--primary);
+    background: var(--bg-element);
 }
 
 .mosaic-header {
@@ -255,15 +247,11 @@
 }
 
 .month-label-sticky h2 {
-    font-size: 2.2rem;
-    font-weight: 900;
+    font-size: 1.8rem;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 4px;
     color: var(--primary);
-    writing-mode: vertical-lr;
-    transform: rotate(180deg);
     margin: 0;
-    opacity: 0.8;
 }
 
 .year-month-card-modern {
