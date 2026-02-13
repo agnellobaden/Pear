@@ -45,7 +45,7 @@ const app = {
         theme: localStorage.getItem('moltbot_theme') || 'dark',
         quickActionLeft: localStorage.getItem('moltbot_qa_left') || 'dashboard',
         quickActionRight: localStorage.getItem('moltbot_qa_right') || 'settings',
-        dockStyle: localStorage.getItem('moltbot_dock_style') || 'compact',
+        dockStyle: localStorage.getItem('moltbot_dock_style') || 'full',
         appName: localStorage.getItem('moltbot_app_name') || 'Pear',
         customFont: localStorage.getItem('moltbot_custom_font') || 'Outfit',
         customPrimary: localStorage.getItem('moltbot_custom_primary') || '',
@@ -72,7 +72,8 @@ const app = {
         deferredPrompt: null,
         fixedCosts: [],
         lastFixedCostsMonth: localStorage.getItem('moltbot_last_fixed_month') || '',
-        savingsBalance: parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0
+        savingsBalance: parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0,
+        menuOrder: JSON.parse(localStorage.getItem('moltbot_menu_order')) || ['dashboard', 'calendar', 'contacts', 'todo', 'finance', 'alarm', 'team', 'settings']
     },
 
 
@@ -471,7 +472,7 @@ const app = {
         this.state.theme = localStorage.getItem('moltbot_theme') || 'dark';
         this.state.quickActionLeft = localStorage.getItem('moltbot_qa_left') || 'dashboard';
         this.state.quickActionRight = localStorage.getItem('moltbot_qa_right') || 'settings';
-        this.state.dockStyle = localStorage.getItem('moltbot_dock_style') || 'compact';
+        this.state.dockStyle = localStorage.getItem('moltbot_dock_style') || 'full';
         this.state.appName = localStorage.getItem('moltbot_app_name') || 'Pear';
         this.state.customFont = localStorage.getItem('moltbot_custom_font') || 'Outfit',
             this.state.customPrimary = localStorage.getItem('moltbot_custom_primary') || '',
@@ -2039,6 +2040,9 @@ const app = {
             document.querySelectorAll('.theme-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.getAttribute('data-theme') === this.state.theme);
             });
+
+            // Render menu order settings
+            this.renderMenuOrderSettings();
         } else if (this.state.view === 'alarm') {
             this.alarm.render();
         } else if (this.state.view === 'finance') {
@@ -2078,6 +2082,17 @@ const app = {
             settings: 'settings'
         };
 
+        const actionLabels = {
+            dashboard: 'Dash',
+            calendar: 'Plan',
+            finance: 'Geld',
+            team: 'Team',
+            contacts: 'Leute',
+            todo: 'ToDo',
+            alarm: 'Uhr',
+            settings: 'Setup'
+        };
+
         const dock = document.querySelector('.voice-dock');
         if (!dock) return;
 
@@ -2085,27 +2100,38 @@ const app = {
         dock.classList.toggle('is-full-bar', this.state.dockStyle === 'full');
 
         if (this.state.dockStyle === 'full') {
-            dock.innerHTML = `
-                <button class="voice-side-btn ${this.state.view === 'dashboard' ? 'active' : ''}" onclick="app.navigateTo('dashboard')"><i data-lucide="layout-dashboard"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'calendar' ? 'active' : ''}" onclick="app.navigateTo('calendar')"><i data-lucide="calendar"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'finance' ? 'active' : ''}" onclick="app.navigateTo('finance')"><i data-lucide="wallet"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'team' ? 'active' : ''}" onclick="app.navigateTo('team')"><i data-lucide="users"></i></button>
-                <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()"><i data-lucide="mic"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'contacts' ? 'active' : ''}" onclick="app.navigateTo('contacts')"><i data-lucide="book-user"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'todo' ? 'active' : ''}" onclick="app.navigateTo('todo')"><i data-lucide="check-square"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'alarm' ? 'active' : ''}" onclick="app.navigateTo('alarm')"><i data-lucide="alarm-clock"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'settings' ? 'active' : ''}" onclick="app.navigateTo('settings')"><i data-lucide="settings"></i></button>
-            `;
+            const views = this.state.menuOrder;
+
+            let html = '';
+            views.forEach((v, idx) => {
+                // Add mic in the middle (after 4 items)
+                if (idx === 4) {
+                    html += `<button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()">
+                                <i data-lucide="mic"></i>
+                                <span class="dock-label">Pear</span>
+                            </button>`;
+                }
+                html += `
+                    <button class="voice-side-btn ${this.state.view === v ? 'active' : ''}" onclick="app.navigateTo('${v}')">
+                        <i data-lucide="${actionIcons[v]}"></i>
+                        <span class="dock-label">${actionLabels[v]}</span>
+                    </button>
+                `;
+            });
+            dock.innerHTML = html;
         } else {
             dock.innerHTML = `
                 <button id="qaLeftBtn" class="voice-side-btn left" onclick="app.navigateTo('${this.state.quickActionLeft}')">
                     <i data-lucide="${actionIcons[this.state.quickActionLeft] || 'star'}"></i>
+                    <span class="dock-label">${actionLabels[this.state.quickActionLeft]}</span>
                 </button>
                 <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()">
                     <i data-lucide="mic"></i>
+                    <span class="dock-label">Pear</span>
                 </button>
                 <button id="qaRightBtn" class="voice-side-btn right" onclick="app.navigateTo('${this.state.quickActionRight}')">
                     <i data-lucide="${actionIcons[this.state.quickActionRight] || 'star'}"></i>
+                    <span class="dock-label">${actionLabels[this.state.quickActionRight]}</span>
                 </button>
             `;
         }
@@ -2113,6 +2139,112 @@ const app = {
         if (window.lucide) lucide.createIcons();
     },
 
+    renderMenuOrderSettings() {
+        const container = document.getElementById('menuOrderList');
+        if (!container) return;
+
+        const menuLabels = {
+            dashboard: 'Dashboard',
+            calendar: 'Kalender',
+            contacts: 'Kontakte',
+            todo: 'Aufgaben',
+            finance: 'Finanzen',
+            alarm: 'Wecker',
+            team: 'Team Sync',
+            settings: 'Einstellungen'
+        };
+
+        const menuIcons = {
+            dashboard: 'layout-dashboard',
+            calendar: 'calendar',
+            contacts: 'contact',
+            todo: 'check-square',
+            finance: 'wallet',
+            alarm: 'clock',
+            team: 'users',
+            settings: 'settings'
+        };
+
+        container.innerHTML = this.state.menuOrder.map((item, index) => `
+            <div class="menu-order-item" draggable="true" data-menu-id="${item}" 
+                style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: 12px; cursor: move; transition: all 0.2s;">
+                <i data-lucide="grip-vertical" size="18" style="color: var(--text-muted);"></i>
+                <i data-lucide="${menuIcons[item]}" size="20" style="color: var(--primary);"></i>
+                <span style="flex: 1; font-weight: 600;">${menuLabels[item]}</span>
+                <span style="font-size: 0.75rem; color: var(--text-muted); background: rgba(var(--primary-rgb), 0.1); padding: 4px 8px; border-radius: 6px;">#${index + 1}</span>
+            </div>
+        `).join('');
+
+        const items = container.querySelectorAll('.menu-order-item');
+        items.forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/html', item.innerHTML);
+                item.style.opacity = '0.4';
+            });
+
+            item.addEventListener('dragend', (e) => {
+                item.style.opacity = '1';
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const afterElement = this.getDragAfterElement(container, e.clientY);
+                const draggable = document.querySelector('.menu-order-item[style*="opacity: 0.4"]');
+                if (afterElement == null) {
+                    container.appendChild(draggable);
+                } else {
+                    container.insertBefore(draggable, afterElement);
+                }
+            });
+
+            item.addEventListener('drop', (e) => {
+                e.stopPropagation();
+                this.updateMenuOrderFromDOM();
+            });
+        });
+
+        if (window.lucide) lucide.createIcons();
+    },
+
+    getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('.menu-order-item:not([style*="opacity: 0.4"])')];
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    },
+
+    updateMenuOrderFromDOM() {
+        const container = document.getElementById('menuOrderList');
+        if (!container) return;
+
+        const items = container.querySelectorAll('.menu-order-item');
+        const newOrder = Array.from(items).map(item => item.getAttribute('data-menu-id'));
+
+        this.state.menuOrder = newOrder;
+        localStorage.setItem('moltbot_menu_order', JSON.stringify(newOrder));
+
+        this.renderMenuOrderSettings();
+        this.renderVoiceDock();
+        this.notify('Menü aktualisiert', 'Die Reihenfolge wurde gespeichert.', 'success');
+    },
+
+    resetMenuOrder() {
+        const defaultOrder = ['dashboard', 'calendar', 'contacts', 'todo', 'finance', 'alarm', 'team', 'settings'];
+        this.state.menuOrder = defaultOrder;
+        localStorage.setItem('moltbot_menu_order', JSON.stringify(defaultOrder));
+
+        this.renderMenuOrderSettings();
+        this.renderVoiceDock();
+        this.notify('Zurückgesetzt', 'Standardreihenfolge wiederhergestellt.', 'success');
+    },
 
 
     // --- FINANCE MODULE ---

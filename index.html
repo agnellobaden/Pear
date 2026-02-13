@@ -8,7 +8,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="author" content="Andrea Agnello, Pear Company">
     <meta name="copyright" content="Copyright © 2026 Andrea Agnello, Pear Company, Deutschland">
     <title>Pear App | Smart Team Sync</title>
@@ -1357,7 +1358,7 @@
                     </div>
                     <div class="card-content">
                         <p class="text-muted" style="margin-bottom: 20px;">Wähle dein bevorzugtes Design für die untere
-                            Steuerungsleiste.</p>
+                            Steuerungsleiste und passe die Reihenfolge der Menüpunkte an.</p>
 
                         <div class="settings-input-grid" style="margin-bottom: 20px;">
                             <div class="form-group" style="grid-column: 1 / -1;">
@@ -1369,7 +1370,7 @@
                             </div>
                         </div>
 
-                        <div id="quickActionSettings" class="settings-input-grid">
+                        <div id="quickActionSettings" class="settings-input-grid" style="margin-bottom: 25px;">
                             <div class="form-group">
                                 <label>Linker Button</label>
                                 <select id="settingsQALeft" onchange="app.updateQuickAction('Left', this.value)">
@@ -1396,6 +1397,33 @@
                                     <option value="settings">Einstellungen</option>
                                 </select>
                             </div>
+                        </div>
+
+                        <div id="menuOrderSettings" style="margin-top: 25px;">
+                            <h4
+                                style="font-size: 0.9rem; font-weight: 700; margin-bottom: 15px; color: var(--text-main);">
+                                <i data-lucide="move" size="16" style="vertical-align: middle;"></i>
+                                Menü-Reihenfolge anpassen
+                            </h4>
+                            <p class="text-muted" style="margin-bottom: 15px; font-size: 0.85rem;">
+                                Ziehe die Einträge, um die Reihenfolge im Dock zu ändern. Die Standardreihenfolge
+                                entspricht dem Hamburger-Menü.
+                            </p>
+                            <div id="menuOrderList"
+                                style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                                <!-- Dynamically populated by JS: app.renderMenuOrderSettings() -->
+                            </div>
+                            <button class="btn-outline" onclick="app.resetMenuOrder()"
+                                style="width: 100%; margin-top: 10px;">
+                                <i data-lucide="rotate-ccw" size="16"></i>
+                                Standardreihenfolge wiederherstellen
+                            </button>
+                        </div>
+
+                        <div class="settings-hint"
+                            style="font-size: 0.8rem; color: var(--text-muted); display:flex; gap:10px; align-items:center; margin-top: 20px;">
+                            <i data-lucide="info" size="14"></i>
+                            Änderungen werden sofort übernommen und auf allen Geräten synchronisiert.
                         </div>
                     </div>
                 </div>

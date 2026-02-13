@@ -4189,9 +4189,15 @@ body {
     }
 }
 
-/* Hide Dock Permanently */
-.mobile-nav {
-    display: none !important;
+@media (max-width: 768px) {
+    .voice-dock {
+        bottom: 0 !important;
+        border-radius: 0 !important;
+        backdrop-filter: blur(40px);
+        background: rgba(var(--bg-card-rgb), 0.98);
+        border-top: 1px solid var(--glass-border);
+        padding-bottom: env(safe-area-inset-bottom, 15px);
+    }
 }
 
 /* --- VOICE CONTROL STYLES (COMPACT PILL) --- */
@@ -4199,61 +4205,87 @@ body {
     position: fixed;
     bottom: 0;
     left: 0;
-    transform: none;
-    width: 100%;
-    z-index: 3000;
+    width: 101%;
+    max-width: 101vw;
+    height: 75px;
+    z-index: 5000;
     display: flex;
     align-items: center;
     justify-content: space-around;
-    background: var(--bg-card);
-    backdrop-filter: blur(25px);
+    background: rgba(var(--bg-card-rgb), 0.98);
+    backdrop-filter: blur(30px);
     border-top: 1px solid var(--glass-border);
-    padding: 8px 5px calc(8px + env(safe-area-inset-bottom, 0px));
-    box-shadow: 0 -5px 25px rgba(0, 0, 0, 0.2);
+    padding: 5px 2px calc(5px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -5px 30px rgba(0, 0, 0, 0.3);
     box-sizing: border-box;
-    transition: var(--transition);
+    transition: none;
+    border-radius: 0;
 }
 
 
 .voice-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
     background: linear-gradient(135deg, var(--primary), var(--secondary));
     border: none;
     color: white;
     cursor: pointer;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 2px;
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     animation: voice-pulse 2.5s infinite;
     flex-shrink: 0;
     box-shadow: 0 8px 25px var(--primary-glow);
 }
 
+.voice-btn .dock-label {
+    color: white;
+    font-size: 0.6rem;
+    opacity: 1;
+}
+
 .voice-side-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: rgba(var(--primary-rgb), 0.05);
-    border: 1px solid var(--glass-border);
+    width: auto;
+    min-width: 44px;
+    height: 100%;
+    border-radius: 0;
+    background: transparent;
+    border: none;
     color: var(--text-muted);
-    /* Now bright enough */
     cursor: pointer;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     transition: all 0.3s ease;
-    flex-shrink: 0;
+    flex: 1;
+}
+
+.dock-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
+}
+
+.voice-side-btn.active .dock-label {
+    opacity: 1;
+    color: var(--primary);
+    transform: scale(1.05);
 }
 
 /* --- FULL BAR MODE REFINEMENTS --- */
 .voice-dock .voice-btn {
-    width: 65px;
-    height: 65px;
-    margin-top: -30px;
-    /* Floating look */
+    width: 58px;
+    height: 58px;
+    margin-top: 0;
+    /* Flush with bar */
     z-index: 10;
 }
 
@@ -4279,7 +4311,7 @@ body {
     .voice-dock .voice-btn {
         width: 58px;
         height: 58px;
-        margin-top: -25px;
+        margin-top: 0;
     }
 
     .voice-dock .voice-side-btn {
@@ -4440,9 +4472,7 @@ body {
 
 /* responsive fix for the mic on smaller screens */
 @media (max-width: 768px) {
-    .voice-dock {
-        bottom: 20px;
-    }
+    /* voice dock handled above now */
 
     .voice-btn {
         width: 55px;
