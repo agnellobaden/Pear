@@ -3219,6 +3219,10 @@ const app = {
                         <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
                             <h3 style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin:0;">Termine & Wichtiges</h3>
                             <span id="eventCountBadge" style="background: rgba(var(--primary-rgb), 0.15); color: var(--primary); padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; flex-shrink:0;">0</span>
+                            <button class="btn-icon-mini" onclick="event.stopPropagation(); app.editEvent()" 
+                                style="background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer; margin-left: 5px;">
+                                <i data-lucide="plus" size="18"></i>
+                            </button>
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                             <button class="btn-text" style="font-size: 0.75rem; padding: 4px 8px;" onclick="event.stopPropagation(); app.navigateTo('calendar')">Alle ansehen</button>
@@ -3237,9 +3241,15 @@ const app = {
                         
                         <!-- Events Section -->
                         <div>
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border);">
-                                <i data-lucide="calendar" size="18" style="color:var(--primary);"></i>
-                                <h4 style="margin: 0; color:var(--primary); font-size: 0.9rem; font-weight: 700;">Nächste Termine</h4>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border);">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <i data-lucide="calendar" size="18" style="color:var(--primary);"></i>
+                                    <h4 style="margin: 0; color:var(--primary); font-size: 0.9rem; font-weight: 700;">Nächste Termine</h4>
+                                </div>
+                                <button class="btn-icon-mini" onclick="app.editEvent()" 
+                                    style="background: rgba(var(--primary-rgb), 0.1); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer;">
+                                    <i data-lucide="plus" size="14"></i>
+                                </button>
                             </div>
                             <div class="event-list" id="dashboardEventList">
                                 <div class="empty-state">Lade Termine...</div>
@@ -3250,8 +3260,14 @@ const app = {
             'mini_calendar': `
                 <div class="card glass mini-calendar collapsible-card">
                     <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <h3 id="miniCalendarMonth">Kalender</h3>
+                        <div style="display: flex; align-items: center; gap: 10px; width: 100%; justify-content: space-between;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h3 id="miniCalendarMonth">Kalender</h3>
+                                <button class="btn-icon-mini" onclick="event.stopPropagation(); app.editEvent()" 
+                                    style="background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer;">
+                                    <i data-lucide="plus" size="18"></i>
+                                </button>
+                            </div>
                             <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
                         </div>
                     </div>
@@ -3945,7 +3961,13 @@ const app = {
             const dateDisplay = selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
 
             let listHtml = `<div style="margin-top:15px; border-top:1px solid var(--glass-border); padding-top:10px; animation:fadeIn 0.3s;">
-                <h5 style="margin:0 0 10px 0; color:var(--text-muted); font-size:0.9rem;">Termine am ${dateDisplay}</h5>`;
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h5 style="margin:0; color:var(--text-muted); font-size:0.9rem;">Termine am ${dateDisplay}</h5>
+                    <button onclick="app.editEvent()" class="btn-icon-mini" 
+                        style="background: rgba(var(--primary-rgb), 0.1); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer;">
+                        <i data-lucide="plus" size="14"></i>
+                    </button>
+                </div>`;
 
             if (events.length === 0) {
                 listHtml += `<div class="text-muted" style="font-size:0.8rem; text-align:center; padding:10px;">Keine Termine</div>`;
