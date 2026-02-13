@@ -59,7 +59,7 @@ const app = {
         isNightLandscape: localStorage.getItem('moltbot_night_landscape') === 'true',
         isAutoNightclockEnabled: localStorage.getItem('moltbot_auto_nightclock') === 'true',
         isWakeLockPersistent: localStorage.getItem('moltbot_wakelock_persistent') === 'true',
-        isWakeWordEnabled: localStorage.getItem('moltbot_wake_word_enabled') === 'true',
+        isWakeWordEnabled: false, // Disabled by user request: Manual only operation
         widgetOrder: JSON.parse(localStorage.getItem('moltbot_widget_order')) || ['special', 'drive', 'kpis', 'quick_finance', 'events', 'mini_calendar'],
         widgetVisibility: JSON.parse(localStorage.getItem('moltbot_widgets')) || {
             'special': true,
@@ -183,11 +183,10 @@ const app = {
             // Initial Render & Navigation
             this.handleInitialNavigation();
 
-            // Start Wake Word if enabled
-            if (this.state.isWakeWordEnabled) {
-                this.voice.init();
-                this.voice.startWakeWord();
-            }
+            // Stop Wake Word listener if active (ensuring manual-only mode)
+            this.voice.stopWakeWord();
+            this.state.isWakeWordEnabled = false;
+            localStorage.setItem('moltbot_wake_word_enabled', 'false');
 
             // Start Departure Reminders Check (every minute)
             setInterval(() => this.checkDepartureReminders(), 60000);
@@ -493,6 +492,7 @@ const app = {
         this.state.isAutoNightclockEnabled = localStorage.getItem('moltbot_auto_nightclock') === 'true';
         this.state.isWakeLockPersistent = localStorage.getItem('moltbot_wakelock_persistent') === 'true';
         this.state.nightModeStart = localStorage.getItem('moltbot_night_mode_start') || '01:00';
+        this.state.isWakeWordEnabled = localStorage.getItem('moltbot_wake_word_enabled') === 'true';
     },
 
     saveLocal() {
@@ -6122,6 +6122,33 @@ const app = {
             if (input.includes('geburtstag') || input.includes('wann bin ich geboren')) {
                 const bday = app.state.user.birthday;
                 this.showFeedback(`Dein Geburtstag ist am ${bday ? new Date(bday).toLocaleDateString('de-DE') : 'nicht hinterlegt'}.`);
+                return;
+            }
+
+            // 1.5 TEAM QUERIES
+            if (input.includes('team') || input.includes('verbunden') || input.includes('online')) {
+                const isConnected = !!app.state.user.teamName;
+                if (!isConnected) {
+                    this.showFeedback("Du bist aktuell nicht mit einem Team verbunden. Du kannst dich im Bereich 'Team Sync' anmelden.");
+                    app.navigateTo('team');
+                    return;
+                }
+
+                const list = document.getElementById('presenceList');
+                let memberNames = [];
+                if (list) {
+                    memberNames = Array.from(list.querySelectorAll('.member-name'))
+                        .map(m => m.textContent.replace('(Ich)', '').trim())
+                        .filter(name => name !== app.state.user.name);
+                }
+
+                if (memberNames.length > 0) {
+                    const membersStr = memberNames.join(', ');
+                    this.showFeedback(`Du bist aktuell im Team "${app.state.user.teamName}" mit ${membersStr} verbunden.`);
+                } else {
+                    this.showFeedback(`Du bist im Team "${app.state.user.teamName}", aber aktuell sind keine anderen Mitglieder online.`);
+                }
+                app.navigateTo('team');
                 return;
             }
 
