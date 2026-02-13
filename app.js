@@ -38,6 +38,7 @@ const app = {
         editingContactId: null,
         finance: [],
         monthlyBudget: parseFloat(localStorage.getItem('moltbot_budget')) || 0,
+        budgetWarningLimit: parseFloat(localStorage.getItem('moltbot_budget_warning')) || 100, // Warn when X€ remains
         savingsGoal: parseFloat(localStorage.getItem('moltbot_savings_goal')) || 0,
         contactView: localStorage.getItem('moltbot_contact_view') || 'table',
         favsCollapsed: localStorage.getItem('moltbot_favs_collapsed') === 'true',
@@ -74,6 +75,65 @@ const app = {
         savingsBalance: parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0
     },
 
+
+    notify(title, message, type = 'primary') {
+        const toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            const container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none;';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        const colorMap = {
+            'primary': 'var(--primary)',
+            'success': 'var(--success)',
+            'warning': 'var(--warning)',
+            'danger': 'var(--danger)'
+        };
+        const color = colorMap[type] || 'var(--primary)';
+
+        toast.style.cssText = `
+            background: rgba(15, 15, 15, 0.9);
+            backdrop-filter: blur(15px);
+            border-left: 4px solid ${color};
+            color: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            min-width: 280px;
+            max-width: 350px;
+            transform: translateX(120%);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: all;
+            cursor: pointer;
+        `;
+
+        toast.innerHTML = `
+            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 4px; color: ${color};">${title}</div>
+            <div style="font-size: 0.85rem; opacity: 0.9;">${message}</div>
+        `;
+
+        document.getElementById('toast-container').appendChild(toast);
+
+        // Animate in
+        setTimeout(() => toast.style.transform = 'translateX(0)', 10);
+
+        // Click to dismiss
+        toast.onclick = () => {
+            toast.style.transform = 'translateX(120%)';
+            setTimeout(() => toast.remove(), 400);
+        };
+
+        // Auto dismiss
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.style.transform = 'translateX(120%)';
+                setTimeout(() => toast.remove(), 400);
+            }
+        }, 5000);
+    },
 
     // --- INITIALIZATION ---
     init() {
@@ -396,8 +456,11 @@ const app = {
         this.state.alarms = safeLoad('moltbot_alarms', []);
         this.state.finance = safeLoad('moltbot_finance', []);
         this.state.finance.forEach(f => {
-            if (!f.type) f.type = 'expense'; // Migration: Existing entries are expenses
+            if (!f.type) f.type = 'expense';
         });
+        this.state.monthlyBudget = parseFloat(localStorage.getItem('moltbot_budget')) || 0;
+        this.state.budgetWarningLimit = parseFloat(localStorage.getItem('moltbot_budget_warning')) || 100;
+
         this.state.todoCategories = safeLoad('moltbot_todo_categories', ['🛒 Einkauf', '💼 Arbeit', '🏠 Zuhause', '👤 Privat']);
         this.state.teamHistory = safeLoad('moltbot_team_history', []);
         this.state.fixedCosts = safeLoad('moltbot_fixed_costs', []);
@@ -2072,7 +2135,7 @@ const app = {
             e.preventDefault();
             const amount = parseFloat(document.getElementById('quickFinAmount').value);
             const date = document.getElementById('quickFinDate').value;
-            const source = document.getElementById('quickFinSource').value || 'Ausgabe';
+            const source = document.getElementById('quickFinSource').value || 'Schnell-Eintrag';
             const type = document.getElementById('quickFinType').value || 'expense';
 
             if (isNaN(amount)) return;
@@ -2091,11 +2154,8 @@ const app = {
             if (app.sync && app.sync.push) app.sync.push();
 
             document.getElementById('quickExpenseModal').classList.add('hidden');
-
-            // Refresh dashboard or finance view
-            if (app.state.view === 'dashboard') app.renderDashboard();
-            if (app.state.view === 'finance') this.render();
-
+            this.render();
+            this.checkBudget(); // Trigger Warning Check
             app.notify(type === 'income' ? "Einnahme gespeichert" : "Ausgabe gespeichert",
                 `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} für ${source} erfasst.`);
         },
@@ -2126,6 +2186,7 @@ const app = {
             const dateInput = document.getElementById('finDate');
             if (dateInput) dateInput.valueAsDate = new Date();
             this.render();
+            this.checkBudget(); // Trigger Warning Check
         },
 
 
@@ -2167,6 +2228,34 @@ const app = {
                 app.state.monthlyBudget = isNaN(b) ? 0 : b;
                 localStorage.setItem('moltbot_budget', app.state.monthlyBudget);
                 this.render();
+            }
+        },
+
+        editBudgetWarning() {
+            const newLimit = prompt('Ab welchem Restbetrag soll ich dich warnen? (€):', app.state.budgetWarningLimit);
+            if (newLimit !== null) {
+                const l = parseFloat(newLimit);
+                app.state.budgetWarningLimit = isNaN(l) ? 0 : l;
+                localStorage.setItem('moltbot_budget_warning', app.state.budgetWarningLimit);
+                this.render();
+            }
+        },
+
+        checkBudget() {
+            if (app.state.monthlyBudget <= 0) return;
+
+            const currentMonth = new Date().toISOString().substring(0, 7);
+            const monthlyExpenses = app.state.finance
+                .filter(e => e.date.startsWith(currentMonth) && e.type === 'expense')
+                .reduce((acc, curr) => acc + curr.amount, 0);
+
+            const remaining = app.state.monthlyBudget - monthlyExpenses;
+
+            if (remaining <= 0) {
+                app.notify("Budget Alarm! 🚨", "Du hast dein monatliches Budget Limit erreicht oder überschritten!", "danger");
+                if (window.vibrate) window.vibrate([200, 100, 200]);
+            } else if (remaining <= app.state.budgetWarningLimit) {
+                app.notify("Budget Warnung! ⚠️", `Dein Budget neigt sich dem Ende zu. Nur noch ${remaining.toFixed(2)}€ übrig.`, "warning");
             }
         },
 
@@ -2366,10 +2455,22 @@ const app = {
                 yearTotalEl.style.color = yearlyBalance < 0 ? 'var(--danger)' : 'var(--success)';
             }
 
+            if (document.getElementById('finWarningLimit')) {
+                document.getElementById('finWarningLimit').textContent = app.state.budgetWarningLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+
+            // Update settings inputs if they exist
+            if (document.getElementById('settingsMonthlyBudget')) {
+                document.getElementById('settingsMonthlyBudget').value = app.state.monthlyBudget;
+            }
+            if (document.getElementById('settingsBudgetWarning')) {
+                document.getElementById('settingsBudgetWarning').value = app.state.budgetWarningLimit;
+            }
+
             // Apply warning color if budget is exceeded
             const remainingEl = document.getElementById('finRemaining');
             if (remainingEl) {
-                remainingEl.style.color = remainingBudget < 0 ? 'var(--danger)' : 'var(--text-bright)';
+                remainingEl.style.color = remainingBudget < 0 ? 'var(--danger)' : (remainingBudget <= app.state.budgetWarningLimit ? 'var(--warning)' : 'var(--text-bright)');
             }
 
             // Render Table (Filter out deleted entries)
@@ -3156,23 +3257,28 @@ const app = {
             const futureEvents = this.getFilteredEvents().filter(e => e.date >= todayStr && e.category !== 'holiday').sort((a, b) => a.date.localeCompare(b.date) || (a.time || '00:00').localeCompare(b.time || '00:00'));
             const nextEvent = futureEvents[0];
 
+            const remainingBudget = this.state.monthlyBudget - monthlyExpenses;
+            const isWarning = remainingBudget > 0 && remainingBudget <= this.state.budgetWarningLimit;
+
             budgetWidget.innerHTML = `
-            <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOverBudget ? 'rgba(239, 68, 68, 0.4)' : 'var(--glass-border)'}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
+            <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOverBudget ? 'rgba(239, 68, 68, 0.4)' : (isWarning ? 'rgba(245, 158, 11, 0.4)' : 'var(--glass-border)')}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
                 <div class="card-header-toggle" onclick="app.toggleCard(this)">
                     <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
-                        <div class="icon-circle" style="background: ${isOverBudget ? 'rgba(239,68,68,0.1)' : 'rgba(var(--primary-rgb), 0.1)'}; color: ${isOverBudget ? '#ef4444' : 'var(--primary)'}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;">
-                            <i data-lucide="wallet" size="18"></i>
+                        <div class="icon-circle" style="background: ${isOverBudget ? 'rgba(239,68,68,0.1)' : (isWarning ? 'rgba(245,158,11,0.1)' : 'rgba(var(--primary-rgb), 0.1)')}; color: ${isOverBudget ? '#ef4444' : (isWarning ? '#f59e0b' : 'var(--primary)')}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;">
+                            <i data-lucide="${isOverBudget ? 'alert-octagon' : (isWarning ? 'bell-ring' : 'wallet')}" size="18"></i>
                         </div>
                         <div style="overflow: hidden;">
-                            <h3 style="font-size: 0.95rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Finanz-Status</h3>
+                            <h3 style="font-size: 0.95rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                ${isOverBudget ? 'Budget Überschritten! 🚨' : (isWarning ? 'Budget wird knapp! ⚠️' : 'Finanz-Status')}
+                            </h3>
                             <small style="color: var(--text-muted); white-space: nowrap; font-size: 0.75rem;">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
                         </div>
                     </div>
                     <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                          <div style="text-align: right; margin-right: 5px;">
-                            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">Tageslimit:</div>
-                            <div style="font-size: 1.1rem; font-weight: 800; color: var(--primary);">
-                                ${dailyLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">Verfügbar:</div>
+                            <div style="font-size: 1.1rem; font-weight: 800; color: ${isOverBudget ? '#ef4444' : (isWarning ? '#f59e0b' : 'var(--success)')};">
+                                ${remainingBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                             </div>
                         </div>
                         <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
@@ -3180,11 +3286,24 @@ const app = {
                 </div>
                 
                 <div class="card-content">
+                    <!-- Warning Message -->
+                    ${isOverBudget ? `
+                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: #ef4444; display: flex; align-items: center; gap: 10px;">
+                            <i data-lucide="alert-circle" size="16"></i>
+                            <span>Achtung: Du hast dein Limit um ${Math.abs(remainingBudget).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} überschritten!</span>
+                        </div>
+                    ` : (isWarning ? `
+                        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: #f59e0b; display: flex; align-items: center; gap: 10px;">
+                            <i data-lucide="info" size="16"></i>
+                            <span>Hinweis: Du hast nur noch ${remainingBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} bis zum Monatsende.</span>
+                        </div>
+                    ` : '')}
+
                     <!-- Additional KPIs Row -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; margin-bottom: 15px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                         <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border);">
-                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Netto-Rest (Monat)</small>
-                            <div style="font-weight: 700; color: var(--success);">${totalAvailable.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Tageslimit (Intelligent)</small>
+                            <div style="font-weight: 700; color: var(--primary);">${dailyLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--glass-border);">
                             <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.7rem;">Ausgaben Heute</small>
@@ -3194,11 +3313,11 @@ const app = {
 
                     <!-- Progress Section -->
                     <div style="height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden;">
-                        <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? '#ef4444' : 'var(--primary)'}; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                        <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? '#ef4444' : (isWarning ? '#f59e0b' : 'var(--primary)')}; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted);">
                         <span>Gesamt-Eingänge: ${monthlyIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
-                        <span>Budget-Limit: ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        <span>Budget-Limit (Gehalt): ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
                     </div>
                 </div>
             </div>
@@ -6007,11 +6126,42 @@ const app = {
             }
 
             // 2. FINANCE DETECTION
-            if (input.includes('euro') || input.includes('betrag') || input.includes('ausgabe') || input.includes('kosten') || input.includes('€') || input.includes('budget')) {
+            if (input.includes('euro') || input.includes('betrag') || input.includes('ausgabe') || input.includes('kosten') || input.includes('€') || input.includes('budget') || input.includes('gehalt')) {
+                // If setting budget/salary
+                if ((input.includes('setze') || input.includes('mein') || input.includes('ist')) && (input.includes('budget') || input.includes('gehalt'))) {
+                    const amountMatches = text.match(/(\d+([,.]\d+)?)/);
+                    if (amountMatches) {
+                        const amount = parseFloat(amountMatches[1].replace(',', '.'));
+                        app.state.monthlyBudget = amount;
+                        localStorage.setItem('moltbot_budget', amount);
+                        this.showFeedback(`Dein monatliches Budget (Gehalt) wurde auf ${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} festgelegt.`);
+                        app.finance.render();
+                        return;
+                    }
+                }
+
+                // If setting warning threshold
+                if ((input.includes('warn-schwelle') || input.includes('warnung')) && input.includes('euro')) {
+                    const amountMatches = text.match(/(\d+([,.]\d+)?)/);
+                    if (amountMatches) {
+                        const amount = parseFloat(amountMatches[1].replace(',', '.'));
+                        app.state.budgetWarningLimit = amount;
+                        localStorage.setItem('moltbot_budget_warning', amount);
+                        this.showFeedback(`Die Warn-Schwelle wurde auf ${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} festgelegt.`);
+                        app.finance.render();
+                        return;
+                    }
+                }
+
                 // If just "wie ist mein budget"
-                if (input.includes('wie ist') || input.includes('wieviel')) {
-                    const monthlyExpenses = app.state.finance.reduce((acc, curr) => acc + curr.amount, 0); // simplified for this turn
-                    this.showFeedback(`Dein monatliches Budget beträgt ${app.state.monthlyBudget}€. Möchtest du eine Ausgabe eintragen?`);
+                if (input.includes('wie ist') || input.includes('wieviel') || input.includes('kontostand')) {
+                    const currentMonth = new Date().toISOString().substring(0, 7);
+                    const monthlyExpenses = app.state.finance
+                        .filter(e => e.date.startsWith(currentMonth) && e.type === 'expense')
+                        .reduce((acc, curr) => acc + curr.amount, 0);
+                    const remaining = app.state.monthlyBudget - monthlyExpenses;
+
+                    this.showFeedback(`Dein Budget beträgt ${app.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}. Aktuell hast du noch ${remaining.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} übrig.`);
                 } else {
                     this.handleFinance(text);
                 }
@@ -6065,6 +6215,7 @@ const app = {
             app.saveLocal();
             app.navigateTo('finance');
             this.showFeedback(`Betrag gespeichert: ${amount}€ für ${source}`);
+            app.finance.checkBudget(); // Trigger Warning Check
         },
 
         handleTodo(text, forcedCategory = null) {

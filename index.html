@@ -443,9 +443,18 @@
                                 </div>
                             </div>
                             <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Warn-Schwelle ⚠️</small>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <h3 id="finWarningLimit" style="color: var(--warning); margin-top: 5px;">0,00 €</h3>
+                                    <button class="btn-icon" onclick="app.finance.editBudgetWarning()"
+                                        style="width: 24px; height: 24px;"><i data-lucide="bell" size="12"></i></button>
+                                </div>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
                                 <small class="text-muted">Verbl. Budget-Limit</small>
                                 <h3 id="finRemaining" style="margin-top: 5px;">0,00 €</h3>
                             </div>
+
                             <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
                                 <small class="text-muted">Jahresbilanz</small>
                                 <h3 id="finYearTotal" style="margin-top: 5px;">0,00 €</h3>
@@ -1175,6 +1184,49 @@
                                 style="margin-top: 15px; border-color: var(--danger); color: var(--danger);">
                                 <i data-lucide="rotate-ccw"></i> Einstellungen zurücksetzen
                             </button>
+                        </div>
+                    </div>
+                    <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 25px;">
+                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                            <h3>Finanzen & Budget 💰</h3>
+                            <i data-lucide="chevron-down" class="toggle-icon"></i>
+                        </div>
+                        <div class="card-content">
+                            <p class="text-muted" style="margin-bottom: 20px;">Lege dein monatliches Budget (Gehalt) und
+                                die
+                                Warn-Schwelle fest.</p>
+                            <div class="settings-input-grid">
+                                <div class="input-group">
+                                    <label>Netto-Gehalt (Monatsbudget)</label>
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="number" id="settingsMonthlyBudget" placeholder="1000.00"
+                                            onchange="{ app.state.monthlyBudget = parseFloat(this.value) || 0; localStorage.setItem('moltbot_budget', app.state.monthlyBudget); app.finance.render(); }">
+                                        <div
+                                            style="height: 45px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); padding: 0 15px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                                            €</div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label>Warnung bei Restbetrag</label>
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="number" id="settingsBudgetWarning" placeholder="100.00"
+                                            onchange="{ app.state.budgetWarningLimit = parseFloat(this.value) || 0; localStorage.setItem('moltbot_budget_warning', app.state.budgetWarningLimit); app.finance.render(); }">
+                                        <div
+                                            style="height: 45px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); padding: 0 15px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                                            €</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="input-group" style="grid-column: 1 / -1; margin-top: 10px;">
+                                <div
+                                    style="background: rgba(var(--primary-rgb), 0.1); border: 1px solid rgba(var(--primary-rgb), 0.2); padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 12px;">
+                                    <i data-lucide="mic" style="color: var(--primary);"></i>
+                                    <p style="font-size: 0.8rem; margin: 0; opacity: 0.9;">
+                                        <strong>Pro-Tipp:</strong> Du kannst dein Budget auch per Sprache setzen! Sag
+                                        einfach: <em>"Pear, setze mein Gehalt auf 2000 Euro"</em>.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
