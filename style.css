@@ -1733,14 +1733,12 @@ body {
     flex-direction: column;
     overflow: hidden;
     padding: 0;
-    background: var(--bg-card);
-    /* Solid background */
-    border-radius: 24px;
-    /* Optional: keep rounded corners if desired, or set to 0 */
+    background: transparent;
+    border-radius: 0;
     border: none;
-    /* Remove glass border */
     backdrop-filter: none;
-    /* Remove blur */
+    width: 100%;
+    min-height: calc(100vh - 120px);
 }
 
 .calendar-header-pro {
@@ -1811,7 +1809,42 @@ body {
 .calendar-header-pro h2 {
     font-size: 1.4rem;
     font-weight: 600;
-    min-width: 180px;
+    min-width: 140px;
+}
+
+@media (max-width: 600px) {
+    .calendar-header-pro {
+        padding: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
+    }
+
+    .header-left {
+        width: 100%;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .header-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .calendar-header-pro h2 {
+        font-size: 1.1rem;
+        min-width: unset;
+        order: -1;
+        /* Move title to front/top if needed */
+        width: 100%;
+        text-align: center;
+    }
+
+    .icon-btn {
+        width: 40px;
+        height: 40px;
+    }
 }
 
 .view-selector {
@@ -1987,7 +2020,9 @@ body {
         flex-direction: column;
         grid-template-columns: none;
         height: auto;
-        gap: 15px;
+        gap: 0;
+        width: 100%;
+        padding: 0;
     }
 
     .calendar-sidebar {
@@ -2130,10 +2165,18 @@ body {
 /* YEAR VIEW REDESIGN */
 .calendar-grid-large.view-year {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 30px;
     padding: 30px;
-    background: radial-gradient(circle at center, rgba(99, 102, 241, 0.1), transparent);
+    background: radial-gradient(circle at center, rgba(var(--primary-rgb), 0.1), transparent);
+}
+
+@media (max-width: 768px) {
+    .calendar-grid-large.view-year {
+        grid-template-columns: 1fr;
+        padding: 15px;
+        gap: 20px;
+    }
 }
 
 .year-month-card {

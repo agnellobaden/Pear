@@ -219,6 +219,239 @@
     transition: width 1s ease-in-out;
 }
 
+/* YEAR VIEW: Vertical Feed Redesign */
+.lifestyle-year-container {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    padding: 20px;
+    background: transparent;
+}
+
+.year-feed-month-section {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 30px;
+    align-items: start;
+    padding: 30px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--glass-border);
+    border-radius: 40px;
+    transition: all 0.4s ease;
+}
+
+.year-feed-month-section:hover {
+    background: rgba(var(--primary-rgb), 0.05);
+    border-color: var(--primary);
+    transform: translateY(-5px);
+}
+
+.month-label-sticky {
+    position: sticky;
+    top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.month-label-sticky h2 {
+    font-size: 2.2rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: var(--primary);
+    writing-mode: vertical-lr;
+    transform: rotate(180deg);
+    margin: 0;
+    opacity: 0.8;
+}
+
+.year-month-card-modern {
+    flex: 1;
+}
+
+.year-mini-grid-large {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+
+.year-mini-cell-large {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+}
+
+.year-mini-cell-large:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--primary);
+}
+
+.year-mini-cell-large.has-event {
+    background: rgba(var(--primary-rgb), 0.15);
+    color: var(--primary);
+    border-color: rgba(var(--primary-rgb), 0.3);
+}
+
+.year-mini-cell-large.is-today {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 0 15px var(--primary-glow);
+}
+
+@media (max-width: 768px) {
+    .lifestyle-year-container {
+        padding: 10px 0;
+        /* No side padding to use max width */
+    }
+
+    .year-feed-month-section {
+        grid-template-columns: 1fr;
+        padding: 15px 10px;
+        /* Snug padding */
+        gap: 10px;
+        border-radius: 20px;
+        margin: 0 5px;
+        /* Tiny margin to keep it centered but wide */
+    }
+
+    .month-label-sticky {
+        writing-mode: horizontal-tb;
+        transform: none;
+        position: static;
+        align-items: flex-start;
+    }
+
+    .month-label-sticky h2 {
+        writing-mode: horizontal-tb;
+        transform: none;
+        font-size: 2rem;
+        letter-spacing: 1px;
+        margin-bottom: 5px;
+    }
+
+    .year-mini-grid-large {
+        gap: 4px;
+        /* More compact for mobile */
+    }
+
+    .year-mini-cell-large {
+        font-size: 0.9rem;
+        border-radius: 8px;
+    }
+}
+
+/* YEAR VIEW: Agenda List Style */
+.year-agenda-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.year-agenda-day-row {
+    display: grid;
+    grid-template-columns: 45px 50px 1fr;
+    gap: 15px;
+    align-items: center;
+    padding: 12px 15px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 12px;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.year-agenda-day-row:hover {
+    background: rgba(var(--primary-rgb), 0.05);
+    border-color: var(--primary);
+}
+
+.year-agenda-day-row.is-today {
+    background: rgba(var(--primary-rgb), 0.15);
+    border-color: var(--primary);
+}
+
+.y-day-num {
+    font-weight: 800;
+    font-size: 1.2rem;
+    color: var(--text-main);
+    text-align: right;
+}
+
+.y-day-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.y-day-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.y-event-mini {
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    border-left: 3px solid var(--primary);
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.y-empty-day {
+    font-size: 0.85rem;
+    opacity: 0.3;
+    color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+    .lifestyle-day-container {
+        padding: 15px 10px;
+        gap: 20px;
+    }
+
+    .lifestyle-day-container::before {
+        left: 35px;
+        /* Shift line to left for more content space */
+    }
+
+    .timeline-entry {
+        gap: 15px;
+    }
+
+    .timeline-time-col {
+        min-width: 70px;
+    }
+
+    .timeline-time-col .time-bubble {
+        padding: 6px 10px;
+        font-size: 0.85rem;
+    }
+
+    .lifestyle-event-card {
+        padding: 15px;
+        border-radius: 16px;
+    }
+
+    .lifestyle-event-card h3 {
+        font-size: 1.2rem;
+    }
+}
+
 @keyframes slideInUp {
     from {
         opacity: 0;
@@ -228,16 +461,5 @@
     to {
         opacity: 1;
         transform: translateY(0);
-    }
-}
-
-@media (max-width: 600px) {
-    .lifestyle-week-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .mosaic-day-card {
-        height: auto;
-        min-height: 200px;
     }
 }

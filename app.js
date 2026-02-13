@@ -1177,6 +1177,28 @@ const app = {
         if (!e.date) return false;
         const evDate = new Date(e.date);
 
+        // Normalize dates to midnight for comparison
+        const normalizedD = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const normalizedEvDate = new Date(evDate.getFullYear(), evDate.getMonth(), evDate.getDate()).getTime();
+
+        // Don't show recurring events before their start date
+        if (normalizedD < normalizedEvDate) return false;
+
+        // Recurrence Logic
+        if (e.recurrence === 'daily') return true;
+
+        if (e.recurrence === 'weekly') {
+            return evDate.getDay() === d.getDay();
+        }
+
+        if (e.recurrence === 'monthly') {
+            return evDate.getDate() === d.getDate();
+        }
+
+        if (e.recurrence === 'yearly') {
+            return evDate.getDate() === d.getDate() && evDate.getMonth() === d.getMonth();
+        }
+
         // Year-independent matching for birthdays and holidays
         if (e.category === 'birthday' || e.category === 'holiday') {
             return evDate.getDate() === d.getDate() && evDate.getMonth() === d.getMonth();
@@ -1512,6 +1534,7 @@ const app = {
         setVal('eventEmail', event ? (event.email || '') : '');
         setVal('eventNotes', event ? (event.notes || '') : '');
         setVal('eventCategory', event ? (event.category || 'work') : 'work');
+        setVal('eventRecurrence', event ? (event.recurrence || 'none') : 'none');
         setVal('eventColor', event ? (event.color || '#6366f1') : '#6366f1');
 
         // Update Action Buttons
@@ -1656,6 +1679,7 @@ const app = {
                 email: document.getElementById('eventEmail').value,
                 notes: document.getElementById('eventNotes').value,
                 category: document.getElementById('eventCategory').value,
+                recurrence: document.getElementById('eventRecurrence').value,
                 color: document.getElementById('eventCategory').value === 'urgent' ? '#ef4444' : document.getElementById('eventColor').value
             };
             e.target.reset();
@@ -4035,9 +4059,12 @@ const app = {
             const isYear = this.state.calendarView === 'year';
             toggleBtn.style.display = isYear ? 'none' : 'inline-flex';
 
-            const mode = this.state.calendarLayoutMode || 'modern';
+            const view = this.state.calendarView;
+            const mode = this.state[`${view}LayoutMode`] || 'modern';
             toggleBtn.innerHTML = mode === 'modern' ? '<i data-lucide="list"></i>' : '<i data-lucide="layout"></i>';
             toggleBtn.title = mode === 'modern' ? 'Listenansicht' : 'Kartenansicht';
+
+            if (window.lucide) lucide.createIcons();
         }
 
         if (this.state.calendarView === 'year') {
@@ -4085,13 +4112,15 @@ const app = {
     },
 
     toggleCalendarLayout() {
-        this.state.calendarLayoutMode = this.state.calendarLayoutMode === 'modern' ? 'classic' : 'modern';
-        localStorage.setItem('moltbot_calendar_layout', this.state.calendarLayoutMode);
+        const view = this.state.calendarView;
+        const key = `${view}LayoutMode`;
+        this.state[key] = (this.state[key] || 'modern') === 'modern' ? 'classic' : 'modern';
+        localStorage.setItem(`moltbot_calendar_layout_${view}`, this.state[key]);
         this.render();
     },
 
     renderMonthView(grid, year, month, filteredEvents) {
-        const mode = this.state.calendarLayoutMode || 'modern';
+        const mode = this.state.monthLayoutMode || 'modern';
 
         if (mode === 'modern') {
             this.renderMonthGridView(grid, year, month, filteredEvents);
@@ -4277,7 +4306,7 @@ const app = {
     },
 
     renderWeekView(grid, startOfWeek, filteredEvents) {
-        const mode = this.state.calendarLayoutMode || 'modern';
+        const mode = this.state.weekLayoutMode || 'modern';
 
         if (mode === 'modern') {
             this.renderWeekMosaicView(grid, startOfWeek, filteredEvents);
@@ -4295,10 +4324,19 @@ const app = {
             const dateStr = date.toISOString().split('T')[0];
             const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
             const isToday = date.toDateString() === new Date().toDateString();
-            html += this.renderDayListRow(date, dayEvents, isToday, dateStr);
+            html += `<div ${isToday ? 'id="agenda-today"' : ''}>${this.renderDayListRow(date, dayEvents, isToday, dateStr)}</div>`;
         }
         html += '</div>';
         grid.innerHTML = html;
+
+        // Auto-scroll to today
+        setTimeout(() => {
+            const todayEl = document.getElementById('agenda-today');
+            if (todayEl) {
+                todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 300);
+
         if (window.lucide) lucide.createIcons();
     },
 
@@ -4319,7 +4357,7 @@ const app = {
             const intensity = Math.min(100, dayEvents.length * 20);
 
             html += `
-                <div class="mosaic-day-card ${isToday ? 'today' : ''}" onclick="app.goToDay('${dateStr}')">
+                <div class="mosaic-day-card ${isToday ? 'today' : ''}" ${isToday ? 'id="mosaic-today"' : ''} onclick="app.goToDay('${dateStr}')">
                     <div class="mosaic-header">
                         <div style="display:flex; flex-direction:column;">
                             <span class="mosaic-day-name">${date.toLocaleDateString('de-DE', { weekday: 'short' })}</span>
@@ -4344,6 +4382,15 @@ const app = {
             `;
         }
         grid.innerHTML = html;
+
+        // Auto-scroll to today
+        setTimeout(() => {
+            const todayEl = document.getElementById('mosaic-today');
+            if (todayEl) {
+                todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 300);
+
         if (window.lucide) lucide.createIcons();
     },
 
@@ -4375,7 +4422,7 @@ const app = {
                 <div class="agenda-event-item" onclick="app.editEvent('${e.id}')" style="${colorStyle}">
                     <div class="agenda-time">${e.time || 'Ganztägig'}</div>
                     <div class="agenda-details">
-                        <div class="agenda-title">${e.title}</div>
+                        <div class="agenda-title">${e.title} ${(e.recurrence && e.recurrence !== 'none') ? `<i data-lucide="repeat" size="12" style="margin-left: 5px; opacity: 0.5; vertical-align: middle;"></i>` : ''}</div>
                         ${e.location ? `<div class="agenda-loc"><i data-lucide="map-pin" size="12"></i> ${e.location}</div>` : ''}
                         <div style="display:flex; gap:8px; margin-top:4px;">
                             ${phone ? `<a href="tel:${phone}" onclick="event.stopPropagation()" class="text-link" style="font-size:0.75rem; color:var(--success); display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="11"></i> ${phone}</a>` : ''}
@@ -4419,7 +4466,7 @@ const app = {
     },
 
     renderDayView(grid, date, filteredEvents) {
-        const mode = this.state.calendarLayoutMode || 'modern';
+        const mode = this.state.dayLayoutMode || 'modern';
         if (mode === 'modern') {
             this.renderDayTimelineView(grid, date, filteredEvents);
         } else {
@@ -4468,7 +4515,7 @@ const app = {
                         <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: ${e.color || 'var(--primary)'}; font-weight: 800; margin-bottom: 4px;">
                             ${e.category || 'Termin'}
                         </div>
-                        <h3>${e.title}</h3>
+                        <h3>${e.title} ${(e.recurrence && e.recurrence !== 'none') ? `<i data-lucide="repeat" size="16" style="margin-left: 8px; opacity: 0.5; vertical-align: middle;" title="Wiederholung"></i>` : ''}</h3>
                         <div class="event-meta-row">
                             ${e.location ? `
                                 <div class="event-meta-item">
@@ -4878,43 +4925,89 @@ const app = {
     },
 
     renderYearView(grid, year, filteredEvents) {
+        const mode = this.state.calendarLayoutMode || 'modern';
+        grid.className = 'lifestyle-year-container';
         let html = '';
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
+        const currentDate = today.getDate();
+
         for (let m = 0; m < 12; m++) {
-            const monthDate = new Date(year, m, 1);
-            const monthName = monthDate.toLocaleString('de-DE', { month: 'long' });
-            const daysInMonth = new Date(year, m + 1, 0).getDate();
-            const firstDay = new Date(year, m, 1).getDay();
-            let emptyCells = firstDay === 0 ? 6 : firstDay - 1;
+            const monthName = new Date(year, m, 1).toLocaleString('de-DE', { month: 'long' });
 
-            html += `<div class="year-month-card">
-                <h4>${monthName}</h4>
-                <div class="year-mini-grid">`;
+            html += `
+                <div class="year-feed-month-section" id="month-section-${m}">
+                    <div class="month-label-sticky">
+                        <h2>${monthName}</h2>
+                    </div>
+                    <div class="year-month-card-modern">`;
 
-            for (let i = 0; i < emptyCells; i++) html += '<div class="year-mini-cell"></div>';
-            for (let d = 1; d <= daysInMonth; d++) {
-                const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const dailyEvents = filteredEvents.filter(e => e.date === dateStr);
-                let classStr = 'year-mini-cell';
-                let styleStr = ''; // No full background
-                let visualContent = `${d}`;
+            if (mode === 'modern') {
+                html += `<div class="year-mini-grid-large">`;
+                const firstDay = new Date(year, m, 1).getDay();
+                const daysInMonth = new Date(year, m + 1, 0).getDate();
+                let emptyCells = (firstDay + 6) % 7;
 
-                if (dailyEvents.length > 0) {
-                    classStr += ' has-event';
-                    if (dailyEvents.length > 2) classStr += ' has-event-many';
-
-                    const dotsHtml = dailyEvents.slice(0, 3).map(e => {
-                        const color = e.color || 'var(--primary)';
-                        return `<div class="mini-event-dot" style="background: ${color}; width:3px; height:3px;"></div>`;
-                    }).join('');
-                    visualContent += `<div class="mini-event-dots" style="justify-content:center; margin-top:0;">${dotsHtml}</div>`;
+                for (let i = 0; i < emptyCells; i++) {
+                    html += '<div class="year-mini-cell-large empty" style="background:transparent; opacity:0;"></div>';
                 }
 
-                // Change click action to navigate to Day View
-                html += `<div class="${classStr}" style="${styleStr}" onclick="app.goToDay('${dateStr}')">${visualContent}</div>`;
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const dailyEvents = filteredEvents.filter(e => e.date === dateStr);
+                    const isToday = (year === currentYear && m === currentMonth && d === currentDate);
+                    let classStr = 'year-mini-cell-large';
+                    if (dailyEvents.length > 0) classStr += ' has-event';
+                    if (isToday) classStr += ' is-today';
+
+                    let dotsHtml = '';
+                    if (dailyEvents.length > 0) {
+                        dotsHtml = `<div class="mini-event-dots" style="position:absolute; bottom:4px; gap:2px;">
+                            ${dailyEvents.slice(0, 3).map(e => `<div class="mini-event-dot" style="background:${isToday ? 'white' : (e.color || 'var(--primary)')}; width:4px; height:4px;"></div>`).join('')}
+                        </div>`;
+                    }
+                    html += `<div class="${classStr}" onclick="app.goToDay('${dateStr}')" style="position:relative;">${d}${dotsHtml}</div>`;
+                }
+                html += `</div>`;
+            } else {
+                html += `<div class="year-agenda-list">`;
+                const daysInMonth = new Date(year, m + 1, 0).getDate();
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const date = new Date(year, m, d);
+                    const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const dailyEvents = filteredEvents.filter(e => e.date === dateStr);
+                    const isToday = (year === currentYear && m === currentMonth && d === currentDate);
+                    const dayName = date.toLocaleDateString('de-DE', { weekday: 'short' });
+
+                    html += `
+                        <div class="year-agenda-day-row ${isToday ? 'is-today' : ''}" onclick="app.goToDay('${dateStr}')">
+                            <div class="y-day-num">${d}</div>
+                            <div class="y-day-name">${dayName}</div>
+                            <div class="y-day-content">
+                                ${dailyEvents.length > 0 ? dailyEvents.map(e => `
+                                    <div class="y-event-mini" style="border-left-color: ${e.color || 'var(--primary)'}">
+                                        ${e.time ? e.time + ' ' : ''}${e.title}
+                                    </div>
+                                `).join('') : '<div class="y-empty-day">Keine Termine</div>'}
+                            </div>
+                        </div>`;
+                }
+                html += `</div>`;
             }
+
             html += `</div></div>`;
         }
         grid.innerHTML = html;
+
+        if (year === currentYear) {
+            setTimeout(() => {
+                const currentMonthEl = document.getElementById(`month-section-${currentMonth}`);
+                if (currentMonthEl) {
+                    currentMonthEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 500);
+        }
     },
 
     goToDay(dateStr) {
@@ -6647,6 +6740,13 @@ const app = {
                 date = d.toISOString().split('T')[0];
             }
 
+            // 5. Parse Recurrence
+            let recurrence = 'none';
+            if (input.includes('täglich') || input.includes('jeden tag')) recurrence = 'daily';
+            else if (input.includes('wöchentlich') || input.includes('jede woche')) recurrence = 'weekly';
+            else if (input.includes('monatlich') || input.includes('jeden monat')) recurrence = 'monthly';
+            else if (input.includes('jährlich') || input.includes('jedes jahr') || input.includes('jahrestag')) recurrence = 'yearly';
+
             const newEvent = {
                 id: Date.now().toString(),
                 title: title,
@@ -6654,6 +6754,7 @@ const app = {
                 time: time,
                 location: location,
                 category: 'work',
+                recurrence: recurrence,
                 notes: notes,
                 createdAt: Date.now(),
                 updatedAt: Date.now()
