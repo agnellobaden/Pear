@@ -22,7 +22,7 @@
 
     <!-- PWA / Mobile Icon -->
     <link rel="icon" type="image/svg+xml" href="logo.svg">
-    <link rel="apple-touch-icon" href="logo.svg">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0a0c10">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -135,6 +135,11 @@
             <header class="top-bar mobile-only"
                 style="justify-content: space-between; align-items: center; display: flex; padding: 10px 20px;">
                 <div style="display: flex; align-items: center; gap: 15px;">
+                    <button id="mobileBackBtn" class="icon-btn hidden" title="Zurück zum Dashboard"
+                        onclick="app.navigateTo('dashboard')"
+                        style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 38px; height: 38px;">
+                        <i data-lucide="arrow-left" size="20"></i>
+                    </button>
                     <button id="mobileMenuBtn" class="icon-btn" title="Menü öffnen"
                         onclick="document.getElementById('sidebar').classList.add('active')"
                         style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 38px; height: 38px;">
@@ -158,9 +163,16 @@
 
 
             <header class="top-bar mobile-hidden">
-                <div class="search-bar">
-                    <i data-lucide="search"></i>
-                    <input type="text" placeholder="Suche nach Terminen, Aufgaben...">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button id="desktopBackBtn" class="icon-btn hidden" title="Zurück zum Dashboard"
+                        onclick="app.navigateTo('dashboard')"
+                        style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 32px; height: 32px;">
+                        <i data-lucide="arrow-left" size="18"></i>
+                    </button>
+                    <div class="search-bar">
+                        <i data-lucide="search"></i>
+                        <input type="text" placeholder="Suche nach Terminen, Aufgaben...">
+                    </div>
                 </div>
 
                 <div class="user-actions">
@@ -1048,24 +1060,31 @@
                         <i data-lucide="chevron-down" class="toggle-icon"></i>
                     </div>
                     <div class="card-content">
-                        <p class="text-muted" style="margin-bottom: 20px;">Installiere Pear als App auf deinem Startbildschirm oder sende sie an Freunde & Familie.</p>
-                        
+                        <p class="text-muted" style="margin-bottom: 20px;">Installiere Pear als App auf deinem
+                            Startbildschirm oder sende sie an Freunde & Familie.</p>
+
                         <div style="display: flex; flex-direction: column; gap: 15px;">
-                            <button id="pwaInstallBtn" class="btn-primary w-full" onclick="app.installApp()" style="display: none; height: 55px; border-radius: 16px; font-weight: 700;">
+                            <button id="pwaInstallBtn" class="btn-primary w-full" onclick="app.installApp()"
+                                style="display: none; height: 55px; border-radius: 16px; font-weight: 700;">
                                 <i data-lucide="download"></i> PEAR APP INSTALLIEREN
                             </button>
 
-                            <button class="btn-outline w-full" onclick="app.shareApp()" style="height: 55px; border-radius: 16px; font-weight: 600; background: rgba(var(--primary-rgb), 0.1);">
+                            <button class="btn-outline w-full" onclick="app.shareApp()"
+                                style="height: 55px; border-radius: 16px; font-weight: 600; background: rgba(var(--primary-rgb), 0.1);">
                                 <i data-lucide="share-2"></i> App mit anderen teilen
                             </button>
 
-                            <div style="background: rgba(var(--secondary-rgb), 0.05); padding: 15px; border-radius: 16px; border: 1px solid var(--glass-border);">
-                                <h4 style="font-size: 0.9rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                            <div
+                                style="background: rgba(var(--secondary-rgb), 0.05); padding: 15px; border-radius: 16px; border: 1px solid var(--glass-border);">
+                                <h4
+                                    style="font-size: 0.9rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                                     <i data-lucide="smartphone"></i> Manuelle Installation
                                 </h4>
-                                <ol style="padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 5px;">
+                                <ol
+                                    style="padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 5px;">
                                     <li>Öffne Pear in deinem Browser (Chrome/Safari).</li>
-                                    <li>Tippe auf das <b>Teilen-Icon</b> (iOS) oder die <b>drei Punkte</b> (Android).</li>
+                                    <li>Tippe auf das <b>Teilen-Icon</b> (iOS) oder die <b>drei Punkte</b> (Android).
+                                    </li>
                                     <li>Wähle <b>"Zum Home-Bildschirm hinzufügen"</b>.</li>
                                 </ol>
                             </div>

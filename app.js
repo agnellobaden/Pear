@@ -125,6 +125,15 @@ const app = {
             setInterval(() => this.checkDepartureReminders(), 60000);
             this.checkDepartureReminders(); // Initial check
 
+            // Listen for messages from Service Worker (e.g. for navigation from notifications)
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    if (event.data && event.data.type === 'NAVIGATE') {
+                        this.navigateTo(event.data.view);
+                    }
+                });
+            }
+
         } catch (e) {
             console.error("Critical Init Error:", e);
             alert("Fehler beim Starten: " + e.message);
@@ -1686,6 +1695,12 @@ const app = {
                     wakeWordToggle.checked = this.state.isWakeWordEnabled;
                 }
             }
+
+            // --- Toggle Back Buttons ---
+            const backBtns = [document.getElementById('mobileBackBtn'), document.getElementById('desktopBackBtn')];
+            backBtns.forEach(btn => {
+                if (btn) btn.classList.toggle('hidden', page === 'dashboard');
+            });
 
             this.render();
 
@@ -4832,9 +4847,20 @@ const app = {
             if (!app.state.isAutoNightclockEnabled) return;
 
             const current = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-            if (current === app.state.nightModeStart && !app.state.isNightClockFullscreen) {
+
+            // Trigger if exactly start time OR if app was just opened/resumed and it's within the night period
+            // (Assuming night period is from start time until 06:00 for auto-activation)
+            const startTime = app.state.nightModeStart;
+            const isAtStartTime = current === startTime;
+
+            // Experimental: If app is hidden/background, send a notification to "Wake up" for night mode
+            if (isAtStartTime && document.visibilityState !== 'visible') {
+                app.notify("Pear Nachtuhr", "Es ist Zeit für den Nachtmodus. Tippe hier, um die Uhr zu aktivieren.", "#view-alarm");
+            }
+
+            if (isAtStartTime && !app.state.isNightClockFullscreen) {
                 this.toggleFullscreen(true);
-                // Also ensure wake lock is on (if user wants auto-nightclock, they likely want wake lock too)
+                // Also ensure wake lock is on
                 const wakeCheck = document.getElementById('wakeLockCheck');
                 if (wakeCheck && !wakeCheck.checked) {
                     wakeCheck.checked = true;
