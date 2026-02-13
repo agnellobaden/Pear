@@ -413,6 +413,52 @@ const app = {
         alert("Profil wurde zurückgesetzt.");
     },
 
+    createNewTeamAccount() {
+        const confirmMsg = "Möchtest du wirklich ein NEUES Team erstellen? \n\nACHTUNG: Alle deine aktuellen lokalen Daten (Termine, Aufgaben, Kontakte, Finanzen) werden UNWIDERRUFLICH gelöscht, um mit einem leeren Team zu starten.";
+        if (!confirm(confirmMsg)) return;
+
+        const team = prompt("Gewünschter Team-Name / Schlüssel (z.B. FamilieMüller):");
+        if (!team) return;
+
+        const pin = prompt("Vergebe einen 4-stelligen PIN (Zahlen):");
+        if (!pin || pin.length !== 4 || isNaN(pin)) {
+            return alert("Fehler: Der PIN muss genau 4 Ziffern haben.");
+        }
+
+        const userName = prompt("Dein Benutzername für dieses Team:");
+        if (!userName) return;
+
+        // 1. Clear State
+        this.state.events = [];
+        this.state.todos = [];
+        this.state.contacts = [];
+        this.state.finance = [];
+        this.state.alarms = [];
+        this.state.fixedCosts = [];
+
+        // 2. Set Team & User
+        this.state.user.name = userName;
+        this.state.user.teamName = team;
+        this.state.user.teamPin = pin;
+        this.state.hasReceivedInitialSync = true;
+
+        // 3. Save Locally
+        localStorage.setItem('moltbot_username', userName);
+        localStorage.setItem('moltbot_team', team);
+        localStorage.setItem('moltbot_pin', pin);
+        this.saveLocal();
+
+        // 4. Initialize Sync
+        if (this.sync) {
+            this.sync.init();
+            setTimeout(() => this.sync.push(), 1000);
+        }
+
+        // 5. Navigate & Notify
+        this.navigateTo('dashboard');
+        this.notify("Konto erstellt", `Das Team "${team}" wurde neu angelegt.`, "success");
+    },
+
     loadLocal() {
         const safeLoad = (key, fallback) => {
             const val = localStorage.getItem(key);
