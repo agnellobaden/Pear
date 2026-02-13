@@ -38,6 +38,7 @@ const app = {
         editingContactId: null,
         finance: [],
         monthlyBudget: parseFloat(localStorage.getItem('moltbot_budget')) || 0,
+        savingsGoal: parseFloat(localStorage.getItem('moltbot_savings_goal')) || 0,
         contactView: localStorage.getItem('moltbot_contact_view') || 'table',
         favsCollapsed: localStorage.getItem('moltbot_favs_collapsed') === 'true',
         theme: localStorage.getItem('moltbot_theme') || 'dark',
@@ -67,7 +68,9 @@ const app = {
             'events': true,
             'mini_calendar': true
         },
-        deferredPrompt: null
+        deferredPrompt: null,
+        fixedCosts: [],
+        lastFixedCostsMonth: localStorage.getItem('moltbot_last_fixed_month') || ''
     },
 
 
@@ -99,6 +102,10 @@ const app = {
 
             // Initialize Sync
             this.sync.init();
+
+            // Auto-apply Fixed Costs if month changed
+            this.finance.checkAndApplyAutoFixedCosts();
+
 
             // Start Clock Interface
             this.alarm.init();
@@ -392,6 +399,10 @@ const app = {
         });
         this.state.todoCategories = safeLoad('moltbot_todo_categories', ['🛒 Einkauf', '💼 Arbeit', '🏠 Zuhause', '👤 Privat']);
         this.state.teamHistory = safeLoad('moltbot_team_history', []);
+        this.state.fixedCosts = safeLoad('moltbot_fixed_costs', []);
+        this.state.lastFixedCostsMonth = localStorage.getItem('moltbot_last_fixed_month') || '';
+        this.state.savingsGoal = parseFloat(localStorage.getItem('moltbot_savings_goal')) || 0;
+        this.state.lastRemoteSync = parseInt(localStorage.getItem('moltbot_last_sync')) || 0;
 
         this.state.theme = localStorage.getItem('moltbot_theme') || 'dark';
         this.state.quickActionLeft = localStorage.getItem('moltbot_qa_left') || 'dashboard';
@@ -439,6 +450,9 @@ const app = {
         localStorage.setItem('moltbot_auto_nightclock', this.state.isAutoNightclockEnabled);
         localStorage.setItem('moltbot_wakelock_persistent', this.state.isWakeLockPersistent);
         localStorage.setItem('moltbot_night_mode_start', this.state.nightModeStart);
+        localStorage.setItem('moltbot_fixed_costs', JSON.stringify(this.state.fixedCosts));
+        localStorage.setItem('moltbot_last_fixed_month', this.state.lastFixedCostsMonth);
+        localStorage.setItem('moltbot_savings_goal', this.state.savingsGoal);
     },
 
     updateTheme(theme) {
@@ -875,7 +889,10 @@ const app = {
                 },
                 updatedAt: Date.now(),
                 pushedBy: app.state.user.name,
-                pin: app.state.user.teamPin
+                pin: app.state.user.teamPin,
+                fixedCosts: app.state.fixedCosts,
+                lastFixedCostsMonth: app.state.lastFixedCostsMonth,
+                savingsGoal: app.state.savingsGoal
             };
 
             this.db.collection('moltbot_private_sync').doc(app.state.user.teamName).set({
@@ -1247,6 +1264,22 @@ const app = {
                 this.state.todoCategories = incoming.todoCategories;
                 changed = true;
             }
+        }
+
+        // Merge Fixed Costs
+        if (incoming.fixedCosts) {
+            if (JSON.stringify(this.state.fixedCosts) !== JSON.stringify(incoming.fixedCosts)) {
+                this.state.fixedCosts = incoming.fixedCosts;
+                changed = true;
+            }
+        }
+        if (incoming.lastFixedCostsMonth && incoming.lastFixedCostsMonth !== this.state.lastFixedCostsMonth) {
+            this.state.lastFixedCostsMonth = incoming.lastFixedCostsMonth;
+            changed = true;
+        }
+        if (incoming.savingsGoal !== undefined && incoming.savingsGoal !== this.state.savingsGoal) {
+            this.state.savingsGoal = incoming.savingsGoal;
+            changed = true;
         }
 
         // Sync Profile / App Name if newer
@@ -2009,8 +2042,22 @@ const app = {
             if (form) form.reset();
             const dateInput = document.getElementById('quickFinDate');
             if (dateInput) dateInput.valueAsDate = new Date();
+
+            const title = modal.querySelector('h3');
+            if (title) title.textContent = 'Ausgabe hinzufügen';
+
             modal.classList.remove('hidden');
             document.getElementById('quickFinAmount').focus();
+        },
+
+        openIncomeAdd() {
+            this.openQuickAdd();
+            const typeSelect = document.getElementById('quickFinType');
+            if (typeSelect) typeSelect.value = 'income';
+
+            // Update title of modal if possible (optional but nice)
+            const title = document.querySelector('#quickExpenseModal h3');
+            if (title) title.textContent = 'Einnahme erfassen';
         },
 
         saveQuickAdd(e) {
@@ -2073,6 +2120,16 @@ const app = {
             this.render();
         },
 
+
+        editSavingsGoal() {
+            const newSavingsGoal = prompt("Wie viel möchtest du diesen Monat als Reserve sparen?", app.state.savingsGoal);
+            if (newSavingsGoal !== null) {
+                app.state.savingsGoal = parseFloat(newSavingsGoal) || 0;
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                this.render();
+            }
+        },
 
         editBudget() {
             const newBudget = prompt('Bitte gib dein monatliches Budget Limit ein (€):', app.state.monthlyBudget);
@@ -2163,6 +2220,21 @@ const app = {
             const balance = monthlyIncome - monthlyExpenses;
             const remainingBudget = app.state.monthlyBudget - monthlyExpenses;
 
+            // Calculate Fixed Costs Plan
+            let plannedFixedExpenses = 0;
+            let plannedFixedIncome = 0;
+            app.state.fixedCosts.forEach(f => {
+                if (f.type === 'income') plannedFixedIncome += f.amount;
+                else plannedFixedExpenses += f.amount;
+            });
+
+            // "Netto" calculation: Actual Income - Planned Fixed Expenses
+            const nettoRemaining = monthlyIncome - plannedFixedExpenses;
+
+            // "Verfügbar" calculation: Netto - Savings Goal
+            // This is what's left for daily expenses like food, gas, etc.
+            const totalAvailable = nettoRemaining - app.state.savingsGoal;
+
             // Update UI
             if (document.getElementById('finTodayTotal')) {
                 document.getElementById('finTodayTotal').textContent = dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -2177,6 +2249,24 @@ const app = {
             if (document.getElementById('finTotalExpenses')) {
                 document.getElementById('finTotalExpenses').textContent = monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
             }
+            if (document.getElementById('finFixedPlan')) {
+                document.getElementById('finFixedPlan').textContent = '-' + plannedFixedExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                document.getElementById('finFixedPlan').style.color = 'var(--danger)';
+            }
+            if (document.getElementById('finNetto')) {
+                const nettoEl = document.getElementById('finNetto');
+                nettoEl.textContent = (nettoRemaining < 0 ? '-' : '+') + Math.abs(nettoRemaining).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                nettoEl.style.color = nettoRemaining < 0 ? 'var(--danger)' : 'var(--success)';
+            }
+            if (document.getElementById('finSavingsGoal')) {
+                document.getElementById('finSavingsGoal').textContent = app.state.savingsGoal.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+            if (document.getElementById('finDailyAvailable')) {
+                const dailyEl = document.getElementById('finDailyAvailable');
+                dailyEl.textContent = (totalAvailable < 0 ? '-' : '+') + Math.abs(totalAvailable).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                dailyEl.style.color = totalAvailable < 0 ? 'var(--danger)' : 'var(--success)';
+            }
+
             if (document.getElementById('finBalance')) {
                 const balanceEl = document.getElementById('finBalance');
                 balanceEl.textContent = (balance < 0 ? '-' : '+') + Math.abs(balance).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -2218,6 +2308,7 @@ const app = {
             `).join('');
 
             this.updateChart();
+            this.renderFixedCosts(); // New: Keep templates list updated
             if (window.lucide) lucide.createIcons();
         },
 
@@ -2291,6 +2382,219 @@ const app = {
                     }
                 }
             });
+        },
+
+        // --- FIXED COSTS (TEMPLATES) ---
+        addFixedCost() {
+            const name = document.getElementById('fixedCostName').value.trim();
+            const amount = parseFloat(document.getElementById('fixedCostAmount').value);
+            const type = document.getElementById('fixedCostType').value;
+
+            if (!name || isNaN(amount)) return;
+
+            app.state.fixedCosts.push({
+                id: Date.now().toString(),
+                name,
+                amount,
+                type
+            });
+
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+
+            document.getElementById('fixedCostName').value = '';
+            document.getElementById('fixedCostAmount').value = '';
+
+            this.renderFixedCosts();
+            this.showToast("Fixkosten-Vorlage gespeichert", "var(--primary)");
+        },
+
+        createBaseTemplates() {
+            const items = [
+                { name: 'Gehalt 💰', amount: 2500, type: 'income' },
+                { name: 'Miete/Wohnen 🏠', amount: 850, type: 'expense' },
+                { name: 'Strom/Wasser ⚡', amount: 120, type: 'expense' },
+                { name: 'Internet/Mobilfunk 🌐', amount: 50, type: 'expense' },
+                { name: 'Versicherung 🛡️', amount: 80, type: 'expense' },
+                { name: 'Einkaufen (Plan) 🛒', amount: 400, type: 'expense' },
+                { name: 'Tanken (Plan) 🚗', amount: 150, type: 'expense' }
+            ];
+
+            if (confirm("Möchtest du Standard-Vorlagen hinzufügen? Bereits vorhandene Vorlagen (gleicher Name) werden nicht doppelt erstellt.")) {
+                items.forEach(item => {
+                    if (!app.state.fixedCosts.find(f => f.name === item.name)) {
+                        app.state.fixedCosts.push({
+                            id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                            ...item
+                        });
+                    }
+                });
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                this.renderFixedCosts();
+                this.render();
+                app.notify("Setup abgeschlossen", "Deine Vorlagen wurden aktualisiert.");
+            }
+        },
+
+        deleteFixedCost(id) {
+            const index = app.state.fixedCosts.findIndex(f => f.id === id);
+            if (index > -1) {
+                app.state.fixedCosts.splice(index, 1);
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                this.renderFixedCosts();
+            }
+        },
+
+        editFixedCost(id) {
+            const f = app.state.fixedCosts.find(cost => cost.id === id);
+            if (!f) return;
+
+            const newName = prompt("Name der Fixkosten:", f.name);
+            if (newName === null) return;
+            const newAmountStr = prompt("Betrag in €:", f.amount);
+            if (newAmountStr === null) return;
+
+            f.name = newName;
+            f.amount = parseFloat(newAmountStr) || 0;
+
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+            this.renderFixedCosts();
+            this.render();
+        },
+
+        checkAndApplyAutoFixedCosts() {
+            const now = new Date();
+            const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+
+            // 1. Check if already marked as applied via Month-Key
+            if (app.state.lastFixedCostsMonth === currentMonthKey) return;
+
+            // 2. Extra Safety: Check if entries starting with "FIX:" already exist for this month
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+            const entriesExist = app.state.finance.some(e => {
+                const d = new Date(e.date);
+                return !e.deleted &&
+                    d.getFullYear() === currentYear &&
+                    d.getMonth() === currentMonth &&
+                    e.source.startsWith('FIX:');
+            });
+
+            if (entriesExist) {
+                app.state.lastFixedCostsMonth = currentMonthKey;
+                app.saveLocal();
+                return;
+            }
+
+            // If no templates, just update the tracker to current month
+            if (!app.state.fixedCosts || app.state.fixedCosts.length === 0) {
+                app.state.lastFixedCostsMonth = currentMonthKey;
+                app.saveLocal();
+                return;
+            }
+
+            console.log(`Auto-Applying Fixed Costs for ${currentMonthKey}`);
+
+            // Create the first-of-month date string
+            const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+            app.state.fixedCosts.forEach(f => {
+                app.state.finance.push({
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                    amount: f.amount,
+                    date: dateStr,
+                    type: f.type,
+                    source: `FIX: ${f.name}`,
+                    createdAt: Date.now()
+                });
+            });
+
+            app.state.lastFixedCostsMonth = currentMonthKey;
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+
+            if (app.state.view === 'finance') this.render();
+
+            app.notify("Automatischer Finanzplaner", `${app.state.fixedCosts.length} Fixkosten wurden für diesen Monat automatisch gebucht.`);
+        },
+
+        applyFixedCosts() {
+            if (app.state.fixedCosts.length === 0) {
+                alert("Du hast noch keine Fixkosten-Vorlagen erstellt.");
+                return;
+            }
+
+            if (!confirm(`Möchtest du alle ${app.state.fixedCosts.length} Fixkosten für den aktuellen Monat buchen?`)) return;
+
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            const entriesAdded = [];
+
+            app.state.fixedCosts.forEach(f => {
+                const entry = {
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                    amount: f.amount,
+                    date: dateStr,
+                    type: f.type,
+                    source: `FIX: ${f.name}`,
+                    createdAt: Date.now()
+                };
+                app.state.finance.push(entry);
+                entriesAdded.push(entry);
+            });
+
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+
+            this.render();
+            this.renderFixedCosts();
+            alert(`${entriesAdded.length} Fixkosten wurden erfolgreich für heute gebucht.`);
+        },
+
+        renderFixedCosts() {
+            const list = document.getElementById('fixedCostsList');
+            if (!list) return;
+
+            if (!app.state.fixedCosts || app.state.fixedCosts.length === 0) {
+                list.innerHTML = '<p class="text-muted" style="text-align:center; padding:20px; font-style:italic;">Noch keine Vorlagen vorhanden.</p>';
+                return;
+            }
+
+            list.innerHTML = app.state.fixedCosts.map(f => `
+                <div class="glass" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(var(--primary-rgb), 0.1);">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="icon-circle" style="background: ${f.type === 'income' ? 'rgba(var(--success-rgb), 0.1)' : 'rgba(var(--danger-rgb), 0.1)'}; color: ${f.type === 'income' ? 'var(--success)' : 'var(--danger)'};">
+                            <i data-lucide="${f.type === 'income' ? 'trending-up' : 'trending-down'}" size="14"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 0.95rem;">${f.name}</div>
+                            <div style="font-size: 0.8rem; opacity: 0.7;">${f.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-icon" onclick="app.finance.editFixedCost('${f.id}')" style="width: 28px; height: 28px; background: rgba(var(--primary-rgb), 0.1);">
+                            <i data-lucide="edit-3" size="14"></i>
+                        </button>
+                        <button class="btn-icon-danger" onclick="app.finance.deleteFixedCost('${f.id}')" style="width: 28px; height: 28px;">
+                            <i data-lucide="trash-2" size="14"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            if (window.lucide) lucide.createIcons();
+        },
+
+        showToast(text, color) {
+            // Helper if not defined globally
+            if (app.alarm && app.alarm.showToast) {
+                app.alarm.showToast(text, color);
+            } else {
+                console.log("Toast:", text);
+            }
         }
     },
 

@@ -358,7 +358,12 @@
                 <div class="dashboard-grid" style="margin-bottom: 25px;">
                     <div class="card glass">
                         <small class="text-muted">Monatseinnahmen</small>
-                        <h2 id="finTotalIncome" style="color: var(--success);">0,00 €</h2>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <h2 id="finTotalIncome" style="color: var(--success);">0,00 €</h2>
+                            <button class="btn-icon" onclick="app.finance.openIncomeAdd()" title="Einnahme hinzufügen">
+                                <i data-lucide="edit-3" size="14"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="card glass">
                         <small class="text-muted">Monatsausgaben</small>
@@ -384,6 +389,29 @@
                         <small class="text-muted">Jahresbilanz</small>
                         <h2 id="finYearTotal">0,00 €</h2>
                     </div>
+                    <div class="card glass">
+                        <small class="text-muted">Fixkosten (Plan)</small>
+                        <h2 id="finFixedPlan" style="color: var(--secondary);">0,00 €</h2>
+                    </div>
+                    <div class="card glass">
+                        <small class="text-muted">Netto (nach Fixkosten)</small>
+                        <h2 id="finNetto" style="font-weight: 800;">0,00 €</h2>
+                    </div>
+                    <div class="card glass">
+                        <small class="text-muted">Sparziel (Reserve)</small>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <h2 id="finSavingsGoal" style="color: var(--warning);">0,00 €</h2>
+                            <button class="btn-icon" onclick="app.finance.editSavingsGoal()" title="Sparziel anpassen">
+                                <i data-lucide="edit-3" size="14"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card glass"
+                        style="background: rgba(var(--success-rgb), 0.05); border: 2px solid rgba(var(--success-rgb), 0.2);">
+                        <small class="text-muted">Verfügbar für Alltag 🛒</small>
+                        <h2 id="finDailyAvailable" style="font-weight: 900; font-size: 1.8rem; color: var(--success);">
+                            0,00 €</h2>
+                    </div>
                 </div>
 
                 <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 25px;">
@@ -403,6 +431,62 @@
                             <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
                                 <small class="text-muted">Ausgaben diese Woche</small>
                                 <h3 id="finWeekTotal" style="color: var(--danger);">0,00 €</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 25px;">
+                    <div class="card-header-toggle"
+                        style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <div style="display: flex; align-items: center; gap: 10px;"
+                            onclick="app.toggleCard(this.parentElement)">
+                            <i data-lucide="repeat" size="18" class="text-secondary"></i>
+                            <span style="font-weight: 600;">Regelmäßige Fixkosten (Vorlagen) 🏠</span>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-icon" onclick="app.finance.createBaseTemplates()"
+                                title="Standard-Vorlagen laden"
+                                style="background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; padding: 4px 8px; width: auto; height: auto; font-size: 0.75rem; display: flex; align-items: center; gap: 5px;">
+                                <i data-lucide="zap" size="12"></i> Setup
+                            </button>
+                            <i data-lucide="chevron-down" class="toggle-icon" size="20"
+                                onclick="app.toggleCard(this.parentElement.parentElement)"></i>
+                        </div>
+                    </div>
+                    <div class="card-content">
+                        <div style="margin-top: 15px;">
+                            <div
+                                style="display: grid; grid-template-columns: 1fr 120px 100px; gap: 10px; margin-bottom: 15px;">
+                                <input type="text" id="fixedCostName" placeholder="Name (z.B. Miete)"
+                                    style="width:100%;">
+                                <input type="number" id="fixedCostAmount" step="0.01" placeholder="Betrag €"
+                                    style="width:100%;">
+                                <select id="fixedCostType"
+                                    style="width:100%; border-radius:12px; padding:0 10px; background:var(--bg-solid-2); border:1px solid var(--glass-border); color:var(--text-main);">
+                                    <option value="expense">Ausgabe</option>
+                                    <option value="income">Einnahme</option>
+                                </select>
+                            </div>
+                            <button class="btn-primary w-full" onclick="app.finance.addFixedCost()"
+                                style="margin-bottom: 25px;">Vorlage hinzufügen</button>
+
+                            <h4 style="font-size: 0.9rem; margin-bottom: 15px; opacity: 0.8;">Gespeicherte Vorlagen</h4>
+                            <div id="fixedCostsList"
+                                style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 25px;">
+                                <!-- JS populated -->
+                            </div>
+
+                            <div style="border-top: 1px solid var(--glass-border); padding-top: 20px;">
+                                <button class="btn-primary w-full" onclick="app.finance.applyFixedCosts()"
+                                    style="background: var(--secondary); border: none; height: 55px; border-radius: 16px;">
+                                    <i data-lucide="zap" size="18" style="margin-right: 8px;"></i> Alle Fixkosten jetzt
+                                    buchen
+                                </button>
+                                <p class="text-muted"
+                                    style="font-size: 0.75rem; margin-top: 12px; text-align: center; font-style: italic;">
+                                    Ein Klick wandelt alle Vorlagen in echte Einträge für den aktuellen Monat um.
+                                </p>
                             </div>
                         </div>
                     </div>
