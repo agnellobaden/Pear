@@ -73,6 +73,7 @@ const app = {
         fixedCosts: [],
         lastFixedCostsMonth: localStorage.getItem('moltbot_last_fixed_month') || '',
         savingsBalance: parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0,
+        financeArchive: JSON.parse(localStorage.getItem('moltbot_finance_archive')) || [],
         menuOrder: JSON.parse(localStorage.getItem('moltbot_menu_order')) || ['dashboard', 'calendar', 'contacts', 'todo', 'finance', 'alarm', 'team', 'settings']
     },
 
@@ -513,6 +514,7 @@ const app = {
         this.state.lastFixedCostsMonth = localStorage.getItem('moltbot_last_fixed_month') || '';
         this.state.savingsGoal = parseFloat(localStorage.getItem('moltbot_savings_goal')) || 0;
         this.state.savingsBalance = parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0;
+        this.state.financeArchive = safeLoad('moltbot_finance_archive', []);
         this.state.lastRemoteSync = parseInt(localStorage.getItem('moltbot_last_sync')) || 0;
 
         this.state.theme = localStorage.getItem('moltbot_theme') || 'dark';
@@ -566,6 +568,7 @@ const app = {
         localStorage.setItem('moltbot_last_fixed_month', this.state.lastFixedCostsMonth);
         localStorage.setItem('moltbot_savings_goal', this.state.savingsGoal);
         localStorage.setItem('moltbot_savings_balance', this.state.savingsBalance);
+        localStorage.setItem('moltbot_finance_archive', JSON.stringify(this.state.financeArchive));
     },
 
     updateTheme(theme) {
@@ -1004,6 +1007,7 @@ const app = {
                 pushedBy: app.state.user.name,
                 pin: app.state.user.teamPin,
                 fixedCosts: app.state.fixedCosts,
+                financeArchive: app.state.financeArchive,
                 lastFixedCostsMonth: app.state.lastFixedCostsMonth,
                 savingsGoal: app.state.savingsGoal,
                 savingsBalance: app.state.savingsBalance
@@ -1412,6 +1416,12 @@ const app = {
         if (incoming.lastFixedCostsMonth && incoming.lastFixedCostsMonth !== this.state.lastFixedCostsMonth) {
             this.state.lastFixedCostsMonth = incoming.lastFixedCostsMonth;
             changed = true;
+        }
+        if (incoming.financeArchive) {
+            if (JSON.stringify(this.state.financeArchive) !== JSON.stringify(incoming.financeArchive)) {
+                this.state.financeArchive = incoming.financeArchive;
+                changed = true;
+            }
         }
         if (incoming.savingsGoal !== undefined && incoming.savingsGoal !== this.state.savingsGoal) {
             this.state.savingsGoal = incoming.savingsGoal;
@@ -2892,6 +2902,9 @@ const app = {
             // 1. Check if already marked as applied via Month-Key
             if (app.state.lastFixedCostsMonth === currentMonthKey) return;
 
+            // Archivieren der alten Daten, bevor der neue Monat startet
+            this.archiveFinance();
+
             // NEW: Auto-Harvest Savings from Previous Month before starting new one
             if (app.state.lastFixedCostsMonth) {
                 const [y, m] = app.state.lastFixedCostsMonth.split('-').map(Number);
@@ -3015,6 +3028,111 @@ const app = {
 
             app.render();
             app.notify("Finanzplan aktualisiert", `${updatedCount} Positionen aktualisiert, ${addedCount} neu hinzugefügt.`, "success");
+        },
+
+        archiveFinance() {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            // Filtere alle Einträge, die NICHT zum aktuellen Monat gehören
+            const toArchive = app.state.finance.filter(e => {
+                if (e.deleted) return false;
+                const d = new Date(e.date);
+                return d.getMonth() !== currentMonth || d.getFullYear() !== currentYear;
+            });
+
+            if (toArchive.length > 0) {
+                // In das Archiv verschieben
+                app.state.financeArchive = [...app.state.financeArchive, ...toArchive];
+
+                // Aus der aktiven Liste entfernen (indem wir nur aktuelle behalten)
+                app.state.finance = app.state.finance.filter(e => {
+                    if (e.deleted) return false;
+                    const d = new Date(e.date);
+                    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                });
+
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                console.log(`${toArchive.length} Einträge ins Archiv verschoben.`);
+            }
+        },
+
+        renderArchive() {
+            const list = document.getElementById('financeArchiveList');
+            if (!list) return;
+
+            if (!app.state.financeArchive || app.state.financeArchive.length === 0) {
+                list.innerHTML = '<div class="empty-state">Keine archivierten Einträge vorhanden.</div>';
+                return;
+            }
+
+            // Gruppiere nach Monat
+            const byMonth = {};
+            app.state.financeArchive.forEach(e => {
+                const date = new Date(e.date);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                if (!byMonth[monthKey]) byMonth[monthKey] = [];
+                byMonth[monthKey].push(e);
+            });
+
+            // Sortiere Monate absteigend
+            const sortedMonths = Object.keys(byMonth).sort().reverse();
+
+            list.innerHTML = sortedMonths.map(monthKey => {
+                const entries = byMonth[monthKey];
+                const [year, month] = monthKey.split('-');
+                const monthName = new Date(year, parseInt(month) - 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+
+                const totalIncome = entries.filter(e => e.type === 'income').reduce((sum, e) => sum + e.amount, 0);
+                const totalExpense = entries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+                const balance = totalIncome - totalExpense;
+
+                return `
+                    <div class="glass" style="padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--glass-border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h4 style="margin: 0; font-size: 1rem; font-weight: 700;">${monthName}</h4>
+                            <div style="font-size: 0.85rem; color: ${balance >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 700;">
+                                ${balance >= 0 ? '+' : ''}${balance.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                            </div>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+                            ${entries.length} Einträge • 
+                            <span style="color: var(--success);">+${totalIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span> • 
+                            <span style="color: var(--danger);">-${totalExpense.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        </div>
+                        <details style="margin-top: 10px;">
+                            <summary style="cursor: pointer; font-size: 0.85rem; color: var(--primary); font-weight: 600;">Details anzeigen</summary>
+                            <div style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
+                                ${entries.sort((a, b) => new Date(b.date) - new Date(a.date)).map(e => `
+                                    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--glass-border); font-size: 0.85rem;">
+                                        <div>
+                                            <div style="font-weight: 600;">${e.source}</div>
+                                            <div style="color: var(--text-muted); font-size: 0.75rem;">${new Date(e.date).toLocaleDateString('de-DE')}</div>
+                                        </div>
+                                        <div style="font-weight: 700; color: ${e.type === 'income' ? 'var(--success)' : 'var(--danger)'};">
+                                            ${e.type === 'income' ? '+' : '-'}${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </details>
+                    </div>
+                `;
+            }).join('');
+
+            if (window.lucide) lucide.createIcons();
+        },
+
+        clearArchive() {
+            if (confirm('Möchtest du wirklich das gesamte Finanz-Archiv löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) {
+                app.state.financeArchive = [];
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                this.renderArchive();
+                app.notify("Archiv geleert", "Alle archivierten Transaktionen wurden gelöscht.", "success");
+            }
         },
 
         renderFixedCosts() {

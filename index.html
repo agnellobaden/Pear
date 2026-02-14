@@ -1374,19 +1374,24 @@
 
                 <div class="card glass animate-in collapsible-card is-collapsed" style="margin-top: 25px;">
                     <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                        <h3>Archiv 📦</h3>
+                        <h3>Finanz-Archiv 📦</h3>
                         <i data-lucide="chevron-down" class="toggle-icon"></i>
                     </div>
                     <div class="card-content">
-                        <p class="text-muted" style="margin-bottom: 15px;">Wiederherstellen oder endgültiges Löschen von
-                            archivierten Einträgen.</p>
-                        <div id="archiveManagerList" style="display: flex; flex-direction: column; gap: 10px;">
-                            <div class="empty-state">Lade Archiv...</div>
+                        <p class="text-muted" style="margin-bottom: 15px;">Archivierte Transaktionen aus vergangenen
+                            Monaten. Diese werden automatisch am 1. jeden Monats archiviert.</p>
+                        <div id="financeArchiveList"
+                            style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+                            <div class="empty-state">Keine archivierten Einträge vorhanden.</div>
                         </div>
-                        <button class="btn-outline" onclick="app.renderArchiveSettings()"
-                            style="margin-top: 15px; width: 100%;">
-                            <i data-lucide="refresh-cw"></i> Archiv aktualisieren
-                        </button>
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button class="btn-outline" onclick="app.finance.renderArchive()" style="flex: 1;">
+                                <i data-lucide="refresh-cw"></i> Aktualisieren
+                            </button>
+                            <button class="btn-outline" onclick="app.finance.clearArchive()" style="flex: 1;">
+                                <i data-lucide="trash-2"></i> Archiv leeren
+                            </button>
+                        </div>
                     </div>
                 </div>
 
