@@ -246,11 +246,12 @@
 
 .divider-line {
     flex: 1;
-    height: 1px;
+    height: 2px;
     background: linear-gradient(90deg,
             transparent 0%,
-            rgba(255, 255, 255, 0.2) 50%,
+            var(--text-muted) 50%,
             transparent 100%);
+    opacity: 0.8;
 }
 
 .divider-text {
