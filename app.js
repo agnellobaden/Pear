@@ -6041,24 +6041,45 @@ const app = {
             if (!app.state.isAutoNightclockEnabled) return;
 
             const current = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            const startTimeStr = app.state.nightModeStart; // e.g. "22:00"
+            const [sH, sM] = startTimeStr.split(':').map(Number);
+            const cH = now.getHours();
+            const cM = now.getMinutes();
 
-            // Trigger if exactly start time OR if app was just opened/resumed and it's within the night period
-            // (Assuming night period is from start time until 06:00 for auto-activation)
-            const startTime = app.state.nightModeStart;
-            const isAtStartTime = current === startTime;
-
-            // Experimental: If app is hidden/background, send a notification to "Wake up" for night mode
-            if (isAtStartTime && document.visibilityState !== 'visible') {
+            // Notify exactly at start time if backgrounded
+            const isExactStart = (cH === sH && cM === sM);
+            if (isExactStart && document.visibilityState !== 'visible' && !this._hasNotifiedNight) {
                 app.notify("Pear Nachtuhr", "Es ist Zeit für den Nachtmodus. Tippe hier, um die Uhr zu aktivieren.", "#view-alarm");
+                this._hasNotifiedNight = true;
+                setTimeout(() => this._hasNotifiedNight = false, 70000); // Reset after 1 min
             }
 
-            if (isAtStartTime && !app.state.isNightClockFullscreen) {
+            // Determine if we are "in night mode period" (Start -> 05:00)
+            let isNightTime = false;
+            // Case 1: Start is evening (e.g. 22:00) -> Active if >= 22 OR < 5
+            if (sH >= 12) {
+                if (cH >= sH || cH < 5) isNightTime = true;
+                if (cH === sH && cM < sM) isNightTime = false; // Before minute
+            }
+            // Case 2: Start is morning (e.g. 01:00) -> Active if >= 1 AND < 5
+            else {
+                if (cH >= sH && cH < 5) isNightTime = true;
+                if (cH === sH && cM < sM) isNightTime = false;
+            }
+
+            // Auto-Activate Logic
+            // Activates if: Is Night Time AND Not Fullscreen AND Not Dismissed manually this session
+            if (isNightTime && !app.state.isNightClockFullscreen && !app.state.nightModeDismissed) {
+                console.log("Auto-Activating Night Mode (In Period)");
                 this.toggleFullscreen(true);
-                // Also ensure wake lock is on
+
+                // Force Wake Lock
                 const wakeCheck = document.getElementById('wakeLockCheck');
                 if (wakeCheck && !wakeCheck.checked) {
                     wakeCheck.checked = true;
-                    this.toggleWakeLock();
+                    this.toggleWakeLock(true);
+                } else if (!app.state.wakeLock) {
+                    this.toggleWakeLock(true);
                 }
             }
         },
@@ -6175,6 +6196,9 @@ const app = {
 
         toggleFullscreen(force = null) {
             const desiredState = force !== null ? force : !app.state.isNightClockFullscreen;
+            if (!desiredState && app.state.isNightClockFullscreen) {
+                app.state.nightModeDismissed = true;
+            }
             app.state.isNightClockFullscreen = desiredState;
 
             const overlay = document.getElementById('nightClockFullscreen');

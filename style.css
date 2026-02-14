@@ -4251,30 +4251,63 @@ body {
 
 @media (max-width: 480px) {
     .voice-dock {
-        padding: 6px 0px calc(6px + env(safe-area-inset-bottom, 0px));
-        gap: 1px;
+        padding: 6px 2px calc(6px + env(safe-area-inset-bottom, 0px));
+        gap: 0;
+        justify-content: space-between;
+        /* Distribute space evenly */
     }
 
     .voice-dock .voice-btn {
-        width: 54px;
-        height: 54px;
+        width: 50px;
+        height: 50px;
         margin-top: 0;
+        flex-shrink: 0;
+    }
+
+    .voice-dock .voice-btn i {
+        width: 24px;
+        height: 24px;
     }
 
     .voice-dock .voice-side-btn {
-        min-width: 34px;
-        max-width: 60px;
-        padding: 0 1px;
+        min-width: 0;
+        /* Allow shrinking below content size if needed */
+        flex: 1;
+        /* Distribute available space equally */
+        max-width: none;
+        padding: 0;
     }
 
     .voice-dock .voice-side-btn i {
-        width: 18px;
-        height: 18px;
+        width: 20px;
+        height: 20px;
+        margin-bottom: 2px;
     }
 
     .dock-label {
         font-size: 0.55rem;
-        letter-spacing: 0.2px;
+        letter-spacing: 0px;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+/* Very Small Screens: Hide Labels to prevent clutter */
+@media (max-width: 370px) {
+    .dock-label {
+        display: none !important;
+    }
+
+    .voice-dock .voice-side-btn i {
+        width: 22px;
+        height: 22px;
+        margin-bottom: 0;
+    }
+
+    .voice-dock {
+        padding-top: 10px;
+        padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     }
 }
 
@@ -5695,4 +5728,32 @@ body {
 
 .dashboard-finance-add-btn:active {
     transform: scale(0.95) rotate(90deg);
+}
+
+/* --- Digital Clock Responsive Typography --- */
+.digital-clock {
+    font-size: 5rem;
+    line-height: 1;
+    white-space: nowrap;
+    /* Prevent wrapping */
+    transition: font-size 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .digital-clock {
+        font-size: 4rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .digital-clock {
+        font-size: 15vw;
+        /* Fluid typography for small screens */
+    }
+}
+
+@media (max-width: 360px) {
+    .digital-clock {
+        font-size: 13vw;
+    }
 }
