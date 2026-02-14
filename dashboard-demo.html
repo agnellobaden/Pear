@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Dashboard Demo - Pear App</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="enhanced-dashboard.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-rgb: 99, 102, 241;
+            --secondary: #22d3ee;
+            --accent: #f472b6;
+            --success: #10b981;
+            --success-rgb: 16, 185, 129;
+            --urgent: #ef4444;
+            --text-primary: #ffffff;
+            --text-muted: #94a3b8;
+            --bg-dark: #0a0c10;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #0a0c10;
+            color: white;
+            min-height: 100vh;
+            padding: 40px 20px;
+            background: radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(244, 114, 182, 0.1) 0%, transparent 50%);
+        }
+
+        .demo-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .demo-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .demo-header h1 {
+            font-size: 3.5rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 15px;
+        }
+
+        .demo-header p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .comparison-section {
+            margin-bottom: 80px;
+        }
+
+        .comparison-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .comparison-header h2 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 60px;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 60px rgba(99, 102, 241, 0.3);
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 16px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+        }
+
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .cta-section {
+            text-align: center;
+            padding: 60px 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 32px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 60px;
+        }
+
+        .cta-section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        .cta-section p {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            margin-bottom: 30px;
+        }
+
+        .btn-primary {
+            display: inline-block;
+            padding: 16px 40px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.05);
+            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.4);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="demo-container">
+        <!-- Header -->
+        <div class="demo-header">
+            <h1>🍐 Enhanced Dashboard</h1>
+            <p>Premium Dashboard-System für deine Pear App - Noch besser als TaskForce1!</p>
+        </div>
+
+        <!-- Features -->
+        <div class="comparison-section">
+            <div class="comparison-header">
+                <h2>✨ Neue Features</h2>
+                <p style="color: var(--text-muted);">Was macht dieses Dashboard besser?</p>
+            </div>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i data-lucide="sparkles" size="32" style="color: white;"></i>
+                    </div>
+                    <h3>Advanced Glassmorphism</h3>
+                    <p>Tiefere, modernere Glas-Effekte mit mehrschichtigen Schatten und dynamischen Glows</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i data-lucide="zap" size="32" style="color: white;"></i>
+                    </div>
+                    <h3>Smooth Animations</h3>
+                    <p>Flüssige Micro-Interactions, Hover-Effekte und Transitions für Premium-Feeling</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i data-lucide="layout-grid" size="32" style="color: white;"></i>
+                    </div>
+                    <h3>Smart Widget System</h3>
+                    <p>Interaktive Widgets mit Refresh, Expand und Live-Updates</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i data-lucide="trending-up" size="32" style="color: white;"></i>
+                    </div>
+                    <h3>Progress Tracking</h3>
+                    <p>Visuelle Fortschrittsbalken mit Shimmer-Effekten und Echtzeit-Updates</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i data-lucide="activity" size="32" style="color: white;"></i>
+                    </div>
+                    <h3>Activity Feed</h3>
+                    <p>Chronologische Übersicht aller Aktivitäten mit Icons und Zeitstempeln</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i data-lucide="smartphone" size="32" style="color: white;"></i>
+                    </div>
+                    <h3>Fully Responsive</h3>
+                    <p>Perfekte Anpassung an Desktop, Tablet und Mobile mit optimierten Layouts</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Dashboard Demo -->
+        <div class="comparison-section">
+            <div class="comparison-header">
+                <h2>📊 Live Dashboard</h2>
+                <p style="color: var(--text-muted);">Interaktive Demo mit echten Widgets</p>
+            </div>
+
+            <!-- Dashboard Hero -->
+            <div class="dashboard-hero">
+                <div style="text-align: center;">
+                    <h1 style="font-size: 2.5rem; margin-bottom: 10px;">Willkommen zurück! 👋</h1>
+                    <p style="color: var(--text-muted); font-size: 1.1rem;">Hier ist deine Premium Dashboard-Übersicht
+                    </p>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="dashboard-grid" id="demo-dashboard">
+                <!-- Upcoming Events Widget -->
+                <div class="widget-card span-2 animate-in">
+                    <div class="widget-header">
+                        <div class="widget-title">
+                            <div class="widget-icon">
+                                <i data-lucide="calendar"></i>
+                            </div>
+                            Nächste Termine
+                        </div>
+                        <div class="widget-actions">
+                            <button class="widget-action-btn">
+                                <i data-lucide="refresh-cw" size="16"></i>
+                            </button>
+                            <button class="widget-action-btn">
+                                <i data-lucide="maximize-2" size="16"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="widget-content">
+                        <div class="activity-feed">
+                            <div class="activity-item">
+                                <div class="activity-icon"
+                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5);">
+                                    <i data-lucide="calendar" size="18"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <div class="activity-title">Team Meeting</div>
+                                    <div class="activity-time">Heute • 14:00 • Büro</div>
+                                </div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="activity-icon"
+                                    style="background: linear-gradient(135deg, #22d3ee, #06b6d4);">
+                                    <i data-lucide="coffee" size="18"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <div class="activity-title">Mittagessen mit Anna</div>
+                                    <div class="activity-time">Morgen • 12:30 • Restaurant</div>
+                                </div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="activity-icon"
+                                    style="background: linear-gradient(135deg, #ffd700, #ffa500);">
+                                    <i data-lucide="cake" size="18"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <div class="activity-title">Geburtstag Max</div>
+                                    <div class="activity-time">15. Feb • Ganztägig</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Finance Summary Widget -->
+                <div class="widget-card animate-in">
+                    <div class="widget-header">
+                        <div class="widget-title">
+                            <div class="widget-icon">
+                                <i data-lucide="wallet"></i>
+                            </div>
+                            Finanzen
+                        </div>
+                        <div class="widget-actions">
+                            <button class="widget-action-btn">
+                                <i data-lucide="refresh-cw" size="16"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="widget-content">
+                        <div class="metric-value">€1,250</div>
+                        <div class="metric-label">Verfügbar</div>
+
+                        <div class="progress-container">
+                            <div class="progress-info">
+                                <span>Budget-Nutzung</span>
+                                <span class="progress-percentage">62%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 62%"></div>
+                            </div>
+                        </div>
+
+                        <div class="quick-stats" style="margin-top: 20px;">
+                            <div class="stat-box">
+                                <div class="stat-box-value">€2,000</div>
+                                <div class="stat-box-label">Budget</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-box-value">€750</div>
+                                <div class="stat-box-label">Ausgegeben</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Task Progress Widget -->
+                <div class="widget-card animate-in">
+                    <div class="widget-header">
+                        <div class="widget-title">
+                            <div class="widget-icon">
+                                <i data-lucide="check-circle"></i>
+                            </div>
+                            Aufgaben
+                        </div>
+                        <div class="widget-actions">
+                            <button class="widget-action-btn">
+                                <i data-lucide="refresh-cw" size="16"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="widget-content">
+                        <div class="metric-value">12/18</div>
+                        <div class="metric-label">Erledigt</div>
+
+                        <div class="progress-container">
+                            <div class="progress-info">
+                                <span>Fortschritt</span>
+                                <span class="progress-percentage">67%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: 67%"></div>
+                            </div>
+                        </div>
+
+                        <div class="task-summary" style="margin-top: 20px;">
+                            <div class="task-category" style="border-left-color: var(--urgent)">
+                                <div class="task-category-name">
+                                    <i data-lucide="alert-circle" size="16"></i>
+                                    Dringend
+                                </div>
+                                <div class="task-category-count">3</div>
+                            </div>
+                            <div class="task-category" style="border-left-color: var(--primary)">
+                                <div class="task-category-name">
+                                    <i data-lucide="calendar" size="16"></i>
+                                    Heute
+                                </div>
+                                <div class="task-category-count">5</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Weather Widget -->
+                <div class="widget-card animate-in">
+                    <div class="widget-header">
+                        <div class="widget-title">
+                            <div class="widget-icon">
+                                <i data-lucide="cloud"></i>
+                            </div>
+                            Wetter
+                        </div>
+                    </div>
+                    <div class="widget-content">
+                        <div class="weather-widget">
+                            <div class="weather-icon-large">
+                                <i data-lucide="sun"></i>
+                            </div>
+                            <div class="weather-temp">22°C</div>
+                            <div class="metric-label">Baden-Baden</div>
+
+                            <div class="weather-details">
+                                <div class="weather-detail">
+                                    <div class="weather-detail-value">65%</div>
+                                    <div class="weather-detail-label">Luftfeuchtigkeit</div>
+                                </div>
+                                <div class="weather-detail">
+                                    <div class="weather-detail-value">12 km/h</div>
+                                    <div class="weather-detail-label">Wind</div>
+                                </div>
+                                <div class="weather-detail">
+                                    <div class="weather-detail-value">1013 hPa</div>
+                                    <div class="weather-detail-label">Druck</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats Widget -->
+                <div class="widget-card span-3 animate-in">
+                    <div class="widget-header">
+                        <div class="widget-title">
+                            <div class="widget-icon">
+                                <i data-lucide="trending-up"></i>
+                            </div>
+                            Schnellübersicht
+                        </div>
+                    </div>
+                    <div class="widget-content">
+                        <div class="quick-stats">
+                            <div class="stat-box">
+                                <div class="stat-box-value" style="color: var(--primary)">3</div>
+                                <div class="stat-box-label">
+                                    <i data-lucide="calendar" size="12"></i>
+                                    Termine heute
+                                </div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-box-value" style="color: var(--secondary)">6</div>
+                                <div class="stat-box-label">
+                                    <i data-lucide="check-square" size="12"></i>
+                                    Offene Aufgaben
+                                </div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-box-value" style="color: var(--accent)">24</div>
+                                <div class="stat-box-label">
+                                    <i data-lucide="users" size="12"></i>
+                                    Kontakte
+                                </div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-box-value" style="color: var(--success)">2</div>
+                                <div class="stat-box-label">
+                                    <i data-lucide="wifi" size="12"></i>
+                                    Team-Mitglieder
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA Section -->
+        <div class="cta-section">
+            <h2>Bereit für das Upgrade? 🚀</h2>
+            <p>Integriere das Enhanced Dashboard in deine Pear App und erlebe Premium-Qualität!</p>
+            <a href="ENHANCED_DASHBOARD_GUIDE.md" class="btn-primary">
+                Zur Installations-Anleitung
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Add some interactivity
+        document.querySelectorAll('.widget-action-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const icon = btn.querySelector('i');
+                if (icon.getAttribute('data-lucide') === 'refresh-cw') {
+                    icon.style.transform = 'rotate(360deg)';
+                    icon.style.transition = 'transform 0.5s ease';
+                    setTimeout(() => {
+                        icon.style.transform = 'rotate(0deg)';
+                    }, 500);
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

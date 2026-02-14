@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Todo Liste - Pear App</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="premium-todo.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-rgb: 99, 102, 241;
+            --secondary: #22d3ee;
+            --accent: #f472b6;
+            --success: #10b981;
+            --urgent: #ef4444;
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+            --text-muted: #94a3b8;
+            --bg-dark: #0a0c10;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #0a0c10;
+            color: white;
+            min-height: 100vh;
+            padding: 40px 20px;
+            background: radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(244, 114, 182, 0.1) 0%, transparent 50%);
+        }
+
+        .demo-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .demo-header h1 {
+            font-size: 3rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .demo-header p {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="demo-header">
+        <h1>✅ Premium Todo Liste</h1>
+        <p>Moderne, interaktive Aufgabenverwaltung für deine Pear App</p>
+    </div>
+
+    <div class="todo-container">
+        <!-- Hero Section with Stats -->
+        <div class="todo-hero">
+            <div class="todo-hero-content">
+                <h1 style="font-size: 2.5rem; margin-bottom: 10px;">Deine Aufgaben 👋</h1>
+                <p style="color: var(--text-muted); font-size: 1.1rem;">Behalte den Überblick über deine To-Dos</p>
+
+                <div class="todo-stats-row">
+                    <div class="todo-stat-card">
+                        <div class="todo-stat-value" id="totalTasks">12</div>
+                        <div class="todo-stat-label">Gesamt</div>
+                    </div>
+                    <div class="todo-stat-card">
+                        <div class="todo-stat-value" id="activeTasks">5</div>
+                        <div class="todo-stat-label">Aktiv</div>
+                    </div>
+                    <div class="todo-stat-card">
+                        <div class="todo-stat-value" id="completedTasks">7</div>
+                        <div class="todo-stat-label">Erledigt</div>
+                    </div>
+                    <div class="todo-stat-card">
+                        <div class="todo-stat-value" id="urgentTasks">2</div>
+                        <div class="todo-stat-label">Dringend</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Add -->
+        <div class="todo-quick-add">
+            <div class="todo-input-row">
+                <div class="todo-input-wrapper">
+                    <i data-lucide="plus-circle" class="todo-input-icon"></i>
+                    <input type="text" class="todo-input" id="newTodoInput" placeholder="Neue Aufgabe hinzufügen..."
+                        onkeypress="if(event.key==='Enter') addTodo()">
+                </div>
+                <button class="todo-add-btn" onclick="addTodo()">
+                    <i data-lucide="plus" size="20"></i>
+                    <span>Hinzufügen</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="todo-filters">
+            <button class="todo-filter-btn active" data-filter="all" onclick="filterTodos('all')">
+                <i data-lucide="list" size="16"></i>
+                Alle
+                <span class="filter-count">12</span>
+            </button>
+            <button class="todo-filter-btn" data-filter="active" onclick="filterTodos('active')">
+                <i data-lucide="circle" size="16"></i>
+                Aktiv
+                <span class="filter-count">5</span>
+            </button>
+            <button class="todo-filter-btn" data-filter="completed" onclick="filterTodos('completed')">
+                <i data-lucide="check-circle" size="16"></i>
+                Erledigt
+                <span class="filter-count">7</span>
+            </button>
+            <button class="todo-filter-btn" data-filter="urgent" onclick="filterTodos('urgent')">
+                <i data-lucide="alert-circle" size="16"></i>
+                Dringend
+                <span class="filter-count">2</span>
+            </button>
+        </div>
+
+        <!-- Todo List -->
+        <div class="todo-list" id="todoList">
+            <!-- Demo Items -->
+            <div class="todo-item urgent">
+                <div class="todo-content">
+                    <div class="todo-checkbox-wrapper">
+                        <input type="checkbox" class="todo-checkbox" onchange="toggleTodo(this)">
+                    </div>
+                    <div class="todo-main">
+                        <div class="todo-text"
+                            onclick="toggleTodo(this.closest('.todo-item').querySelector('.todo-checkbox'))">
+                            Projekt-Präsentation vorbereiten</div>
+                        <div class="todo-meta">
+                            <span class="todo-tag urgent">
+                                <i data-lucide="alert-circle" size="12"></i>
+                                Dringend
+                            </span>
+                            <span class="todo-tag due-date">
+                                <i data-lucide="calendar" size="12"></i>
+                                Heute, 14:00
+                            </span>
+                            <span class="todo-tag category">
+                                <i data-lucide="briefcase" size="12"></i>
+                                Arbeit
+                            </span>
+                        </div>
+                    </div>
+                    <div class="todo-actions">
+                        <button class="todo-action-btn urgent-active" onclick="toggleUrgent(this)"
+                            title="Als normal markieren">
+                            <i data-lucide="alert-circle" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn" onclick="editTodo(this)" title="Bearbeiten">
+                            <i data-lucide="edit-3" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn delete" onclick="deleteTodo(this)" title="Löschen">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="todo-item">
+                <div class="todo-content">
+                    <div class="todo-checkbox-wrapper">
+                        <input type="checkbox" class="todo-checkbox" onchange="toggleTodo(this)">
+                    </div>
+                    <div class="todo-main">
+                        <div class="todo-text"
+                            onclick="toggleTodo(this.closest('.todo-item').querySelector('.todo-checkbox'))">Einkaufen
+                            gehen</div>
+                        <div class="todo-meta">
+                            <span class="todo-tag category">
+                                <i data-lucide="shopping-cart" size="12"></i>
+                                Privat
+                            </span>
+                            <span class="todo-tag">
+                                <i data-lucide="clock" size="12"></i>
+                                Morgen
+                            </span>
+                        </div>
+                    </div>
+                    <div class="todo-actions">
+                        <button class="todo-action-btn" onclick="toggleUrgent(this)" title="Als dringend markieren">
+                            <i data-lucide="alert-circle" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn" onclick="editTodo(this)" title="Bearbeiten">
+                            <i data-lucide="edit-3" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn delete" onclick="deleteTodo(this)" title="Löschen">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="todo-item done">
+                <div class="todo-content">
+                    <div class="todo-checkbox-wrapper">
+                        <input type="checkbox" class="todo-checkbox" checked onchange="toggleTodo(this)">
+                    </div>
+                    <div class="todo-main">
+                        <div class="todo-text"
+                            onclick="toggleTodo(this.closest('.todo-item').querySelector('.todo-checkbox'))">E-Mails
+                            beantworten</div>
+                        <div class="todo-meta">
+                            <span class="todo-tag category">
+                                <i data-lucide="mail" size="12"></i>
+                                Arbeit
+                            </span>
+                        </div>
+                    </div>
+                    <div class="todo-actions">
+                        <button class="todo-action-btn urgent-active" onclick="toggleUrgent(this)"
+                            title="Als normal markieren">
+                            <i data-lucide="alert-circle" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn" onclick="editTodo(this)" title="Bearbeiten">
+                            <i data-lucide="edit-3" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn delete" onclick="deleteTodo(this)" title="Löschen">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="todo-item urgent">
+                <div class="todo-content">
+                    <div class="todo-checkbox-wrapper">
+                        <input type="checkbox" class="todo-checkbox" onchange="toggleTodo(this)">
+                    </div>
+                    <div class="todo-main">
+                        <div class="todo-text"
+                            onclick="toggleTodo(this.closest('.todo-item').querySelector('.todo-checkbox'))">Arzttermin
+                            vereinbaren</div>
+                        <div class="todo-meta">
+                            <span class="todo-tag urgent">
+                                <i data-lucide="alert-circle" size="12"></i>
+                                Dringend
+                            </span>
+                            <span class="todo-tag category">
+                                <i data-lucide="heart" size="12"></i>
+                                Gesundheit
+                            </span>
+                        </div>
+                    </div>
+                    <div class="todo-actions">
+                        <button class="todo-action-btn urgent-active" onclick="toggleUrgent(this)"
+                            title="Als normal markieren">
+                            <i data-lucide="alert-circle" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn" onclick="editTodo(this)" title="Bearbeiten">
+                            <i data-lucide="edit-3" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn delete" onclick="deleteTodo(this)" title="Löschen">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="todo-item">
+                <div class="todo-content">
+                    <div class="todo-checkbox-wrapper">
+                        <input type="checkbox" class="todo-checkbox" onchange="toggleTodo(this)">
+                    </div>
+                    <div class="todo-main">
+                        <div class="todo-text"
+                            onclick="toggleTodo(this.closest('.todo-item').querySelector('.todo-checkbox'))">
+                            Geburtstagsgeschenk für Anna kaufen</div>
+                        <div class="todo-meta">
+                            <span class="todo-tag due-date">
+                                <i data-lucide="calendar" size="12"></i>
+                                15. Februar
+                            </span>
+                            <span class="todo-tag category">
+                                <i data-lucide="gift" size="12"></i>
+                                Privat
+                            </span>
+                        </div>
+                    </div>
+                    <div class="todo-actions">
+                        <button class="todo-action-btn urgent-active" onclick="toggleUrgent(this)"
+                            title="Als normal markieren">
+                            <i data-lucide="alert-circle" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn" onclick="editTodo(this)" title="Bearbeiten">
+                            <i data-lucide="edit-3" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn delete" onclick="deleteTodo(this)" title="Löschen">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Add new todo
+        function addTodo() {
+            const input = document.getElementById('newTodoInput');
+            const text = input.value.trim();
+
+            if (!text) return;
+
+            const todoList = document.getElementById('todoList');
+            const todoItem = document.createElement('div');
+            todoItem.className = 'todo-item';
+            todoItem.innerHTML = `
+                <div class="todo-content">
+                    <div class="todo-checkbox-wrapper">
+                        <input type="checkbox" class="todo-checkbox" onchange="toggleTodo(this)">
+                    </div>
+                    <div class="todo-main">
+                        <div class="todo-text" onclick="toggleTodo(this.closest('.todo-item').querySelector('.todo-checkbox'))">${text}</div>
+                        <div class="todo-meta">
+                            <span class="todo-tag category">
+                                <i data-lucide="circle" size="12"></i>
+                                Neu
+                            </span>
+                        </div>
+                    </div>
+                    <div class="todo-actions">
+                        <button class="todo-action-btn urgent-active" onclick="toggleUrgent(this)" title="Als normal markieren">
+                            <i data-lucide="alert-circle" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn" onclick="editTodo(this)" title="Bearbeiten">
+                            <i data-lucide="edit-3" size="16"></i>
+                        </button>
+                        <button class="todo-action-btn delete" onclick="deleteTodo(this)" title="Löschen">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            todoList.insertBefore(todoItem, todoList.firstChild);
+            input.value = '';
+
+            // Reinitialize icons
+            lucide.createIcons();
+
+            // Update stats
+            updateStats();
+
+            // Add animation
+            todoItem.style.opacity = '0';
+            setTimeout(() => {
+                todoItem.style.transition = 'opacity 0.4s ease';
+                todoItem.style.opacity = '1';
+            }, 10);
+        }
+
+        // Toggle todo completion
+        function toggleTodo(checkbox) {
+            const todoItem = checkbox.closest('.todo-item');
+            if (checkbox.checked) {
+                todoItem.classList.add('done');
+            } else {
+                todoItem.classList.remove('done');
+            }
+            updateStats();
+            sortTodos();
+        }
+
+        // Sort todos: incomplete first, completed last
+        function sortTodos() {
+            const todoList = document.getElementById('todoList');
+            const todos = Array.from(todoList.querySelectorAll('.todo-item'));
+
+            todos.sort((a, b) => {
+                const aDone = a.classList.contains('done');
+                const bDone = b.classList.contains('done');
+                if (aDone === bDone) return 0;
+                return aDone ? 1 : -1;
+            });
+
+            todos.forEach(todo => todoList.appendChild(todo));
+        }
+
+        // Toggle urgent status
+        function toggleUrgent(btn) {
+            const todoItem = btn.closest('.todo-item');
+            const isUrgent = todoItem.classList.contains('urgent');
+
+            if (isUrgent) {
+                todoItem.classList.remove('urgent');
+                btn.classList.remove('urgent-active');
+                btn.title = 'Als dringend markieren';
+                // Remove urgent tag
+                const urgentTag = todoItem.querySelector('.todo-tag.urgent');
+                if (urgentTag) urgentTag.remove();
+            } else {
+                todoItem.classList.add('urgent');
+                btn.classList.add('urgent-active');
+                btn.title = 'Als normal markieren';
+                // Add urgent tag
+                const metaDiv = todoItem.querySelector('.todo-meta');
+                if (metaDiv && !metaDiv.querySelector('.todo-tag.urgent')) {
+                    const urgentTag = document.createElement('span');
+                    urgentTag.className = 'todo-tag urgent';
+                    urgentTag.innerHTML = `
+                        <i data-lucide="alert-circle" size="12"></i>
+                        Dringend
+                    `;
+                    metaDiv.insertBefore(urgentTag, metaDiv.firstChild);
+                    lucide.createIcons();
+                }
+            }
+            updateStats();
+        }
+
+        // Delete todo
+        function deleteTodo(btn) {
+            const todoItem = btn.closest('.todo-item');
+            todoItem.style.transition = 'all 0.3s ease';
+            todoItem.style.opacity = '0';
+            todoItem.style.transform = 'translateX(-100%)';
+            setTimeout(() => {
+                todoItem.remove();
+                updateStats();
+            }, 300);
+        }
+
+        // Edit todo
+        function editTodo(btn) {
+            const todoItem = btn.closest('.todo-item');
+            const textEl = todoItem.querySelector('.todo-text');
+            const currentText = textEl.textContent;
+
+            const newText = prompt('Aufgabe bearbeiten:', currentText);
+            if (newText && newText.trim()) {
+                textEl.textContent = newText.trim();
+            }
+        }
+
+        // Filter todos
+        function filterTodos(filter) {
+            const buttons = document.querySelectorAll('.todo-filter-btn');
+            buttons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.filter === filter) {
+                    btn.classList.add('active');
+                }
+            });
+
+            const todos = document.querySelectorAll('.todo-item');
+            todos.forEach(todo => {
+                const isCompleted = todo.classList.contains('done');
+                const isUrgent = todo.classList.contains('urgent');
+
+                let show = false;
+                switch (filter) {
+                    case 'all':
+                        show = true;
+                        break;
+                    case 'active':
+                        show = !isCompleted;
+                        break;
+                    case 'completed':
+                        show = isCompleted;
+                        break;
+                    case 'urgent':
+                        show = isUrgent && !isCompleted;
+                        break;
+                }
+
+                todo.style.display = show ? 'block' : 'none';
+            });
+        }
+
+        // Update statistics
+        function updateStats() {
+            const todos = document.querySelectorAll('.todo-item');
+            const completed = document.querySelectorAll('.todo-item.done').length;
+            const urgent = document.querySelectorAll('.todo-item.urgent:not(.done)').length;
+            const active = todos.length - completed;
+
+            document.getElementById('totalTasks').textContent = todos.length;
+            document.getElementById('activeTasks').textContent = active;
+            document.getElementById('completedTasks').textContent = completed;
+            document.getElementById('urgentTasks').textContent = urgent;
+
+            // Update filter counts
+            document.querySelector('[data-filter="all"] .filter-count').textContent = todos.length;
+            document.querySelector('[data-filter="active"] .filter-count').textContent = active;
+            document.querySelector('[data-filter="completed"] .filter-count').textContent = completed;
+            document.querySelector('[data-filter="urgent"] .filter-count').textContent = urgent;
+        }
+
+        // Initialize
+        updateStats();
+    </script>
+</body>
+
+</html>
