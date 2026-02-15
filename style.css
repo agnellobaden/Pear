@@ -1161,7 +1161,8 @@ body {
     border-left: 2px solid #3b82f6;
 }
 
-.month-event-pill.private {
+.month-event-pill.private,
+.month-event-pill.privat {
     background: rgba(16, 185, 129, 0.2);
     color: #34d399;
     border-left: 2px solid #10b981;
@@ -2762,9 +2763,16 @@ body {
     background: rgba(99, 102, 241, 0.9);
 }
 
-.event-card-absolute.private {
-    border-color: var(--secondary);
-    background: rgba(168, 85, 247, 0.9);
+.event-card-absolute.private,
+.event-card-absolute.privat {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.9);
+}
+
+.event-card-absolute.eisverkauf {
+    border-color: #fbbf24;
+    background: rgba(251, 191, 36, 0.9);
+    color: #000;
 }
 
 .event-card-absolute.urgent {
@@ -4773,84 +4781,134 @@ body {
     background: rgba(255, 255, 255, 0.01);
 }
 
-/* Event Cards in Day/Week View */
+/* Event Cards in Day/Week View - Modern iOS Style */
 .event-card {
     position: absolute;
-    left: 4px;
-    right: 4px;
-    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.25), rgba(var(--primary-rgb), 0.15));
-    backdrop-filter: blur(8px);
-    /* Higher blur for a real glass look */
-    border-left: 4px solid var(--primary);
-    border-radius: 12px;
+    left: 6px;
+    right: 6px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.95), rgba(99, 102, 241, 0.85));
+    backdrop-filter: blur(20px);
+    border: none;
+    border-left: 5px solid rgba(0, 0, 0, 0.15);
+    border-radius: 16px;
     padding: 0;
     overflow: hidden;
     cursor: pointer;
-    font-size: 0.8rem;
-    color: var(--text-main);
+    font-size: 0.85rem;
+    color: white;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 5;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    box-shadow:
+        0 8px 20px rgba(0, 0, 0, 0.25),
+        0 2px 8px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .event-card-inner {
-    padding: 8px 10px;
+    padding: 12px 14px;
     height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+    position: relative;
 }
 
 .event-card-header {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 0.75rem;
-    font-weight: 800;
-    color: var(--text-main);
-    /* Forced to main for contrast */
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    opacity: 0.9;
 }
 
 .event-title {
-    font-weight: 800;
-    /* Ultra bold for readability */
-    font-size: 0.95rem;
-    line-height: 1.1;
+    font-weight: 700;
+    font-size: 1.1rem;
+    line-height: 1.2;
     white-space: normal;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    color: var(--text-main);
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .event-loc {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: rgba(255, 255, 255, 0.7);
     display: flex;
     align-items: center;
     gap: 4px;
     margin-top: auto;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .event-card:hover {
     z-index: 50;
-    transform: scale(1.02) translateX(2px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
-    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.35), rgba(var(--primary-rgb), 0.25));
+    transform: scale(1.04) translateY(-4px);
+    box-shadow:
+        0 20px 35px -8px rgba(0, 0, 0, 0.5),
+        0 10px 15px -5px rgba(0, 0, 0, 0.3),
+        inset 0 1px 2px rgba(255, 255, 255, 0.4);
 }
 
 .event-card.holiday {
-    border-left-color: #06b6d4;
-    background: linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(6, 182, 212, 0.1));
+    background: linear-gradient(165deg, #06b6d4 0%, #0891b2 100%);
+    box-shadow: 0 12px 20px -8px rgba(8, 145, 178, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 .event-card.birthday {
-    border-left-color: #f59e0b;
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(245, 158, 11, 0.1));
+    background: linear-gradient(165deg, #f59e0b 0%, #d97706 100%);
+    box-shadow: 0 12px 20px -8px rgba(217, 119, 6, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+}
+
+/* Eisverkauf - Sattes Gelb/Gold 3D */
+.event-card.eisverkauf {
+    background: linear-gradient(165deg, #fbbf24 0%, #f59e0b 100%) !important;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    color: #1a1a1a !important;
+    box-shadow:
+        0 15px 25px -5px rgba(245, 158, 11, 0.6),
+        0 8px 12px -6px rgba(0, 0, 0, 0.2),
+        inset 0 1px 2px rgba(255, 255, 255, 0.6),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.event-card.eisverkauf .event-title,
+.event-card.eisverkauf .event-card-header,
+.event-card.eisverkauf .event-loc {
+    color: #1a1a1a !important;
+    text-shadow: none;
+}
+
+.event-card.eisverkauf .event-card-header {
+    opacity: 0.7;
+}
+
+/* Privat - Sattes Grün 3D */
+.event-card.private,
+.event-card.privat {
+    background: linear-gradient(165deg, #10b981 0%, #059669 100%) !important;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    color: white !important;
+    box-shadow:
+        0 15px 25px -5px rgba(16, 185, 129, 0.5),
+        inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+
+/* Arbeit - Sattes Blau 3D */
+.event-card.work,
+.event-card.arbeit {
+    background: linear-gradient(165deg, #3b82f6 0%, #1d4ed8 100%) !important;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    color: white !important;
+    box-shadow:
+        0 15px 25px -5px rgba(59, 130, 246, 0.5),
+        inset 0 1px 2px rgba(255, 255, 255, 0.3);
 }
 
 
@@ -5752,8 +5810,234 @@ body {
     }
 }
 
+
+.night-controls {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 10px 20px;
+    border-radius: 40px;
+    opacity: 0;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    z-index: 10002;
+}
+
+.night-overlay:hover .night-controls,
+.night-overlay:active .night-controls {
+    opacity: 1;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+}
+
+.night-hint {
+    position: absolute;
+    bottom: 20px;
+    font-size: 0.8rem;
+    opacity: 0.3;
+}
+
+/* --- NIGHT CLOCK ORIENTATION MODES --- */
+
+/* 1. Base Portrait Mode (Default) - Handled above */
+
+/* 2. Physical Landscape Mode (When phone is actually rotated) */
+@media (orientation: landscape) {
+    .night-overlay {
+        flex-direction: row;
+        gap: 8vw;
+    }
+
+    .night-clock-large {
+        font-size: 35vh;
+        /* Bigger in landscape */
+    }
+
+    .night-clock-date {
+        font-size: 6vh;
+        margin-top: 0;
+        writing-mode: horizontal-tb;
+    }
+
+    .night-controls {
+        bottom: 20px;
+    }
+
+    .night-close-btn {
+        top: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+    }
+}
+
+/* 3. Manual Bedside (Nachttisch) Mode - Forced Landscape */
+.night-overlay.is-landscape-forced {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3vh;
+}
+
+/* On Mobile portrait, rotate the content 90deg for bedside placement */
+@media (max-width: 600px) and (orientation: portrait) {
+    .night-overlay.is-landscape-forced {
+        width: 100vh !important;
+        height: 100vw !important;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(90deg);
+        overflow: hidden;
+    }
+
+    .night-overlay.is-landscape-forced .night-clock-large {
+        font-size: 26vh;
+        /* Scaled to fit comfortably across the width */
+        margin: 0;
+        line-height: 1;
+    }
+
+    .night-overlay.is-landscape-forced .night-clock-date {
+        font-size: 7vh;
+        margin-top: 2vh;
+        opacity: 0.6;
+    }
+
+    .night-overlay.is-landscape-forced .night-hint {
+        display: none;
+    }
+
+    .night-overlay.is-landscape-forced .night-close-btn {
+        top: 20px;
+        right: 20px;
+        width: 44px;
+        height: 44px;
+    }
+}
+
+
+
+/* Special fix for very small phones */
+@media (max-width: 400px) {
+    .night-clock-large {
+        font-size: 26vw;
+    }
+
+    .night-clock-date {
+        font-size: 5vw;
+    }
+}
+
+/* Finance Quick Add Button */
+.finance-quick-add-btn:hover {
+    transform: scale(1.1) rotate(90deg);
+    box-shadow: 0 12px 30px rgba(var(--primary-rgb), 0.6);
+}
+
+.finance-quick-add-btn:active {
+    transform: scale(0.95) rotate(90deg);
+}
+
+/* Mobile adjustments for finance quick add button */
+@media (max-width: 768px) {
+    .finance-quick-add-btn {
+        width: 56px !important;
+        height: 56px !important;
+        font-size: 1.8rem !important;
+        top: 15px !important;
+        right: 15px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .finance-quick-add-btn {
+        width: 50px !important;
+        height: 50px !important;
+        font-size: 1.6rem !important;
+        top: 10px !important;
+        right: 10px !important;
+    }
+}
+
+/* Dashboard Finance Add Button */
+.dashboard-finance-add-btn:hover {
+    transform: scale(1.1) rotate(90deg);
+    box-shadow: 0 6px 18px rgba(var(--primary-rgb), 0.5);
+}
+
+.dashboard-finance-add-btn:active {
+    transform: scale(0.95) rotate(90deg);
+}
+
+/* --- Digital Clock Responsive Typography --- */
+.digital-clock {
+    font-size: 5rem;
+    line-height: 1;
+    white-space: nowrap;
+    /* Prevent wrapping */
+    transition: font-size 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .digital-clock {
+        font-size: 4rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .digital-clock {
+        font-size: 15vw;
+        /* Fluid typography for small screens */
+    }
+}
+
 @media (max-width: 360px) {
     .digital-clock {
         font-size: 13vw;
     }
+}
+
+/* Eisverkauf Highlighting - FULL YELLOW */
+.calendar-cell-large.eisverkauf,
+.calendar-cell.eisverkauf,
+.mosaic-day-card.eisverkauf {
+    background: #FFD700 !important;
+    /* Solid Gold/Yellow */
+    border: 2px solid #DAA520 !important;
+    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+    color: #000 !important;
+    /* Ensure readable text */
+}
+
+/* Ensure child elements respect contrast */
+.calendar-cell-large.eisverkauf .day-num,
+.mosaic-day-card.eisverkauf .mosaic-day-name,
+.mosaic-day-card.eisverkauf .mosaic-date-label {
+    color: #000 !important;
+    font-weight: 800;
+}
+
+/* Today + Eisverkauf override */
+.calendar-cell-large.eisverkauf.today-full {
+    background: #FFD700 !important;
+    border-color: #000 !important;
+}
+
+/* Event Pill on Yellow Background -> White for contrast */
+.month-event-pill.eisverkauf {
+    background: #ffffff !important;
+    color: #000 !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }

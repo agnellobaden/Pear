@@ -385,14 +385,18 @@ class EnhancedDashboard {
     }
 
     getCategoryColor(category) {
-        const colors = {
-            work: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-            private: 'linear-gradient(135deg, #22d3ee, #06b6d4)',
-            urgent: 'linear-gradient(135deg, #ef4444, #dc2626)',
-            birthday: 'linear-gradient(135deg, #ffd700, #ffa500)',
-            holiday: 'linear-gradient(135deg, #ff9f43, #ff6b6b)'
-        };
-        return colors[category] || colors.private;
+        const cat = (category || '').toLowerCase();
+
+        // Dynamic Mapping
+        if (cat === 'eisverkauf' || cat.includes('eis')) return 'linear-gradient(135deg, #fbbf24, #f59e0b)'; // Yellow/Orange
+        if (cat === 'work' || cat === 'arbeit' || cat.includes('arbeit')) return 'linear-gradient(135deg, #6366f1, #4f46e5)'; // Indigo
+        if (cat === 'private' || cat === 'privat' || cat.includes('privat')) return 'linear-gradient(135deg, #10b981, #059669)'; // Green (User requested specific color alignment)
+        if (cat === 'urgent' || cat === 'dringend') return 'linear-gradient(135deg, #ef4444, #dc2626)'; // Red
+        if (cat === 'birthday' || cat === 'geburtstag') return 'linear-gradient(135deg, #eab308, #ca8a04)'; // Gold
+        if (cat === 'holiday' || cat === 'feiertag') return 'linear-gradient(135deg, #06b6d4, #0891b2)'; // Cyan
+
+        // Default
+        return 'linear-gradient(135deg, #64748b, #475569)';
     }
 
     getWeatherIcon(condition) {

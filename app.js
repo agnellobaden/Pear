@@ -1957,8 +1957,9 @@ const app = {
                 const currentCellDate = new Date(year, month, d);
                 const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
 
-                const dayEvents = this.state.events.filter(e => this.isEventOnDate(e, currentCellDate));
+                const dayEvents = app.state.events.filter(e => app.isEventOnDate(e, currentCellDate));
                 const hasEvent = dayEvents.length > 0;
+                const isEisverkauf = dayEvents.some(e => e.category === 'eisverkauf' || (e.title && e.title.toLowerCase().includes('eisverkauf')));
 
                 let styleStr = '';
                 if (hasEvent) {
@@ -1970,7 +1971,7 @@ const app = {
                     }
                 }
 
-                let classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''}`;
+                let classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''} ${isEisverkauf ? 'eisverkauf' : ''}`;
 
                 html += `<div class="${classStr}" style="${styleStr}" onclick="app.goToDay('${dateStr}')">${d}</div>`;
             }
@@ -3928,12 +3929,20 @@ const app = {
                 const day = d.getDate();
                 const month = d.toLocaleString('de-DE', { month: 'short' });
 
-                const eventColor = e.color || 'var(--primary)';
+                const eventColor = this.getEventColor ? this.getEventColor(e) : (e.color || 'var(--primary)');
+                const isYellow = (eventColor === '#fbbf24' || eventColor === '#f59e0b' || eventColor === '#eab308');
+                const badgeTextColor = isYellow ? '#000000' : '#ffffff';
+
                 const itemStyle = `
                     cursor: pointer; 
                     position: relative; 
-                    border-left: 4px solid ${eventColor};
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 5px ${eventColor}20;
+                    background: linear-gradient(135deg, ${eventColor}cc, ${eventColor});
+                    border-radius: 12px;
+                    padding: 12px;
+                    margin-bottom: 8px;
+                    color: ${badgeTextColor};
+                    box-shadow: 0 4px 15px -3px ${eventColor}66, 0 2px 4px -2px rgba(0,0,0,0.1);
+                    border: 1px solid rgba(255,255,255,0.1);
                 `;
 
                 // Check for phone & email
@@ -3948,43 +3957,56 @@ const app = {
                 }
 
                 return `
-                    <div class="event-item" onclick="app.editEvent('${e.id}')" style="${itemStyle}">
-                        <div class="event-time-box">
-                            <span class="event-day">${day}</span>
-                            <span class="event-month">${month}</span>
+                    <div class="event-item" onclick="app.editEvent('${e.id}')" style="${itemStyle} display:grid; grid-template-columns: auto 1fr auto; align-items:center; gap:16px;">
+                        
+                        <div class="event-time-box" style="background:rgba(255,255,255,0.25); color:${badgeTextColor}; padding:8px 14px; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:55px; backdrop-filter: blur(4px);">
+                            <span class="event-day" style="font-weight:900; font-size:1.25rem; line-height:1; letter-spacing: -0.5px;">${day}</span>
+                            <span class="event-month" style="font-size:0.75rem; text-transform:uppercase; font-weight:700; opacity:0.95; letter-spacing: 0.5px; margin-top: 2px;">${month}</span>
                         </div>
-                        <div class="event-info">
-                            <h4 style="color:var(--text-main); font-weight:700; display: flex; align-items: center; gap: 8px;">
+
+                        <div class="event-info" style="min-width:0; display:flex; flex-direction:column; gap:4px;">
+                            <h4 style="color:${badgeTextColor}; font-weight:800; font-size:1.1rem; margin:0; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
                                 ${e.title}
-                                ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="14" style="opacity:0.6;" title="Wiederholt sich ${e.recurrence}"></i>` : ''}
                             </h4>
-                            <p style="opacity:0.8;">${e.time || '--:--'} Uhr ${e.location ? `• ${e.location}` : ''} ${email ? `• ${email}` : ''}</p>
+                            <div style="font-size:0.9rem; opacity:0.9; color:${badgeTextColor}; display:flex; align-items:center; flex-wrap: wrap; gap:8px; font-weight: 500;">
+                                <div style="display:flex; align-items:center; gap:4px;">
+                                    <i data-lucide="clock" size="14"></i> 
+                                    <span>${e.time || 'Ganztägig'}</span>
+                                </div>
+                                ${e.location ? `
+                                <div style="display:flex; align-items:center; gap:4px; opacity: 0.9;">
+                                    <span style="opacity: 0.6;">•</span>
+                                    <span>${e.location}</span>
+                                </div>` : ''}
+                                ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="12" style="opacity:0.8;"></i>` : ''}
+                            </div>
                         </div>
-                        <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+
+                        <div style="display:flex; align-items:center; gap:8px;">
                             ${phone ? `
-                                <a href="tel:${phone}" class="btn-icon-subtle" onclick="event.stopPropagation()" title="Anrufen" style="color:#d97706; background:rgba(217,119,6,0.1); width: 36px; height: 36px; border-radius: 10px;">
+                                <a href="tel:${phone}" onclick="event.stopPropagation()" title="Anrufen" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
                                     <i data-lucide="phone" size="18"></i>
                                 </a>
                             ` : ''}
                             ${email ? `
-                                <a href="mailto:${email}" class="btn-icon-subtle" onclick="event.stopPropagation()" title="E-Mail schreiben" style="color:#3b82f6; background:rgba(59,130,246,0.1); width: 36px; height: 36px; border-radius: 10px;">
+                                <a href="mailto:${email}" onclick="event.stopPropagation()" title="E-Mail" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
                                     <i data-lucide="mail" size="18"></i>
                                 </a>
                             ` : ''}
                             ${e.location ? `
-                                <button class="btn-icon-subtle" onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte öffnen" style="width: 36px; height: 36px; border-radius: 10px;">
+                                <button onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
                                     <i data-lucide="map" size="18"></i>
                                 </button>
                             ` : ''}
-                            <div class="event-category-badge category-${e.category}" style="${e.color ? `background:${e.color}; color:white;` : ''}">${e.category}</div>
+                            
                             <div class="event-hover-actions">
-                                <button onclick="event.stopPropagation(); app.deleteEvent('${e.id}')" class="btn-delete-subtle" title="Löschen">
+                                <button onclick="event.stopPropagation(); app.deleteEvent('${e.id}')" title="Löschen" style="color:${badgeTextColor}; background:rgba(220,38,38,0.2); width: 36px; height: 36px; border-radius: 10px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
                                     <i data-lucide="trash-2" size="18"></i>
                                 </button>
                             </div>
                         </div>
                     </div>
-                `;
+    `;
             }).join('');
         }
 
@@ -4010,42 +4032,42 @@ const app = {
 
             // Render Urgent Contacts (First!)
             urgentHtml += urgentContacts.map(c => `
-                <div class="urgent-item-accent" onclick="${c.phone ? `window.location.href='tel:${c.phone}'` : `app.navigateTo('contacts')`}">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <i data-lucide="${c.phone ? 'phone-call' : 'user'}" size="18" style="color:#ef4444;"></i>
-                        <span style="font-weight:700; font-size:1rem;">${c.name}</span>
-                    </div>
+    <div class="urgent-item-accent" onclick="${c.phone ? `window.location.href='tel:${c.phone}'` : `app.navigateTo('contacts')`}">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="${c.phone ? 'phone-call' : 'user'}" size="18" style="color:#ef4444;"></i>
+            <span style="font-weight:700; font-size:1rem;">${c.name}</span>
+        </div>
                     ${c.phone ? '<span class="urgent-badge-pill">ANRUFEN!</span>' : '<span style="font-size:0.75rem; color:#ef4444; font-weight:800;">DRINGEND</span>'}
                 </div>
-            `).join('');
+    `).join('');
 
             // Render Urgent Events
             urgentHtml += urgentEvents.map(e => `
-                <div class="urgent-item-accent" onclick="app.editEvent('${e.id}')">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <i data-lucide="calendar-clock" size="18" style="color:#ef4444;"></i>
-                        <div style="display:flex; flex-direction:column;">
-                            <span style="font-weight:700; font-size:1rem;">${e.title}</span>
-                            <span style="font-size:0.8rem; opacity:0.9;">Heute ${e.time || ''}</span>
-                        </div>
-                    </div>
+    <div class="urgent-item-accent" onclick="app.editEvent('${e.id}')">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="calendar-clock" size="18" style="color:#ef4444;"></i>
+            <div style="display:flex; flex-direction:column;">
+                <span style="font-weight:700; font-size:1rem;">${e.title}</span>
+                <span style="font-size:0.8rem; opacity:0.9;">Heute ${e.time || ''}</span>
+            </div>
+        </div>
                     ${e.phone ?
                     `<a href="tel:${e.phone}" class="urgent-badge-pill" onclick="event.stopPropagation()" style="text-decoration:none; display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="12"></i> ANRUFEN</a>`
                     : `<span class="urgent-badge-pill">TERMIN</span>`
                 }
                 </div>
-            `).join('');
+    `).join('');
 
             // Render Urgent Todos
             urgentHtml += urgentTodos.map(t => `
-                <div class="urgent-item-accent" onclick="app.navigateTo('todo')">
+    <div class="urgent-item-accent" onclick="app.navigateTo('todo')">
                     <div style="display:flex; align-items:center; gap:12px;">
                         <i data-lucide="check-square" size="18" style="color:#ef4444;"></i>
                         <span style="font-weight:700; font-size:1rem;">${t.text}</span>
                     </div>
                     <span class="urgent-badge-pill">TODO</span>
                 </div>
-            `).join('');
+    `).join('');
 
 
             if (urgentTodos.length > 0 || urgentContacts.length > 0 || urgentEvents.length > 0) {
@@ -4091,7 +4113,7 @@ const app = {
         }
 
         container.innerHTML = favs.map(c => `
-            <div class="quick-contact-item" title="${c.name}">
+    <div class="quick-contact-item" title="${c.name}">
                 <div class="avatar-circle" onclick="app.contacts.edit('${c.id}')">
                     ${c.name.charAt(0).toUpperCase()}
                 </div>
@@ -4107,7 +4129,7 @@ const app = {
                     </button>
                 </div>
             </div>
-        `).join('');
+    `).join('');
 
         if (window.lucide) lucide.createIcons();
     },
@@ -4161,6 +4183,7 @@ const app = {
 
             const dayEvents = this.state.events.filter(e => !e.archived && this.isEventOnDate(e, currentCellDate));
             const hasEvent = dayEvents.length > 0;
+            const isEisverkauf = dayEvents.some(e => e.category === 'eisverkauf' || (e.title && e.title.toLowerCase().includes('eisverkauf')));
 
             let visualContent = `${d}`;
             if (hasEvent) {
@@ -4171,8 +4194,8 @@ const app = {
                 visualContent += `<div class="mini-event-dots">${dotsHtml}</div>`;
             }
 
-            let classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''} ${isSelected ? 'selected-day' : ''}`;
-            let styleStr = isSelected ? `border-color: var(--text-main); background: rgba(255,255,255,0.1);` : '';
+            const classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''} ${isSelected ? 'selected-day' : ''} ${isEisverkauf ? 'eisverkauf' : ''}`;
+            const styleStr = isSelected ? `border-color: var(--text-main); background: rgba(255, 255, 255, 0.1);` : '';
 
             // Update click to select date
             html += `<div class="${classStr}" style="${styleStr}" onclick="app.selectDashboardDate('${dateStr}')">${visualContent}</div>`;
@@ -4186,13 +4209,13 @@ const app = {
             const dateDisplay = selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
 
             let listHtml = `<div style="margin-top:15px; border-top:1px solid var(--glass-border); padding-top:10px; animation:fadeIn 0.3s;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <h5 style="margin:0; color:var(--text-muted); font-size:0.9rem;">Termine am ${dateDisplay}</h5>
-                    <button onclick="app.editEvent()" class="btn-icon-mini" 
-                        style="background: rgba(var(--primary-rgb), 0.1); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer;">
-                        <i data-lucide="plus" size="14"></i>
-                    </button>
-                </div>`;
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h5 style="margin:0; color:var(--text-muted); font-size:0.9rem;">Termine am ${dateDisplay}</h5>
+        <button onclick="app.editEvent()" class="btn-icon-mini"
+            style="background: rgba(var(--primary-rgb), 0.1); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer;">
+            <i data-lucide="plus" size="14"></i>
+        </button>
+    </div>`;
 
             if (events.length === 0) {
                 listHtml += `<div class="text-muted" style="font-size:0.8rem; text-align:center; padding:10px;">Keine Termine</div>`;
@@ -4200,7 +4223,7 @@ const app = {
                 events.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
                 listHtml += `<div style="display:flex; flex-direction:column; gap:8px;">`;
                 listHtml += events.map(e => `
-                    <div onclick="app.editEvent('${e.id}')" class="scale-hover" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:12px; cursor:pointer; border-left: 3px solid ${e.color || 'var(--primary)'};">
+    <div onclick="app.editEvent('${e.id}')" class="scale-hover" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:12px; cursor:pointer; border-left: 3px solid ${e.color || 'var(--primary)'};">
                         <span style="font-weight:700; font-size:0.9rem; min-width:45px;">${e.time || '--:--'}</span>
                         <div style="overflow:hidden;">
                             <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display: flex; align-items: center; gap: 4px;">
@@ -4209,7 +4232,7 @@ const app = {
                             </div>
                         </div>
                     </div>
-                 `).join('');
+    `).join('');
                 listHtml += `</div>`;
             }
             listHtml += `</div>`;
@@ -4236,6 +4259,7 @@ const app = {
         const month = date.getMonth();
         const filteredEvents = this.getFilteredEvents();
 
+        // Inject Contact Birthdays for the current view year
         // Inject Contact Birthdays for the current view year
         const viewYear = date.getFullYear();
         this.state.contacts.forEach(c => {
@@ -4264,7 +4288,7 @@ const app = {
             toggleBtn.style.display = isYear ? 'none' : 'inline-flex';
 
             const view = this.state.calendarView;
-            const mode = this.state[`${view}LayoutMode`] || 'modern';
+            const mode = this.state[`${view} LayoutMode`] || 'modern';
             toggleBtn.innerHTML = mode === 'modern' ? '<i data-lucide="list"></i>' : '<i data-lucide="layout"></i>';
             toggleBtn.title = mode === 'modern' ? 'Listenansicht' : 'Kartenansicht';
 
@@ -4285,7 +4309,7 @@ const app = {
             const endOfWeek = new Date(startOfWeek);
             endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-            monthHeader.textContent = `${startOfWeek.getDate()}. - ${endOfWeek.getDate()}. ${endOfWeek.toLocaleString('de-DE', { month: 'short', year: 'numeric' })}`;
+            monthHeader.textContent = `${startOfWeek.getDate()}.- ${endOfWeek.getDate()}. ${endOfWeek.toLocaleString('de-DE', { month: 'short', year: 'numeric' })} `;
             weekdayHeader.innerHTML = '';
             this.renderWeekView(grid, startOfWeek, filteredEvents);
         } else if (this.state.calendarView === 'day') {
@@ -4298,10 +4322,10 @@ const app = {
     renderEventActions(e) {
         let customStyle = '';
         if (e.color) {
-            customStyle = `background: ${e.color}E6; border-left-color: ${e.color};`;
+            customStyle = `background: ${e.color} E6; border - left - color: ${e.color}; `;
         }
         let html = `<div class="event-pill ${e.category}" title="${e.title}" onclick="event.stopPropagation(); app.editEvent('${e.id}')" style="cursor: pointer; ${customStyle}">
-            <div style="font-weight:600;">${e.time ? e.time + ' ' : ''}${e.title}</div>`;
+    <div style="font-weight:600;">${e.time ? e.time + ' ' : ''}${e.title}</div>`;
 
         if (e.location || e.phone || e.email) {
             html += `<div style="display:flex; gap:6px; margin-top:4px;">`;
@@ -4317,9 +4341,9 @@ const app = {
 
     toggleCalendarLayout() {
         const view = this.state.calendarView;
-        const key = `${view}LayoutMode`;
+        const key = `${view} LayoutMode`;
         this.state[key] = (this.state[key] || 'modern') === 'modern' ? 'classic' : 'modern';
-        localStorage.setItem(`moltbot_calendar_layout_${view}`, this.state[key]);
+        localStorage.setItem(`moltbot_calendar_layout_${view} `, this.state[key]);
         this.render();
     },
 
@@ -4342,7 +4366,7 @@ const app = {
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(year, month, d);
             // FIX: Manual date string to match local time, avoiding UTC rollback
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dateStr = `${year} -${String(month + 1).padStart(2, '0')} -${String(d).padStart(2, '0')} `;
             const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
             const isToday = date.toDateString() === new Date().toDateString();
 
@@ -4368,15 +4392,24 @@ const app = {
 
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(year, month, d);
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dateStr = `${year} -${String(month + 1).padStart(2, '0')} -${String(d).padStart(2, '0')} `;
             const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
 
-            // Sort: Birthdays first, then by time
+            // Check for Eisverkauf
+            const isEisverkauf = dayEvents.some(e => e.category === 'eisverkauf' || (e.title && e.title.toLowerCase().includes('eisverkauf')));
+
+            // Sort: Eisverkauf first, then Birthdays, then by time
             dayEvents.sort((a, b) => {
+                const aIsEis = (a.category === 'eisverkauf' || (a.title && a.title.toLowerCase().includes('eisverkauf')));
+                const bIsEis = (b.category === 'eisverkauf' || (b.title && b.title.toLowerCase().includes('eisverkauf')));
+                if (aIsEis && !bIsEis) return -1;
+                if (!aIsEis && bIsEis) return 1;
+
                 const aIsBday = a.category === 'birthday';
                 const bIsBday = b.category === 'birthday';
                 if (aIsBday && !bIsBday) return -1;
                 if (!aIsBday && bIsBday) return 1;
+
                 return (a.time || '00:00').localeCompare(b.time || '00:00');
             });
             const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
@@ -4385,14 +4418,15 @@ const app = {
             // Limit to 3-4 to avoid overflow
             const visibleEvents = dayEvents.slice(0, 4);
             const eventHtml = visibleEvents.map(e => {
-                let style = e.color ? `background-color:${e.color};` : '';
+                const eventColor = this.getEventColor ? this.getEventColor(e) : (e.color || '#6366f1');
+                let style = `background-color:${eventColor};`;
                 // Add visibility enhancements
                 style += `
-                    font-weight: 700;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-                    border: 1px solid rgba(255,255,255,0.2);
-                `;
+                            font-weight: 700;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+                            border: 1px solid rgba(255,255,255,0.2);
+                        `;
 
                 // Extra styling for birthdays
                 if (e.category === 'birthday') {
@@ -4400,17 +4434,17 @@ const app = {
                 }
 
                 return `<div class="month-event-pill ${e.category}" style="${style}" title="${e.title}">
-                    <span class="truncate" style="color:white; display:flex; align-items:center; gap:4px;">
-                        ${e.time || ''} ${e.title}
-                        ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="10" style="opacity:0.8;"></i>` : ''}
-                    </span>
-                </div>`;
+                                <span class="truncate" style="color:white; display:flex; align-items:center; gap:4px;">
+                                    ${e.time || ''} ${e.title}
+                                    ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="10" style="opacity:0.8;"></i>` : ''}
+                                </span>
+                            </div>`;
             }).join('');
 
             const moreCount = dayEvents.length - visibleEvents.length;
 
             html += `
-                <div class="calendar-cell-large ${isToday ? 'today-full' : ''}" onclick="app.goToDay('${dateStr}')">
+    <div class="calendar-cell-large ${isToday ? 'today-full' : ''} ${isEisverkauf ? 'eisverkauf' : ''}" onclick="app.goToDay('${dateStr}')">
                     <div class="cell-header">
                         <span class="day-num">${d}</span>
                     </div>
@@ -4419,7 +4453,7 @@ const app = {
                         ${moreCount > 0 ? `<div class="more-events">+${moreCount}</div>` : ''}
                     </div>
                 </div>
-            `;
+    `;
         }
         grid.innerHTML = html;
         if (window.lucide) lucide.createIcons();
@@ -4439,7 +4473,7 @@ const app = {
         archived.sort((a, b) => new Date(b.date) - new Date(a.date)); // Newest archived first
 
         container.innerHTML = archived.map(e => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border:1px solid var(--glass-border);">
+    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border:1px solid var(--glass-border);">
                 <div>
                     <div style="font-weight:600; color:var(--text-main);">${e.title}</div>
                     <div style="font-size:0.8rem; color:var(--text-muted);">${new Date(e.date).toLocaleDateString('de-DE')}</div>
@@ -4453,7 +4487,7 @@ const app = {
                     </button>
                 </div>
             </div>
-        `).join('');
+    `).join('');
 
         if (window.lucide) lucide.createIcons();
     },
@@ -4558,13 +4592,20 @@ const app = {
             const dateStr = date.toISOString().split('T')[0];
             const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
 
-            // Sort events by time
-            dayEvents.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+            // Sort events: Eisverkauf first, then time
+            dayEvents.sort((a, b) => {
+                const aIsEis = (a.category === 'eisverkauf' || (a.title && a.title.toLowerCase().includes('eisverkauf')));
+                const bIsEis = (b.category === 'eisverkauf' || (b.title && b.title.toLowerCase().includes('eisverkauf')));
+                if (aIsEis && !bIsEis) return -1;
+                if (!aIsEis && bIsEis) return 1;
+                return (a.time || '00:00').localeCompare(b.time || '00:00');
+            });
 
+            const isEisverkauf = dayEvents.some(e => e.category === 'eisverkauf' || (e.title && e.title.toLowerCase().includes('eisverkauf')));
             const intensity = Math.min(100, dayEvents.length * 20);
 
             html += `
-                <div class="mosaic-day-card ${isToday ? 'today' : ''}" ${isToday ? 'id="mosaic-today"' : ''} onclick="app.goToDay('${dateStr}')">
+    <div class="mosaic-day-card ${isToday ? 'today' : ''} ${isEisverkauf ? 'eisverkauf' : ''}" ${isToday ? 'id="mosaic-today"' : ''} onclick="app.goToDay('${dateStr}')">
                     <div class="mosaic-header">
                         <div style="display:flex; flex-direction:column;">
                             <span class="mosaic-day-name">${date.toLocaleDateString('de-DE', { weekday: 'short' })}</span>
@@ -4573,12 +4614,15 @@ const app = {
                         ${dayEvents.length > 0 ? `<div class="status-dot" style="background:var(--primary); width:10px; height:10px; border-radius:50%;"></div>` : ''}
                     </div>
                     <div class="mosaic-events-stack">
-                        ${dayEvents.slice(0, 3).map(e => `
-                            <div class="mosaic-event-item" style="border-left-color: ${e.color || 'var(--primary)'}">
+                        ${dayEvents.slice(0, 3).map(e => {
+                // Use centralized color logic
+                const eventColor = this.getEventColor ? this.getEventColor(e) : (e.color || 'var(--primary)');
+                return `
+                            <div class="mosaic-event-item" style="border-left-color: ${eventColor}">
                                 <span class="m-time">${e.time || '--:--'}</span>
                                 <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.title}</span>
                             </div>
-                        `).join('')}
+                        `}).join('')}
                         ${dayEvents.length > 3 ? `<div class="text-muted" style="font-size:0.75rem; padding-left:14px;">+ ${dayEvents.length - 3} weitere</div>` : ''}
                         ${dayEvents.length === 0 ? `<div style="padding:20px 0; font-size:0.8rem; opacity:0.5; text-align:center;">Freier Tag 🕊️</div>` : ''}
                     </div>
@@ -4586,7 +4630,7 @@ const app = {
                         <div class="intensity-fill" style="width:${intensity}%"></div>
                     </div>
                 </div>
-            `;
+    `;
         }
         grid.innerHTML = html;
 
@@ -4626,7 +4670,7 @@ const app = {
                 }
 
                 return `
-                <div class="agenda-event-item" onclick="app.editEvent('${e.id}')" style="${colorStyle}">
+    <div class="agenda-event-item" onclick="app.editEvent('${e.id}')" style="${colorStyle}">
                     <div class="agenda-time">${e.time || 'Ganztägig'}</div>
                     <div class="agenda-details">
                         <div class="agenda-title">${e.title} ${(e.recurrence && e.recurrence !== 'none') ? `<i data-lucide="repeat" size="12" style="margin-left: 5px; opacity: 0.5; vertical-align: middle;"></i>` : ''}</div>
@@ -4641,7 +4685,7 @@ const app = {
         }
 
         return `
-            <div class="agenda-day-card ${isToday ? 'today-highlight' : ''}">
+    <div class="agenda-day-card ${isToday ? 'today-highlight' : ''}">
                 <div class="agenda-day-header" onclick="app.goToDay('${dateStr}')">
                     <span class="agenda-day-name">${dayName}</span>
                     <span class="agenda-day-date">${dayDate}</span>
@@ -4651,7 +4695,7 @@ const app = {
                     ${eventsHtml}
                 </div>
             </div>
-        `;
+    `;
     },
 
     goToDay(dateStr) {
@@ -4686,7 +4730,7 @@ const app = {
         const dateStr = date.toISOString().split('T')[0];
         const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
         const isToday = date.toDateString() === new Date().toDateString();
-        grid.innerHTML = `<div class="agenda-view-container">${this.renderDayListRow(date, dayEvents, isToday, dateStr)}</div>`;
+        grid.innerHTML = `< div class="agenda-view-container" > ${this.renderDayListRow(date, dayEvents, isToday, dateStr)}</div > `;
         if (window.lucide) lucide.createIcons();
     },
 
@@ -4696,14 +4740,14 @@ const app = {
 
         if (dayEvents.length === 0) {
             grid.innerHTML = `
-                <div class="lifestyle-empty-day">
+    < div class="lifestyle-empty-day" >
                     <i data-lucide="calendar-off" size="48" style="opacity:0.2; margin-bottom:20px;"></i>
                     <h2 style="font-size:2rem; font-weight:800;">Alles entspannt! 🕊️</h2>
                     <p>Keine festen Termine für diesen Tag.</p>
                     <button class="btn-primary" onclick="app.editEvent()" style="margin:20px auto; width:fit-content;">
                         <i data-lucide="plus"></i> Termin planen
                     </button>
-                </div>`;
+                </div > `;
             if (window.lucide) lucide.createIcons();
             return;
         }
@@ -4711,18 +4755,76 @@ const app = {
         // Sort by time
         dayEvents.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
 
-        grid.innerHTML = dayEvents.map((e, idx) => `
+        // Helper for contrast color
+        const getContrastColor = (hex) => {
+            if (!hex) return '#ffffff';
+            if (hex.startsWith('#') && hex.length === 7) {
+                const r = parseInt(hex.substr(1, 2), 16);
+                const g = parseInt(hex.substr(3, 2), 16);
+                const b = parseInt(hex.substr(5, 2), 16);
+                const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+                return (yiq >= 128) ? '#000000' : '#ffffff';
+            }
+            return '#ffffff'; // Fallback
+        };
+
+        // Helper to get base color
+        const getBaseColor = (e) => {
+            if (e.color) return e.color;
+            const cat = (e.category || '').toLowerCase();
+            if (cat === 'eisverkauf') return '#fbbf24';
+            if (cat.includes('arbeit') || cat === 'work') return '#3b82f6';
+            if (cat.includes('privat') || cat === 'private') return '#10b981';
+            if (cat.includes('geburt') || cat === 'birthday') return '#eab308';
+            if (cat.includes('feiertag') || cat === 'holiday') return '#0891b2';
+            return '#6366f1'; // Default Indigo
+        };
+
+        grid.innerHTML = dayEvents.map((e, idx) => {
+            const baseColor = this.getEventColor(e);
+
+            // Helper for contrast color - INLINE
+            const getContrastColor = (hex) => {
+                if (!hex) return '#ffffff';
+                if (hex.startsWith('#') && hex.length === 7) {
+                    const r = parseInt(hex.substr(1, 2), 16);
+                    const g = parseInt(hex.substr(3, 2), 16);
+                    const b = parseInt(hex.substr(5, 2), 16);
+                    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+                    return (yiq >= 128) ? '#000000' : '#ffffff';
+                }
+                return '#ffffff';
+            };
+
+            // Special check for yellow contrast
+            const isYellow = (baseColor === '#fbbf24' || baseColor === '#f59e0b' || baseColor === '#eab308');
+            const textColor = isYellow ? '#000000' : getContrastColor(baseColor);
+
+            // Prepare shadow color (ensure valid format if hex)
+            let shadowColor = baseColor;
+            if (baseColor && baseColor.startsWith('#') && baseColor.length === 7) {
+                shadowColor = baseColor + '66'; // Add alpha
+            }
+
+            // Use CSS Variables to allow hover effects in CSS to work
+            const cardStyle = `
+                --event-color: ${baseColor};
+                --event-text: ${textColor};
+                --event-shadow: ${shadowColor};
+            `;
+
+            return `
             <div class="timeline-entry" style="animation-delay: ${idx * 0.1}s">
                 <div class="timeline-time-col">
                     <div class="time-bubble">${e.time || 'Alle'}</div>
-                    <div class="timeline-dot" style="background: ${e.color || 'var(--primary)'}"></div>
+                    <div class="timeline-dot" style="background: ${baseColor}; box-shadow: 0 0 10px ${baseColor}88;"></div>
                 </div>
                 <div class="timeline-content-col">
-                    <div class="lifestyle-event-card" onclick="app.editEvent('${e.id}')">
-                        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: ${e.color || 'var(--primary)'}; font-weight: 800; margin-bottom: 4px;">
+                    <div class="lifestyle-event-card ${e.category || ''}" onclick="app.editEvent('${e.id}')" style="${cardStyle}">
+                        <div class="event-category-label">
                             ${e.category || 'Termin'}
                         </div>
-                        <h3>${e.title} ${(e.recurrence && e.recurrence !== 'none') ? `<i data-lucide="repeat" size="16" style="margin-left: 8px; opacity: 0.5; vertical-align: middle;" title="Wiederholung"></i>` : ''}</h3>
+                        <h3>${e.title} ${(e.recurrence && e.recurrence !== 'none') ? `<i data-lucide="repeat" size="16" style="margin-left: 8px; opacity: 0.6; vertical-align: middle;" title="Wiederholung"></i>` : ''}</h3>
                         <div class="event-meta-row">
                             ${e.location ? `
                                 <div class="event-meta-item">
@@ -4738,10 +4840,35 @@ const app = {
                         ${e.notes ? `<div class="event-notes-preview">${e.notes}</div>` : ''}
                     </div>
                 </div>
-            </div>
-        `).join('');
+            </div >
+    `}).join('');
 
         if (window.lucide) lucide.createIcons();
+    },
+
+    getEventColor(e) {
+        if (!e) return '#6366f1';
+
+        // Normalize Content
+        const cat = (e.category || '').toLowerCase();
+        const title = (e.title || '').toLowerCase();
+
+        // STRICT RULE: Eisverkauf must be Yellow (#fbbf24 = amber-400 / #f59e0b = amber-500)
+        if (cat === 'eisverkauf' || title.includes('eisverkauf')) return '#fbbf24';
+
+        // Other Strict Categories
+        if (cat === 'work' || cat === 'arbeit' || cat.includes('arbeit')) return '#3b82f6'; // Blue
+        if (cat === 'private' || cat === 'privat' || cat.includes('privat')) return '#10b981'; // Green
+        if (cat === 'birthday' || cat === 'geburtstag' || title.includes('geburtstag')) return '#eab308'; // Gold straight yellow
+
+        // Default Fallback to stored color if no strict rule matches
+        if (e.color && e.color !== '#6366f1') return e.color;
+
+        // Additional Category Fallbacks
+        if (cat === 'urgent' || cat === 'dringend') return '#dc2626'; // Red
+        if (cat === 'holiday' || cat === 'feiertag') return '#0891b2'; // Cyan
+
+        return '#6366f1'; // Default Indigo
     },
 
 
@@ -4761,7 +4888,7 @@ const app = {
             if (e.allDay || !e.time) {
                 endTs = new Date(e.date + 'T23:59:59').getTime();
             } else {
-                const start = new Date(`${e.date}T${e.time}`);
+                const start = new Date(`${e.date}T${e.time} `);
                 // Default duration 1h
                 endTs = start.getTime() + (60 * 60 * 1000);
             }
@@ -4789,32 +4916,22 @@ const app = {
         const duration = e.duration || 60;
 
         const el = document.createElement('div');
-        el.className = `event-card ${e.category || ''} ${e.archived ? 'archived' : ''}`;
-        el.style.top = `${startMin}px`;
-        el.style.height = `${duration}px`;
+        el.className = `event - card ${e.category || ''} ${e.archived ? 'archived' : ''} `;
+        el.style.top = `${startMin} px`;
+        el.style.height = `${duration} px`;
 
         // Handle overlapping columns within a day
-        el.style.left = `${offsetPercent}%`;
-        el.style.width = `calc(${widthPercent}% - 6px)`;
+        el.style.left = `${offsetPercent}% `;
+        el.style.width = `calc(${widthPercent} % - 6px)`;
 
         // Styling options (color)
-        let baseColor = e.color;
-        if (!baseColor) {
-            const cat = (e.category || '').toLowerCase();
-            // Fallback to category colors (English and common German names)
-            if (cat === 'work' || cat === 'arbeit' || cat === '💼 arbeit') baseColor = '#4f46e5';
-            else if (cat === 'private' || cat === 'privat' || cat === '👤 privat') baseColor = '#9333ea';
-            else if (cat === 'urgent' || cat === 'dringend' || cat === 'wichtig') baseColor = '#dc2626';
-            else if (cat === 'birthday' || cat === 'geburtstag') baseColor = '#eab308';
-            else if (cat === 'holiday' || cat === 'feiertag') baseColor = '#0891b2';
-            else baseColor = '#64748b'; // default slate
-        }
+        let baseColor = this.getEventColor ? this.getEventColor(e) : (e.color || '#6366f1');
 
         if (e.archived) baseColor = '#94a3b8';
 
         // Use stronger opacities for better readability (77 = 47%, 44 = 27%)
-        el.style.background = `linear-gradient(135deg, ${baseColor}77, ${baseColor}44)`;
-        el.style.borderLeft = `4px solid ${baseColor}`;
+        el.style.background = `linear - gradient(135deg, ${baseColor}77, ${baseColor}44)`;
+        el.style.borderLeft = `4px solid ${baseColor} `;
         el.style.color = 'var(--text-main)';
 
         if (e.archived) el.style.opacity = '0.8';
@@ -4831,21 +4948,21 @@ const app = {
         else if (e.location) icon = 'map-pin';
 
         el.innerHTML = `
-            <div class="event-card-inner">
+    < div class="event-card-inner" >
                 <div class="event-card-header">
                     <i data-lucide="${icon}" size="12"></i>
                     <span class="event-time">${e.time || '--:--'}</span>
                 </div>
                 <div class="event-title">${e.title}</div>
                 ${e.location ? `<div class="event-loc"><i data-lucide="map-pin" size="10"></i> ${e.location}</div>` : ''}
-            </div>
-        `;
+            </div >
+    `;
         return el;
     },
 
     renderTimeGrid(container, days, events, viewType) {
         container.innerHTML = '';
-        container.className = `time-grid-container view-${viewType}`;
+        container.className = `time - grid - container view - ${viewType} `;
 
         const header = this.renderTimeGridHeader(days, viewType);
         const allDayRow = this.renderAllDayRow(days, events);
@@ -4890,7 +5007,7 @@ const app = {
         header.className = 'time-grid-header';
 
         // Time gutter spacer (matches the width of time-axis in body)
-        header.innerHTML += `<div class="time-gutter-header"></div>`;
+        header.innerHTML += `< div class="time-gutter-header" ></div > `;
 
         days.forEach(date => {
             const isToday = new Date().toDateString() === date.toDateString();
@@ -4904,15 +5021,15 @@ const app = {
             if (isToday) dayClasses += ' today';
 
             header.innerHTML += `
-                <div class="${dayClasses}" data-date="${date.toISOString()}">
+    < div class="${dayClasses}" data - date="${date.toISOString()}" >
                     <div class="header-day-name">${dayName}</div>
                     <div class="header-day-num">${dayNum}</div>
-                </div>
-            `;
+                </div >
+    `;
         });
 
         // Scrollbar spacer
-        header.innerHTML += `<div class="scrollbar-spacer"></div>`;
+        header.innerHTML += `< div class="scrollbar-spacer" ></div > `;
 
         return header;
     },
@@ -4933,7 +5050,7 @@ const app = {
             const dayAllDayEvents = events.filter(e => e.allDay && this.isEventOnDate(e, date));
             dayAllDayEvents.forEach(e => {
                 const pill = document.createElement('div');
-                pill.className = `all-day-pill ${e.category || ''}`;
+                pill.className = `all - day - pill ${e.category || ''} `;
                 if (e.color) pill.style.background = e.color;
                 pill.textContent = e.title;
                 pill.onclick = () => app.editEvent(e.id);
@@ -4961,15 +5078,15 @@ const app = {
             const relativeY = ev.clientY - rect.top;
             const hour = Math.floor(relativeY / 60);
             const minutes = Math.floor((relativeY % 60) / 15) * 15;
-            const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')} `;
             // Default to first day in current view
             app.openCreateAt(days[0].toISOString().split('T')[0], timeStr);
         };
         for (let h = 0; h <= 23; h++) {
             const label = document.createElement('div');
             label.className = 'time-label-slot';
-            label.style.top = `${h * 60}px`;
-            label.innerHTML = `<span>${String(h).padStart(2, '0')}:00</span>`;
+            label.style.top = `${h * 60} px`;
+            label.innerHTML = `< span > ${String(h).padStart(2, '0')}:00</span > `;
             timeAxis.appendChild(label);
         }
         content.appendChild(timeAxis);
@@ -4981,13 +5098,13 @@ const app = {
             // Hour Line
             const line = document.createElement('div');
             line.className = 'horizontal-line';
-            line.style.top = `${h * 60}px`;
+            line.style.top = `${h * 60} px`;
             gridLines.appendChild(line);
 
             // Half-Hour Line (except for the last hour maybe, but let's go full 24)
             const halfLine = document.createElement('div');
             halfLine.className = 'half-hour-line';
-            halfLine.style.top = `${h * 60 + 30}px`;
+            halfLine.style.top = `${h * 60 + 30} px`;
             gridLines.appendChild(halfLine);
         }
         content.appendChild(gridLines);
@@ -4999,7 +5116,7 @@ const app = {
         days.forEach((date, dayIndex) => {
             const col = document.createElement('div');
             col.className = 'day-column';
-            col.style.width = `${100 / days.length}%`;
+            col.style.width = `${100 / days.length}% `;
 
             const dayEvents = events.filter(e => !e.allDay && this.isEventOnDate(e, date));
 
@@ -5035,10 +5152,10 @@ const app = {
                 const topPx = now.getHours() * 60 + now.getMinutes();
                 const marker = document.createElement('div');
                 marker.className = 'now-marker';
-                marker.style.top = `${topPx}px`;
+                marker.style.top = `${topPx} px`;
 
                 // Add a small time badge to the marker
-                marker.innerHTML = `<div class="now-time-badge">${nowTime}</div>`;
+                marker.innerHTML = `< div class="now-time-badge" > ${nowTime}</div > `;
 
                 col.appendChild(marker);
             }
@@ -5053,7 +5170,7 @@ const app = {
                 const hour = Math.floor(totalMinutes / 60);
                 const minutes = Math.floor((totalMinutes % 60) / 15) * 15;
 
-                const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')} `;
                 app.openCreateAt(date.toISOString().split('T')[0], timeStr);
             };
 
@@ -5083,11 +5200,11 @@ const app = {
         // We use calc()
 
         return `
-            top: ${top}%;
-            height: ${height}%;
-            left: calc(60px + (100% - 60px) * ${colIndex} / ${totalCols});
-            width: calc((100% - 60px) / ${totalCols} - 4px);
-        `;
+top: ${top}%;
+height: ${height}%;
+left: calc(60px + (100 % - 60px) * ${colIndex} / ${totalCols});
+width: calc((100 % - 60px) / ${totalCols} - 4px);
+`;
     },
 
     addMinutes(time, mins) {
@@ -5105,7 +5222,7 @@ const app = {
         const totalMinutes = Math.floor(y / 2.5); // Scaled
         const hours = Math.floor(totalMinutes / 60);
         const minutes = Math.floor((totalMinutes % 60) / 15) * 15; // Snap to 15m
-        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} `;
         this.openCreateAt(date, timeStr);
     },
 
@@ -6770,7 +6887,14 @@ const app = {
                 return;
             }
 
-            // 1. PROFILE QUERIES
+            // 1. NAVIGATION
+            if (input.includes('dashboard') || input.includes('startseite') || input.includes('home') || (input.includes('öffne') && (input.includes('start') || input.includes('app')))) {
+                app.navigateTo('dashboard');
+                this.showFeedback("Okay, ich öffne das Dashboard.");
+                return;
+            }
+
+            // 1.5. PROFILE QUERIES
             if (input.includes('wie heiße ich') || input.includes('mein name') || input.includes('wer bin ich')) {
                 this.showFeedback(`Dein Name ist ${app.state.user.name}.`);
                 return;
