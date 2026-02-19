@@ -8,7 +8,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="author" content="Andrea Agnello, Pear Company">
     <meta name="copyright" content="Copyright © 2026 Andrea Agnello, Pear Company, Deutschland">
     <title>Pear App | Smart Team Sync</title>
@@ -22,7 +23,7 @@
 
     <!-- PWA / Mobile Icon -->
     <link rel="icon" type="image/svg+xml" href="logo.svg">
-    <link rel="apple-touch-icon" href="logo.svg">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0a0c10">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -39,6 +40,9 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style_table.css">
     <link rel="stylesheet" href="style_create_menu.css">
+    <link rel="stylesheet" href="lifestyle-calendar.css">
+    <link rel="stylesheet" href="enhanced-dashboard.css">
+    <link rel="stylesheet" href="premium-todo.css">
 
     <!-- FIX: Ensure map-pin icon works by including it if not already handled by lucide script -->
 </head>
@@ -46,7 +50,7 @@
 <body data-theme="dark">
     <!-- SPLASH SCREEN -->
     <div id="splash-screen"
-        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #09090b; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.6s ease-out, visibility 0.6s;">
+        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #18181b; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.6s ease-out, visibility 0.6s;">
         <svg width="120" height="120" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"
             style="filter: drop-shadow(0 0 20px rgba(255,255,255,0.2)); animation: pulse-logo 2s infinite;">
             <defs>
@@ -74,16 +78,9 @@
     </div>
 
     <div id="app">
-        <div class="sidebar-overlay" onclick="document.getElementById('sidebar').classList.remove('active')"></div>
-
         <!-- Navigation -->
         <nav class="sidebar" id="sidebar">
-            <div class="sidebar-header mobile-only">
-                <h3>Menü</h3>
-                <button class="close-sidebar" onclick="document.getElementById('sidebar').classList.remove('active')">
-                    <i data-lucide="x"></i>
-                </button>
-            </div>
+
             <div class="logo">
                 <svg class="logo-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                     <defs>
@@ -138,33 +135,43 @@
 
         <!-- Main Content -->
         <main class="content">
-            <!-- Mobile Header with Hamburger -->
+            <!-- Mobile Header (Minimalist) -->
             <header class="top-bar mobile-only"
-                style="justify-content: space-between; align-items: center; display: flex;">
-                <button class="menu-toggle" onclick="document.getElementById('sidebar').classList.add('active')">
-                    <i data-lucide="menu"></i>
-                </button>
+                style="justify-content: space-between; align-items: center; display: flex; padding: 10px 20px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button id="mobileBackBtn" class="icon-btn hidden" title="Zurück zum Dashboard"
+                        onclick="app.navigateTo('dashboard')"
+                        style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 38px; height: 38px;">
+                        <i data-lucide="arrow-left" size="20"></i>
+                    </button>
+                    <button id="mobileMenuBtn" class="icon-btn" title="Menü öffnen"
+                        onclick="document.getElementById('sidebar').classList.add('active')"
+                        style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 38px; height: 38px;">
+                        <i data-lucide="menu" size="20"></i>
+                    </button>
+                    <div style="font-weight: 800; font-size: 1.2rem; color: var(--primary);">Pear</div>
+                </div>
 
-                <div style="display: flex; align-items: center;">
-                    <button id="mobileSyncBtn" class="icon-btn hidden" title="Jetzt synchronisieren"
-                        onclick="app.sync.push()"
-                        style="margin-right: 12px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border);">
-                        <i data-lucide="refresh-cw"></i>
-                    </button>
-                    <button class="icon-btn" onclick="app.voice.start()" style="margin-right: 10px;">
-                        <i data-lucide="mic"></i>
-                    </button>
-                    <div class="avatar" style="width: 40px; height: 40px;" onclick="app.navigateTo('settings')">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div class="avatar" style="width: 38px; height: 38px;" onclick="app.navigateTo('settings')">
                         <img id="headerUserAvatarMobile" src="logo.svg"
                             style="width:100%; height:100%; object-fit:cover; border-radius:50%;">
                     </div>
                 </div>
             </header>
 
+
             <header class="top-bar mobile-hidden">
-                <div class="search-bar">
-                    <i data-lucide="search"></i>
-                    <input type="text" placeholder="Suche nach Terminen, Aufgaben...">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button id="desktopBackBtn" class="icon-btn hidden" title="Zurück zum Dashboard"
+                        onclick="app.navigateTo('dashboard')"
+                        style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 32px; height: 32px;">
+                        <i data-lucide="arrow-left" size="18"></i>
+                    </button>
+                    <div class="search-bar">
+                        <i data-lucide="search"></i>
+                        <input type="text" placeholder="Suche nach Terminen, Aufgaben...">
+                    </div>
                 </div>
 
                 <div class="user-actions">
@@ -181,11 +188,7 @@
                             style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted);">Lokal</span>
                     </div>
 
-                    <button id="desktopSyncBtn" class="icon-btn hidden" title="Jetzt synchronisieren"
-                        onclick="app.sync.push()"
-                        style="margin-right: 15px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary); width: 32px; height: 32px;">
-                        <i data-lucide="refresh-cw" size="16"></i>
-                    </button>
+
 
                     <div class="user-info-mini"
                         style="display: flex; flex-direction: column; align-items: flex-end; margin-right: 10px;">
@@ -238,53 +241,9 @@
                 </div>
 
                 <div class="dashboard-grid">
-                    <div id="dashboardSpecialContainer" style="display:none; grid-column: 1 / -1;"></div>
+                    <!-- Statically defined widgets removed. Now dynamically rendered by app.js based on widgetOrder. -->
+                </div>
 
-                    <!-- Dashboard Summary Widgets -->
-                    <div id="dashboardDriveMode" style="grid-column: 1 / -1; display: none;"></div>
-                    <div id="dashboardBudgetWidget" style="grid-column: 1 / -1; display: none;"></div>
-
-                    <!-- Urgent Todos Section -->
-                    <div id="dashboardUrgentTodos" class="card glass collapsible-card is-collapsed"
-                        style="display:none; border: 1px solid rgba(239, 68, 68, 0.5); background: linear-gradient(135deg, rgba(239,68,68,0.05), rgba(0,0,0,0));">
-                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                            <h3 style="color:#ef4444; display:flex; align-items:center; gap:8px;">
-                                <i data-lucide="alert-circle"></i> Dringend / Wichtig
-                            </h3>
-                            <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
-                        </div>
-                        <div id="dashboardUrgentList" class="card-content"
-                            style="display:flex; flex-direction:column; gap:8px;">
-                            <!-- Populated by JS -->
-                        </div>
-                    </div>
-                    <div class="card glass next-events collapsible-card is-collapsed">
-                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <h3>Nächste Termine</h3>
-                                <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
-                            </div>
-                            <button class="btn-text" onclick="event.stopPropagation(); app.navigateTo('calendar')">Alle
-                                ansehen</button>
-                        </div>
-                        <div class="event-list card-content" id="dashboardEventList">
-                            <div class="empty-state">Lade Termine...</div>
-                        </div>
-                    </div>
-
-                    <div class="card glass mini-calendar collapsible-card">
-                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <h3 id="miniCalendarMonth">Februar 2026</h3>
-                                <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
-                            </div>
-                        </div>
-                        <div class="card-content">
-                            <div class="calendar-grid small" id="miniCalendarGrid">
-                                <!-- JS populated -->
-                            </div>
-                        </div>
-                    </div>
             </section>
 
             <section id="view-calendar" class="page-view">
@@ -358,7 +317,11 @@
                                     <button id="nextMonth" class="icon-btn"><i data-lucide="chevron-right"></i></button>
                                 </div>
                                 <h2 id="fullCalendarMonth">Februar 2026</h2>
-                                <button class="icon-btn" id="monthLayoutToggle" onclick="app.toggleMonthLayout()"
+                                <button class="icon-btn" onclick="app.editEvent()" title="Termin erstellen"
+                                    style="margin-left: 15px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary); border: 1px solid var(--glass-border); width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
+                                    <i data-lucide="plus" size="24"></i>
+                                </button>
+                                <button class="icon-btn" id="monthLayoutToggle" onclick="app.toggleCalendarLayout()"
                                     title="Ansicht wechseln" style="display:none; margin-left:10px;">
                                     <i data-lucide="grid"></i>
                                 </button>
@@ -386,52 +349,217 @@
 
             <!-- Finance View -->
             <section id="view-finance" class="page-view">
-                <div class="hero">
+                <div class="hero" style="position: relative;">
                     <h1>Finanzplaner 💰</h1>
                     <p>Behalte deine Ausgaben und dein Budget im Griff.</p>
+
+                    <!-- Quick Add Button -->
+                    <button class="finance-quick-add-btn" onclick="app.finance.openQuickAdd()"
+                        title="Schnell Ausgabe/Einnahme hinzufügen"
+                        style="position: absolute; top: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; color: white; font-size: 2rem; font-weight: 300; cursor: pointer; box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.4); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; z-index: 10;">
+                        +
+                    </button>
                 </div>
 
-                <div class="dashboard-grid" style="margin-bottom: 25px;">
-                    <div class="card glass">
-                        <small class="text-muted">Monatsausgaben</small>
-                        <h2 id="finTotalIncome">0,00 €</h2>
-                    </div>
-                    <div class="card glass">
-                        <small class="text-muted">Monatsbudget</small>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <h2 id="finTotalBudget">0,00 €</h2>
-                            <button class="btn-icon" onclick="app.finance.editBudget()"><i data-lucide="edit-3"
-                                    size="14"></i></button>
+                <!-- Hero Stats (Actionable Reality) -->
+                <div class="dashboard-grid" style="margin-bottom: 30px;">
+                    <div class="card glass"
+                        style="background: rgba(var(--primary-rgb), 0.08); border: 2px solid var(--primary); grid-column: 1 / -1; padding: 25px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <small class="text-muted"
+                                    style="text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Heute
+                                    verfügbar (Tageslimit) ⚡</small>
+                                <h2 id="finDailyLimit"
+                                    style="font-weight: 900; font-size: 2.8rem; color: var(--primary); margin: 10px 0;">
+                                    0,00 €</h2>
+                                <small id="finDaysLeft" class="text-muted"
+                                    style="font-size: 0.85rem; font-style: italic;">noch X Tage im Monat</small>
+                            </div>
+                            <div class="icon-circle"
+                                style="width: 70px; height: 70px; background: rgba(var(--primary-rgb), 0.1); color: var(--primary);">
+                                <i data-lucide="zap" size="32"></i>
+                            </div>
                         </div>
                     </div>
-                    <div class="card glass">
-                        <small class="text-muted">Verbleibendes Budget</small>
-                        <h2 id="finRemaining">0,00 €</h2>
+
+                    <div class="card glass"
+                        style="background: rgba(var(--success-rgb), 0.05); border: 1px solid rgba(var(--success-rgb), 0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <small class="text-muted">Verf. für restl. Monat 🗓️</small>
+                            <button class="btn-text highlight"
+                                style="font-size: 0.65rem; padding: 2px 8px; background: rgba(var(--success-rgb), 0.1); border-radius: 6px; color: var(--success);"
+                                onclick="app.finance.depositToSavings(parseFloat(document.getElementById('finDailyAvailable').textContent.replace(/[^-0-9,]/g, '').replace(',', '.')))">
+                                <i data-lucide="arrow-up-right" size="10"></i> Sparen
+                            </button>
+                        </div>
+                        <h2 id="finDailyAvailable" style="font-weight: 800; color: var(--success);">0,00 €</h2>
                     </div>
-                    <div class="card glass">
-                        <small class="text-muted">Jahresausgaben</small>
-                        <h2 id="finYearTotal">0,00 €</h2>
+
+                    <div class="card glass"
+                        style="background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.1), rgba(0,0,0,0)); border: 1px solid var(--primary);">
+                        <small class="text-muted">Virtuelles Sparkonto 🏦</small>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <h2 id="finSavingsBalance" style="color: var(--primary); font-weight: 800;">0,00 €</h2>
+                            <button class="btn-icon" onclick="app.finance.editSavingsBalance()"
+                                title="Kontostand anpassen">
+                                <i data-lucide="edit-3" size="14"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="card glass" style="margin-bottom: 25px; padding: 15px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                <!-- Strategic Planning & Details (Collapsible to reduce clutter) -->
+                <div class="card glass collapsible-card is-collapsed"
+                    style="margin-bottom: 25px; border: 1px solid var(--glass-border);">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <i data-lucide="line-chart" size="18" class="text-primary"></i>
+                            <span style="font-weight: 600;">Planung & Monats-Details</span>
+                        </div>
+                        <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                    </div>
+                    <div class="card-content">
+                        <div class="dashboard-grid"
+                            style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px;">
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Einnahmen (Gehalt)</small>
+                                <h3 id="finTotalIncome"
+                                    style="color: var(--success); font-weight: 700; margin-top: 5px;">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Fixkosten</small>
+                                <h3 id="finFixedPlanDisplay"
+                                    style="color: var(--danger); font-weight: 700; margin-top: 5px;">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Netto (nach Fixkosten)</small>
+                                <h3 id="finNetto" style="font-weight: 700; margin-top: 5px;">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Variable Ausgaben (Alltag)</small>
+                                <h3 id="finVariableExpenses"
+                                    style="color: var(--danger); font-weight: 700; margin-top: 5px;">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Monats-Ausgaben (Gesamt)</small>
+                                <h3 id="finTotalExpenses"
+                                    style="color: var(--danger); font-weight: 700; margin-top: 5px;">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Sparziel (Reserve)</small>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <h3 id="finSavingsGoal" style="color: var(--warning); margin-top: 5px;">0,00 €</h3>
+                                    <button class="btn-icon" onclick="app.finance.editSavingsGoal()"
+                                        style="width: 24px; height: 24px;"><i data-lucide="edit-3"
+                                            size="12"></i></button>
+                                </div>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Monatsbudget (Limit)</small>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <h3 id="finTotalBudget" style="margin-top: 5px;">0,00 €</h3>
+                                    <button class="btn-icon" onclick="app.finance.editBudget()"
+                                        style="width: 24px; height: 24px;"><i data-lucide="edit-3"
+                                            size="12"></i></button>
+                                </div>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Warn-Schwelle ⚠️</small>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <h3 id="finWarningLimit" style="color: var(--warning); margin-top: 5px;">0,00 €</h3>
+                                    <button class="btn-icon" onclick="app.finance.editBudgetWarning()"
+                                        style="width: 24px; height: 24px;"><i data-lucide="bell" size="12"></i></button>
+                                </div>
+                            </div>
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Verbl. Budget-Limit</small>
+                                <h3 id="finRemaining" style="margin-top: 5px;">0,00 €</h3>
+                            </div>
+
+                            <div class="card glass" style="padding: 15px; background: rgba(255,255,255,0.02);">
+                                <small class="text-muted">Jahresbilanz</small>
+                                <h3 id="finYearTotal" style="margin-top: 5px;">0,00 €</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 25px;">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <i data-lucide="trending-up" size="18" class="text-primary"></i>
                             <span style="font-weight: 600;">Kurzübersicht (Tag/Woche)</span>
                         </div>
-                        <button class="btn-text" style="font-size: 0.8rem;"
-                            onclick="const x = document.getElementById('finExtraStats'); x.style.display = x.style.display === 'none' ? 'grid' : 'none'; this.textContent = x.style.display === 'none' ? 'Details anzeigen' : 'Details ausblenden'">Details
-                            anzeigen</button>
+                        <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
                     </div>
-                    <div id="finExtraStats" class="dashboard-grid" style="margin-top: 15px; display: none; gap: 15px;">
-                        <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
-                            <small class="text-muted">Ausgaben heute</small>
-                            <h3 id="finTodayTotal">0,00 €</h3>
+                    <div class="card-content">
+                        <div id="finExtraStats" class="dashboard-grid" style="margin-top: 15px; gap: 15px;">
+                            <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
+                                <small class="text-muted">Ausgaben heute</small>
+                                <h3 id="finTodayTotal">0,00 €</h3>
+                            </div>
+                            <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
+                                <small class="text-muted">Ausgaben diese Woche</small>
+                                <h3 id="finWeekTotal" style="color: var(--danger);">0,00 €</h3>
+                            </div>
                         </div>
-                        <div class="card glass" style="border: 1px solid var(--glass-border); padding: 15px;">
-                            <small class="text-muted">Ausgaben diese Woche</small>
-                            <h3 id="finWeekTotal">0,00 €</h3>
+                    </div>
+                </div>
+
+                <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 25px;">
+                    <div class="card-header-toggle"
+                        style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <div style="display: flex; align-items: center; gap: 10px;"
+                            onclick="app.toggleCard(this.parentElement)">
+                            <i data-lucide="repeat" size="18" class="text-secondary"></i>
+                            <span style="font-weight: 600;">Regelmäßige Fixkosten (Vorlagen) 🏠</span>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-icon" onclick="app.finance.createBaseTemplates()"
+                                title="Standard-Vorlagen laden"
+                                style="background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; padding: 4px 8px; width: auto; height: auto; font-size: 0.75rem; display: flex; align-items: center; gap: 5px;">
+                                <i data-lucide="zap" size="12"></i> Setup
+                            </button>
+                            <i data-lucide="chevron-down" class="toggle-icon" size="20"
+                                onclick="app.toggleCard(this.parentElement.parentElement)"></i>
+                        </div>
+                    </div>
+                    <div class="card-content">
+                        <div style="margin-top: 15px;">
+                            <div
+                                style="display: grid; grid-template-columns: 1fr 120px 100px; gap: 10px; margin-bottom: 15px;">
+                                <input type="text" id="fixedCostName" placeholder="Name (z.B. Miete)"
+                                    style="width:100%;">
+                                <input type="number" id="fixedCostAmount" step="0.01" placeholder="Betrag €"
+                                    style="width:100%;">
+                                <select id="fixedCostType"
+                                    style="width:100%; border-radius:12px; padding:0 10px; background:var(--bg-solid-2); border:1px solid var(--glass-border); color:var(--text-main);">
+                                    <option value="expense">Ausgabe</option>
+                                    <option value="income">Einnahme</option>
+                                </select>
+                            </div>
+                            <button class="btn-primary w-full" onclick="app.finance.addFixedCost()"
+                                style="margin-bottom: 25px;">Vorlage hinzufügen</button>
+
+                            <h4 style="font-size: 0.9rem; margin-bottom: 15px; opacity: 0.8;">Gespeicherte Vorlagen</h4>
+                            <div id="fixedCostsList"
+                                style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 25px;">
+                                <!-- JS populated -->
+                            </div>
+
+                            <div style="border-top: 1px solid var(--glass-border); padding-top: 20px;">
+                                <button class="btn-primary w-full" onclick="app.finance.applyFixedCosts()"
+                                    style="background: var(--secondary); border: none; height: 55px; border-radius: 16px;">
+                                    <i data-lucide="zap" size="18" style="margin-right: 8px;"></i> Alle Fixkosten jetzt
+                                    buchen
+                                </button>
+                                <p class="text-muted"
+                                    style="font-size: 0.75rem; margin-top: 12px; text-align: center; font-style: italic;">
+                                    Ein Klick wandelt alle Vorlagen in echte Einträge für den aktuellen Monat um.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -450,11 +578,23 @@
                                     <input type="date" id="finDate" required>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label>Beschreibung / Zweck</label>
-                                <input type="text" id="finSource" placeholder="z.B. Lebensmittel, Miete, Hobby...">
+                            <div class="form-row" style="display: flex; gap: 15px; margin-top: 10px;">
+                                <div class="form-group" style="flex: 1;">
+                                    <label>Typ</label>
+                                    <select id="finType"
+                                        style="width: 100%; border-radius: 12px; padding: 12px; background: rgba(var(--bg-solid-2-rgb), 0.5); border: 1px solid var(--glass-border); color: var(--text-main);">
+                                        <option value="expense">Ausgabe 🔻</option>
+                                        <option value="income">Einnahme 🔼</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label>Beschreibung / Zweck</label>
+                                    <input type="text" id="finSource" placeholder="z.B. Gehalt, Miete, Hobby..."
+                                        required>
+                                </div>
                             </div>
-                            <button type="submit" class="btn-primary w-full">Eintragen</button>
+                            <button type="submit" class="btn-primary w-full"
+                                style="margin-top: 15px;">Eintragen</button>
                         </form>
                     </div>
 
@@ -471,10 +611,11 @@
                         <h3>Transaktionsverlauf</h3>
                         <button class="btn-text" onclick="app.finance.clearAll()">Verlauf löschen</button>
                     </div>
-                    <div style="overflow-x: auto;">
-                        <table class="contact-table">
+                    <div class="transaction-history-container"
+                        style="max-height: 500px; overflow-y: auto; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--primary) transparent;">
+                        <table class="contact-table" style="margin-bottom: 0;">
                             <thead>
-                                <tr>
+                                <tr style="position: sticky; top: 0; background: var(--bg-card); z-index: 10;">
                                     <th>Datum</th>
                                     <th>Zweck</th>
                                     <th>Betrag</th>
@@ -530,6 +671,16 @@
                             <button class="btn-primary w-full" onclick="app.sync.connect()"
                                 style="height: 55px; font-size: 1.1rem;">
                                 <i data-lucide="shuffle"></i> Synchronisation Starten
+                            </button>
+                        </div>
+
+                        <!-- Add a clear option for new accounts as requested -->
+                        <div
+                            style="margin-top: 25px; padding-top: 20px; border-top: 1px dashed var(--glass-border); text-align: center;">
+                            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 12px;">Noch kein Team?</p>
+                            <button class="btn-outline w-full" onclick="app.createNewTeamAccount()"
+                                style="border-style: dashed; border-color: var(--primary); height: 50px;">
+                                <i data-lucide="plus-circle" size="18"></i> Neues Team-Konto erstellen
                             </button>
                         </div>
 
@@ -735,7 +886,7 @@
             <section id="view-alarm" class="page-view">
                 <div class="alarm-view-container glass animate-in" style="padding: 40px 20px;">
                     <div id="nightModeClock" class="digital-clock"
-                        style="font-size: 5rem; font-weight: 700; color: var(--primary); text-shadow: 0 0 20px var(--primary); margin-bottom: 30px; font-family: var(--font-main, 'Outfit', sans-serif); text-align: center;">
+                        style="font-weight: 700; color: var(--primary); text-shadow: 0 0 20px var(--primary); margin-bottom: 30px; font-family: var(--font-main, 'Outfit', sans-serif); text-align: center;">
                         00:00:00
                     </div>
 
@@ -871,13 +1022,22 @@
                             </div>
                             <div class="input-group">
                                 <label>Telefon</label>
-                                <input type="tel" id="settingsUserPhone" placeholder="Telefonnummer..."
-                                    onchange="app.updateUserData('phone', this.value)">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="tel" id="settingsUserPhone" placeholder="Telefonnummer..."
+                                        onchange="app.updateUserData('phone', this.value)" style="flex: 1;">
+                                    <a id="settingsCallBtn" href="#" class="btn-icon-subtle hidden" title="Anrufen"
+                                        style="color: var(--success);"><i data-lucide="phone" size="18"></i></a>
+                                </div>
                             </div>
                             <div class="input-group">
                                 <label>E-Mail</label>
-                                <input type="email" id="settingsUserEmail" placeholder="E-Mail..."
-                                    onchange="app.updateUserData('email', this.value)">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="email" id="settingsUserEmail" placeholder="E-Mail..."
+                                        onchange="app.updateUserData('email', this.value)" style="flex: 1;">
+                                    <a id="settingsMailBtn" href="#" class="btn-icon-subtle hidden"
+                                        title="E-Mail schreiben" style="color: var(--primary);"><i data-lucide="mail"
+                                            size="18"></i></a>
+                                </div>
                             </div>
                         </div>
                         <div class="input-group" style="margin-top: 15px;">
@@ -1030,10 +1190,114 @@
                                     style="width: 100%;">
                             </div>
 
+                            <div
+                                style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--glass-border);">
+                                <h4 style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                                    <i data-lucide="mic" size="18"></i> Sprachsteuerung
+                                </h4>
+                                <label
+                                    style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255,255,255,0.03); border-radius: 12px; cursor: pointer; border: 1px solid var(--glass-border);">
+                                    <div>
+                                        <div style="font-weight: 600; margin-bottom: 4px;">"Hey Pear" Aktivierung</div>
+                                        <div style="font-size: 0.85rem; color: var(--text-muted);">Kontinuierliches
+                                            Hören auf das Wake Word</div>
+                                    </div>
+                                    <input type="checkbox" id="wakeWordToggle"
+                                        onchange="if(this.checked) { app.voice.startWakeWord(); } else { app.voice.stopWakeWord(); }"
+                                        style="width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer;">
+                                </label>
+                                <p
+                                    style="font-size: 0.75rem; color: var(--text-muted); margin-top: 10px; font-style: italic;">
+                                    💡 Wenn aktiviert, hört die App kontinuierlich auf "Pear" und aktiviert dann die
+                                    Sprachsteuerung automatisch.
+                                </p>
+                            </div>
+
                             <button class="btn-outline" onclick="app.resetVisuals()"
                                 style="margin-top: 15px; border-color: var(--danger); color: var(--danger);">
                                 <i data-lucide="rotate-ccw"></i> Einstellungen zurücksetzen
                             </button>
+                        </div>
+                    </div>
+                    <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 25px;">
+                        <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                            <h3>Finanzen & Budget 💰</h3>
+                            <i data-lucide="chevron-down" class="toggle-icon"></i>
+                        </div>
+                        <div class="card-content">
+                            <p class="text-muted" style="margin-bottom: 20px;">Lege dein monatliches Budget (Gehalt) und
+                                die
+                                Warn-Schwelle fest.</p>
+                            <div class="settings-input-grid">
+                                <div class="input-group">
+                                    <label>Netto-Gehalt (Monatsbudget)</label>
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="number" id="settingsMonthlyBudget" placeholder="1000.00"
+                                            onchange="{ app.state.monthlyBudget = parseFloat(this.value) || 0; localStorage.setItem('moltbot_budget', app.state.monthlyBudget); app.finance.render(); }">
+                                        <div
+                                            style="height: 45px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); padding: 0 15px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                                            €</div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label>Warnung bei Restbetrag</label>
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="number" id="settingsBudgetWarning" placeholder="100.00"
+                                            onchange="{ app.state.budgetWarningLimit = parseFloat(this.value) || 0; localStorage.setItem('moltbot_budget_warning', app.state.budgetWarningLimit); app.finance.render(); }">
+                                        <div
+                                            style="height: 45px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); padding: 0 15px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                                            €</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="input-group" style="grid-column: 1 / -1; margin-top: 10px;">
+                                <div
+                                    style="background: rgba(var(--primary-rgb), 0.1); border: 1px solid rgba(var(--primary-rgb), 0.2); padding: 12px; border-radius: 12px; display: flex; align-items: center; gap: 12px;">
+                                    <i data-lucide="mic" style="color: var(--primary);"></i>
+                                    <p style="font-size: 0.8rem; margin: 0; opacity: 0.9;">
+                                        <strong>Pro-Tipp:</strong> Du kannst dein Budget auch per Sprache setzen! Sag
+                                        einfach: <em>"Pear, setze mein Gehalt auf 2000 Euro"</em>.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card glass animate-in collapsible-card" style="margin-bottom: 25px;">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <h3>App installieren & Teilen 📱</h3>
+                        <i data-lucide="chevron-down" class="toggle-icon"></i>
+                    </div>
+                    <div class="card-content">
+                        <p class="text-muted" style="margin-bottom: 20px;">Installiere Pear als App auf deinem
+                            Startbildschirm oder sende sie an Freunde & Familie.</p>
+
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <button id="pwaInstallBtn" class="btn-primary w-full" onclick="app.installApp()"
+                                style="display: none; height: 55px; border-radius: 16px; font-weight: 700;">
+                                <i data-lucide="download"></i> PEAR APP INSTALLIEREN
+                            </button>
+
+                            <button class="btn-outline w-full" onclick="app.shareApp()"
+                                style="height: 55px; border-radius: 16px; font-weight: 600; background: rgba(var(--primary-rgb), 0.1);">
+                                <i data-lucide="share-2"></i> App mit anderen teilen
+                            </button>
+
+                            <div
+                                style="background: rgba(var(--secondary-rgb), 0.05); padding: 15px; border-radius: 16px; border: 1px solid var(--glass-border);">
+                                <h4
+                                    style="font-size: 0.9rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                                    <i data-lucide="smartphone"></i> Manuelle Installation
+                                </h4>
+                                <ol
+                                    style="padding-left: 20px; font-size: 0.85rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 5px;">
+                                    <li>Öffne Pear in deinem Browser (Chrome/Safari).</li>
+                                    <li>Tippe auf das <b>Teilen-Icon</b> (iOS) oder die <b>drei Punkte</b> (Android).
+                                    </li>
+                                    <li>Wähle <b>"Zum Home-Bildschirm hinzufügen"</b>.</li>
+                                </ol>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1103,19 +1367,24 @@
 
                 <div class="card glass animate-in collapsible-card is-collapsed" style="margin-top: 25px;">
                     <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                        <h3>Archiv 📦</h3>
+                        <h3>Finanz-Archiv 📦</h3>
                         <i data-lucide="chevron-down" class="toggle-icon"></i>
                     </div>
                     <div class="card-content">
-                        <p class="text-muted" style="margin-bottom: 15px;">Wiederherstellen oder endgültiges Löschen von
-                            archivierten Einträgen.</p>
-                        <div id="archiveManagerList" style="display: flex; flex-direction: column; gap: 10px;">
-                            <div class="empty-state">Lade Archiv...</div>
+                        <p class="text-muted" style="margin-bottom: 15px;">Archivierte Transaktionen aus vergangenen
+                            Monaten. Diese werden automatisch am 1. jeden Monats archiviert.</p>
+                        <div id="financeArchiveList"
+                            style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+                            <div class="empty-state">Keine archivierten Einträge vorhanden.</div>
                         </div>
-                        <button class="btn-outline" onclick="app.renderArchiveSettings()"
-                            style="margin-top: 15px; width: 100%;">
-                            <i data-lucide="refresh-cw"></i> Archiv aktualisieren
-                        </button>
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button class="btn-outline" onclick="app.finance.renderArchive()" style="flex: 1;">
+                                <i data-lucide="refresh-cw"></i> Aktualisieren
+                            </button>
+                            <button class="btn-outline" onclick="app.finance.clearArchive()" style="flex: 1;">
+                                <i data-lucide="trash-2"></i> Archiv leeren
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1126,7 +1395,7 @@
                     </div>
                     <div class="card-content">
                         <p class="text-muted" style="margin-bottom: 20px;">Wähle dein bevorzugtes Design für die untere
-                            Steuerungsleiste.</p>
+                            Steuerungsleiste und passe die Reihenfolge der Menüpunkte an.</p>
 
                         <div class="settings-input-grid" style="margin-bottom: 20px;">
                             <div class="form-group" style="grid-column: 1 / -1;">
@@ -1138,7 +1407,7 @@
                             </div>
                         </div>
 
-                        <div id="quickActionSettings" class="settings-input-grid">
+                        <div id="quickActionSettings" class="settings-input-grid" style="margin-bottom: 25px;">
                             <div class="form-group">
                                 <label>Linker Button</label>
                                 <select id="settingsQALeft" onchange="app.updateQuickAction('Left', this.value)">
@@ -1166,9 +1435,61 @@
                                 </select>
                             </div>
                         </div>
+
+                        <div id="menuOrderSettings" style="margin-top: 25px;">
+                            <h4
+                                style="font-size: 0.9rem; font-weight: 700; margin-bottom: 15px; color: var(--text-main);">
+                                <i data-lucide="move" size="16" style="vertical-align: middle;"></i>
+                                Menü-Reihenfolge anpassen
+                            </h4>
+                            <p class="text-muted" style="margin-bottom: 15px; font-size: 0.85rem;">
+                                Ziehe die Einträge, um die Reihenfolge im Dock zu ändern. Die Standardreihenfolge
+                                entspricht dem Hamburger-Menü.
+                            </p>
+                            <div id="menuOrderList"
+                                style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                                <!-- Dynamically populated by JS: app.renderMenuOrderSettings() -->
+                            </div>
+                            <button class="btn-outline" onclick="app.resetMenuOrder()"
+                                style="width: 100%; margin-top: 10px;">
+                                <i data-lucide="rotate-ccw" size="16"></i>
+                                Standardreihenfolge wiederherstellen
+                            </button>
+                        </div>
+
+                        <div class="settings-hint"
+                            style="font-size: 0.8rem; color: var(--text-muted); display:flex; gap:10px; align-items:center; margin-top: 20px;">
+                            <i data-lucide="info" size="14"></i>
+                            Änderungen werden sofort übernommen und auf allen Geräten synchronisiert.
+                        </div>
                     </div>
                 </div>
+
+                <div class="card glass secondary animate-in collapsible-card is-collapsed" style="margin-top: 25px;">
+
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <h3>Dashboard-Anpassung ⚙️</h3>
+                        <i data-lucide="chevron-down" class="toggle-icon"></i>
+                    </div>
+                    <div class="card-content">
+                        <p class="text-muted" style="margin-bottom: 20px;">Personalisiere dein Dashboard: Ändere die
+                            Reihenfolge oder blende Bereiche ein/aus.</p>
+
+                        <div id="widgetOrderList"
+                            style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 25px;">
+                            <!-- Dynamically populated by JS: app.renderWidgetSettings() -->
+                        </div>
+
+                        <div class="settings-hint"
+                            style="font-size: 0.8rem; color: var(--text-muted); display:flex; gap:10px; align-items:center;">
+                            <i data-lucide="info" size="14"></i>
+                            Jede Änderung wird sofort auf deinem Dashboard übernommen.
+                        </div>
+                    </div>
+
+                </div>
             </section>
+
 
             <section id="view-contacts" class="page-view">
                 <div class="hero">
@@ -1241,7 +1562,13 @@
                     <!-- Populated by JS as either table or cards -->
                 </div>
             </section>
+
         </main> <!-- End of Main Content -->
+
+        <!-- Feedback FAB (Point 9) -->
+        <button class="feedback-fab" onclick="app.showFeedback()" title="Feedback geben">
+            <i data-lucide="message-square"></i>
+        </button>
 
         <!-- Modals -->
         <div class="modal-overlay hidden" id="modalOverlay">
@@ -1273,11 +1600,21 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Telefon</label>
-                                <input type="tel" id="eventPhone" placeholder="+49...">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="tel" id="eventPhone" placeholder="+49..." style="flex: 1;">
+                                    <a id="eventCallBtn" href="#" class="btn-icon-subtle hidden" title="Anrufen"
+                                        style="color: var(--success);"><i data-lucide="phone" size="18"></i></a>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>E-Mail</label>
-                                <input type="email" id="eventEmail" placeholder="kontakt@beispiel.de">
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="email" id="eventEmail" placeholder="kontakt@beispiel.de"
+                                        style="flex: 1;">
+                                    <a id="eventMailBtn" href="#" class="btn-icon-subtle hidden"
+                                        title="E-Mail schreiben" style="color: var(--primary);"><i data-lucide="mail"
+                                            size="18"></i></a>
+                                </div>
                             </div>
                         </div>
                         <div class="form-group">
@@ -1286,8 +1623,19 @@
                         </div>
                         <div class="form-row">
                             <div class="form-group" style="flex: 1;">
+                                <label>Wiederholung</label>
+                                <select id="eventRecurrence">
+                                    <option value="none">Keine</option>
+                                    <option value="daily">Täglich</option>
+                                    <option value="weekly">Wöchentlich</option>
+                                    <option value="monthly">Monatlich</option>
+                                    <option value="yearly">Jährlich (Jahrestag)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1;">
                                 <label>Kategorie</label>
                                 <select id="eventCategory">
+                                    <option value="eisverkauf">Eisverkauf 🍦</option>
                                     <option value="work">Arbeit</option>
                                     <option value="private">Privat</option>
                                     <option value="urgent">Dringend</option>
@@ -1329,11 +1677,23 @@
                         </div>
                         <div class="form-group">
                             <label>Telefon</label>
-                            <input type="tel" id="contactPhone" placeholder="+49 123 456789">
+                            <div style="display: flex; gap: 8px;">
+                                <input type="tel" id="contactPhone" placeholder="+49 123 456789" style="flex: 1;">
+                                <a id="contactCallBtn" href="#" class="btn-icon-subtle hidden" title="Anrufen"
+                                    style="color: var(--success);">
+                                    <i data-lucide="phone" size="18"></i>
+                                </a>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>E-Mail</label>
-                            <input type="email" id="contactEmail" placeholder="max@beispiel.de">
+                            <div style="display: flex; gap: 8px;">
+                                <input type="email" id="contactEmail" placeholder="max@beispiel.de" style="flex: 1;">
+                                <a id="contactMailBtn" href="#" class="btn-icon-subtle hidden" title="E-Mail schreiben"
+                                    style="color: var(--primary);">
+                                    <i data-lucide="mail" size="18"></i>
+                                </a>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>Adresse</label>
@@ -1373,16 +1733,30 @@
 
         <!-- Bottom Navigation Bar (Mobile & Tablet) -->
         <div class="voice-dock">
-            <button id="qaLeftBtn" class="voice-side-btn left" onclick="app.navigateTo(app.state.quickActionLeft)">
-                <i data-lucide="layout-dashboard"></i>
-            </button>
-            <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()">
-                <i data-lucide="mic"></i>
-            </button>
-            <button id="qaRightBtn" class="voice-side-btn right" onclick="app.navigateTo(app.state.quickActionRight)">
-                <i data-lucide="settings"></i>
-            </button>
+            <button class="voice-side-btn" data-page="dashboard" onclick="app.navigateTo('dashboard')"
+                title="Dashboard"><i data-lucide="layout-dashboard"></i></button>
+            <button class="voice-side-btn" data-page="calendar" onclick="app.navigateTo('calendar')" title="Kalender"><i
+                    data-lucide="calendar"></i></button>
+            <button class="voice-side-btn" data-page="finance" onclick="app.navigateTo('finance')" title="Finanzen"><i
+                    data-lucide="wallet"></i></button>
+            <button class="voice-side-btn" data-page="todo" onclick="app.navigateTo('todo')" title="Aufgaben"><i
+                    data-lucide="check-square"></i></button>
+
+            <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()" title="Sprachsteuerung"><i
+                    data-lucide="mic"></i></button>
+
+            <button class="voice-side-btn" data-page="alarm" onclick="app.navigateTo('alarm')" title="Wecker"><i
+                    data-lucide="clock"></i></button>
+            <button class="voice-side-btn" data-page="team" onclick="app.navigateTo('team')" title="Team Sync"><i
+                    data-lucide="users"></i></button>
+            <button class="voice-side-btn" data-page="contacts" onclick="app.navigateTo('contacts')" title="Kontakte"><i
+                    data-lucide="contact"></i></button>
+            <button class="voice-side-btn" data-page="settings" onclick="app.navigateTo('settings')"
+                title="Einstellungen"><i data-lucide="settings"></i></button>
         </div>
+
+
+
 
         <!-- Pear AI Voice & Intelligence Overlay -->
         <div id="voiceOverlay" class="voice-overlay hidden">
@@ -1420,13 +1794,13 @@
 
     <!-- Quick Expense Modal -->
     <div class="modal-overlay hidden" id="quickExpenseModal"
-        style="background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 10000;">
+        style="background: rgba(24, 24, 27, 0.85); backdrop-filter: blur(8px); z-index: 10000;">
         <div class="modal-card animate-in"
-            style="max-width: 550px; background: #ffffff; border-radius: 24px; padding: 30px; border: none; box-shadow: 0 25px 60px rgba(0,0,0,0.2); margin: auto; max-height: 90vh; overflow-y: auto;">
+            style="max-width: 550px; background: var(--bg-card); border-radius: var(--radius-lg); padding: 30px; border: 1px solid var(--glass-border); box-shadow: var(--card-shadow); margin: auto; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header" style="border: none; padding: 0 0 20px 0;">
-                <h3 style="color: #1a1c1e; font-size: 1.5rem; font-weight: 800;">Ausgabe hinzufügen</h3>
+                <h3 style="color: var(--text-main); font-size: 1.5rem; font-weight: 800;">Ausgabe hinzufügen</h3>
                 <button class="btn-icon" onclick="document.getElementById('quickExpenseModal').classList.add('hidden')"
-                    style="color: #1a1c1e; background: #f1f5f9;">
+                    style="color: var(--text-main); background: var(--bg-hover);">
                     <i data-lucide="x"></i>
                 </button>
             </div>
@@ -1436,24 +1810,34 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                         <div class="input-group">
                             <label
-                                style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Betrag
+                                style="color: var(--text-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Betrag
                                 (€)</label>
                             <input type="number" id="quickFinAmount" step="0.01" required placeholder="0.00" autoFocus
-                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main); transition: border-color 0.2s;">
                         </div>
                         <div class="input-group">
                             <label
-                                style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Datum</label>
+                                style="color: var(--text-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Datum</label>
                             <input type="date" id="quickFinDate" required
-                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main); transition: border-color 0.2s;">
                         </div>
                     </div>
-                    <div class="input-group">
-                        <label
-                            style="color: #44474e; font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Beschreibung
-                            / Zweck</label>
-                        <input type="text" id="quickFinSource" placeholder="z.B. Lebensmittel, Miete, Hobby..." required
-                            style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2e8f0; color: #1a1c1e; transition: border-color 0.2s;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="input-group">
+                            <label
+                                style="color: var(--text-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Typ</label>
+                            <select id="quickFinType"
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main); transition: border-color 0.2s;">
+                                <option value="expense">Ausgabe</option>
+                                <option value="income">Einnahme</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label
+                                style="color: var(--text-muted); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">Beschreibung</label>
+                            <input type="text" id="quickFinSource" placeholder="z.B. Gehalt, Miete..." required
+                                style="width: 100%; font-size: 1rem; padding: 12px 16px; border-radius: 12px; background: var(--bg-element); border: 1px solid var(--glass-border); color: var(--text-main); transition: border-color 0.2s;">
+                        </div>
                     </div>
                     <button type="submit" class="btn-primary"
                         style="padding: 16px; font-weight: 700; font-size: 1.1rem; border-radius: 15px; margin-top: 10px; background: #002a46; color: #ffffff; border: none; box-shadow: 0 4px 12px rgba(0,42,70,0.2);">
@@ -1500,6 +1884,8 @@
     </div> <!-- End of #app -->
 
     <script src="app.js"></script>
+    <script src="enhanced-dashboard.js"></script>
+    <script src="premium-todo-integration.js"></script>
 </body>
 
 </html>

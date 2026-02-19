@@ -38,12 +38,14 @@ const app = {
         editingContactId: null,
         finance: [],
         monthlyBudget: parseFloat(localStorage.getItem('moltbot_budget')) || 0,
+        budgetWarningLimit: parseFloat(localStorage.getItem('moltbot_budget_warning')) || 100, // Warn when X€ remains
+        savingsGoal: parseFloat(localStorage.getItem('moltbot_savings_goal')) || 0,
         contactView: localStorage.getItem('moltbot_contact_view') || 'table',
         favsCollapsed: localStorage.getItem('moltbot_favs_collapsed') === 'true',
         theme: localStorage.getItem('moltbot_theme') || 'dark',
         quickActionLeft: localStorage.getItem('moltbot_qa_left') || 'dashboard',
         quickActionRight: localStorage.getItem('moltbot_qa_right') || 'settings',
-        dockStyle: localStorage.getItem('moltbot_dock_style') || 'compact',
+        dockStyle: localStorage.getItem('moltbot_dock_style') || 'full',
         appName: localStorage.getItem('moltbot_app_name') || 'Pear',
         customFont: localStorage.getItem('moltbot_custom_font') || 'Outfit',
         customPrimary: localStorage.getItem('moltbot_custom_primary') || '',
@@ -56,7 +58,83 @@ const app = {
         teamHistory: [],
         isNightLandscape: localStorage.getItem('moltbot_night_landscape') === 'true',
         isAutoNightclockEnabled: localStorage.getItem('moltbot_auto_nightclock') === 'true',
-        isWakeLockPersistent: localStorage.getItem('moltbot_wakelock_persistent') === 'true'
+        isWakeLockPersistent: localStorage.getItem('moltbot_wakelock_persistent') === 'true',
+        isWakeWordEnabled: false, // Disabled by user request: Manual only operation
+        widgetOrder: JSON.parse(localStorage.getItem('moltbot_widget_order')) || ['special', 'drive', 'kpis', 'quick_finance', 'events', 'mini_calendar'],
+        widgetVisibility: JSON.parse(localStorage.getItem('moltbot_widgets')) || {
+            'special': true,
+            'drive': true,
+            'kpis': true,
+            'quick_finance': true,
+            'events': true,
+            'mini_calendar': true
+        },
+        deferredPrompt: null,
+        fixedCosts: [],
+        lastFixedCostsMonth: localStorage.getItem('moltbot_last_fixed_month') || '',
+        savingsBalance: parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0,
+        financeArchive: JSON.parse(localStorage.getItem('moltbot_finance_archive')) || [],
+        menuOrder: JSON.parse(localStorage.getItem('moltbot_menu_order')) || ['dashboard', 'calendar', 'contacts', 'todo', 'finance', 'alarm', 'team', 'settings']
+    },
+
+
+    notify(title, message, type = 'primary') {
+        const toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            const container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none;';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        const colorMap = {
+            'primary': 'var(--primary)',
+            'success': 'var(--success)',
+            'warning': 'var(--warning)',
+            'danger': 'var(--danger)'
+        };
+        const color = colorMap[type] || 'var(--primary)';
+
+        toast.style.cssText = `
+            background: rgba(15, 15, 15, 0.9);
+            backdrop-filter: blur(15px);
+            border-left: 4px solid ${color};
+            color: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            min-width: 280px;
+            max-width: 350px;
+            transform: translateX(120%);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: all;
+            cursor: pointer;
+        `;
+
+        toast.innerHTML = `
+            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 4px; color: ${color};">${title}</div>
+            <div style="font-size: 0.85rem; opacity: 0.9;">${message}</div>
+        `;
+
+        document.getElementById('toast-container').appendChild(toast);
+
+        // Animate in
+        setTimeout(() => toast.style.transform = 'translateX(0)', 10);
+
+        // Click to dismiss
+        toast.onclick = () => {
+            toast.style.transform = 'translateX(120%)';
+            setTimeout(() => toast.remove(), 400);
+        };
+
+        // Auto dismiss
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.style.transform = 'translateX(120%)';
+                setTimeout(() => toast.remove(), 400);
+            }
+        }, 5000);
     },
 
     // --- INITIALIZATION ---
@@ -88,6 +166,10 @@ const app = {
             // Initialize Sync
             this.sync.init();
 
+            // Auto-apply Fixed Costs if month changed
+            this.finance.checkAndApplyAutoFixedCosts();
+
+
             // Start Clock Interface
             this.alarm.init();
             this.alarm.render();
@@ -103,9 +185,23 @@ const app = {
             // Initial Render & Navigation
             this.handleInitialNavigation();
 
+            // Stop Wake Word listener if active (ensuring manual-only mode)
+            this.voice.stopWakeWord();
+            this.state.isWakeWordEnabled = false;
+            localStorage.setItem('moltbot_wake_word_enabled', 'false');
+
             // Start Departure Reminders Check (every minute)
             setInterval(() => this.checkDepartureReminders(), 60000);
             this.checkDepartureReminders(); // Initial check
+
+            // Listen for messages from Service Worker (e.g. for navigation from notifications)
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    if (event.data && event.data.type === 'NAVIGATE') {
+                        this.navigateTo(event.data.view);
+                    }
+                });
+            }
 
         } catch (e) {
             console.error("Critical Init Error:", e);
@@ -122,6 +218,15 @@ const app = {
                     }, 600);
                 }
             }, 2000);
+
+            // Listen for PWA installation prompt
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                this.state.deferredPrompt = e;
+                console.log("PWA Prompt saved. Ready for installation.");
+                const installBtn = document.getElementById('pwaInstallBtn');
+                if (installBtn) installBtn.style.display = 'flex';
+            });
         }
     },
 
@@ -147,14 +252,45 @@ const app = {
             navigator.serviceWorker.ready.then(registration => {
                 registration.showNotification(title, {
                     body: body,
-                    icon: 'icon.png',
-                    badge: 'icon.png',
+                    icon: 'icon-192.png',
+                    badge: 'icon-192.png',
                     data: { url: url }
                 });
             });
         } else {
             // Fallback to simple browser notification
-            new Notification(title, { body: body, icon: 'icon.png' });
+            new Notification(title, { body: body, icon: 'icon-192.png' });
+        }
+    },
+
+    async installApp() {
+        if (!this.state.deferredPrompt) {
+            alert("Die App kann momentan nicht direkt installiert werden. Nutze 'Zum Home-Bildschirm hinzufügen' in deinem Browser-Menü.");
+            return;
+        }
+        this.state.deferredPrompt.prompt();
+        const { outcome } = await this.state.deferredPrompt.userChoice;
+        console.log(`User response to install prompt: ${outcome}`);
+        this.state.deferredPrompt = null;
+        const installBtn = document.getElementById('pwaInstallBtn');
+        if (installBtn) installBtn.style.display = 'none';
+    },
+
+    async shareApp() {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Pear Organizer',
+                    text: 'Schau dir diesen genialen Team-Organizer an!',
+                    url: window.location.href
+                });
+            } catch (err) {
+                console.error('Sharing failed', err);
+            }
+        } else {
+            // Fallback: Copy to clipboard
+            navigator.clipboard.writeText(window.location.href);
+            alert("Link in die Zwischenablage kopiert! Du kannst ihn jetzt versenden.");
         }
     },
 
@@ -278,6 +414,52 @@ const app = {
         alert("Profil wurde zurückgesetzt.");
     },
 
+    createNewTeamAccount() {
+        const confirmMsg = "Möchtest du wirklich ein NEUES Team erstellen? \n\nACHTUNG: Alle deine aktuellen lokalen Daten (Termine, Aufgaben, Kontakte, Finanzen) werden UNWIDERRUFLICH gelöscht, um mit einem leeren Team zu starten.";
+        if (!confirm(confirmMsg)) return;
+
+        const team = prompt("Gewünschter Team-Name / Schlüssel (z.B. FamilieMüller):");
+        if (!team) return;
+
+        const pin = prompt("Vergebe einen 4-stelligen PIN (Zahlen):");
+        if (!pin || pin.length !== 4 || isNaN(pin)) {
+            return alert("Fehler: Der PIN muss genau 4 Ziffern haben.");
+        }
+
+        const userName = prompt("Dein Benutzername für dieses Team:");
+        if (!userName) return;
+
+        // 1. Clear State
+        this.state.events = [];
+        this.state.todos = [];
+        this.state.contacts = [];
+        this.state.finance = [];
+        this.state.alarms = [];
+        this.state.fixedCosts = [];
+
+        // 2. Set Team & User
+        this.state.user.name = userName;
+        this.state.user.teamName = team;
+        this.state.user.teamPin = pin;
+        this.state.hasReceivedInitialSync = true;
+
+        // 3. Save Locally
+        localStorage.setItem('moltbot_username', userName);
+        localStorage.setItem('moltbot_team', team);
+        localStorage.setItem('moltbot_pin', pin);
+        this.saveLocal();
+
+        // 4. Initialize Sync
+        if (this.sync) {
+            this.sync.init();
+            setTimeout(() => this.sync.push(), 1000);
+        }
+
+        // 5. Navigate & Notify
+        this.navigateTo('dashboard');
+        this.notify("Konto erstellt", `Das Team "${team}" wurde neu angelegt.`, "success");
+    },
+
     loadLocal() {
         const safeLoad = (key, fallback) => {
             const val = localStorage.getItem(key);
@@ -320,13 +502,25 @@ const app = {
         this.state.contacts = safeLoad('moltbot_contacts', []);
         this.state.alarms = safeLoad('moltbot_alarms', []);
         this.state.finance = safeLoad('moltbot_finance', []);
+        this.state.finance.forEach(f => {
+            if (!f.type) f.type = 'expense';
+        });
+        this.state.monthlyBudget = parseFloat(localStorage.getItem('moltbot_budget')) || 0;
+        this.state.budgetWarningLimit = parseFloat(localStorage.getItem('moltbot_budget_warning')) || 100;
+
         this.state.todoCategories = safeLoad('moltbot_todo_categories', ['🛒 Einkauf', '💼 Arbeit', '🏠 Zuhause', '👤 Privat']);
         this.state.teamHistory = safeLoad('moltbot_team_history', []);
+        this.state.fixedCosts = safeLoad('moltbot_fixed_costs', []);
+        this.state.lastFixedCostsMonth = localStorage.getItem('moltbot_last_fixed_month') || '';
+        this.state.savingsGoal = parseFloat(localStorage.getItem('moltbot_savings_goal')) || 0;
+        this.state.savingsBalance = parseFloat(localStorage.getItem('moltbot_savings_balance')) || 0;
+        this.state.financeArchive = safeLoad('moltbot_finance_archive', []);
+        this.state.lastRemoteSync = parseInt(localStorage.getItem('moltbot_last_sync')) || 0;
 
         this.state.theme = localStorage.getItem('moltbot_theme') || 'dark';
         this.state.quickActionLeft = localStorage.getItem('moltbot_qa_left') || 'dashboard';
         this.state.quickActionRight = localStorage.getItem('moltbot_qa_right') || 'settings';
-        this.state.dockStyle = localStorage.getItem('moltbot_dock_style') || 'compact';
+        this.state.dockStyle = localStorage.getItem('moltbot_dock_style') || 'full';
         this.state.appName = localStorage.getItem('moltbot_app_name') || 'Pear';
         this.state.customFont = localStorage.getItem('moltbot_custom_font') || 'Outfit',
             this.state.customPrimary = localStorage.getItem('moltbot_custom_primary') || '',
@@ -347,6 +541,7 @@ const app = {
         this.state.isAutoNightclockEnabled = localStorage.getItem('moltbot_auto_nightclock') === 'true';
         this.state.isWakeLockPersistent = localStorage.getItem('moltbot_wakelock_persistent') === 'true';
         this.state.nightModeStart = localStorage.getItem('moltbot_night_mode_start') || '01:00';
+        this.state.isWakeWordEnabled = localStorage.getItem('moltbot_wake_word_enabled') === 'true';
     },
 
     saveLocal() {
@@ -369,6 +564,11 @@ const app = {
         localStorage.setItem('moltbot_auto_nightclock', this.state.isAutoNightclockEnabled);
         localStorage.setItem('moltbot_wakelock_persistent', this.state.isWakeLockPersistent);
         localStorage.setItem('moltbot_night_mode_start', this.state.nightModeStart);
+        localStorage.setItem('moltbot_fixed_costs', JSON.stringify(this.state.fixedCosts));
+        localStorage.setItem('moltbot_last_fixed_month', this.state.lastFixedCostsMonth);
+        localStorage.setItem('moltbot_savings_goal', this.state.savingsGoal);
+        localStorage.setItem('moltbot_savings_balance', this.state.savingsBalance);
+        localStorage.setItem('moltbot_finance_archive', JSON.stringify(this.state.financeArchive));
     },
 
     updateTheme(theme) {
@@ -422,9 +622,11 @@ const app = {
         this.state.user[key] = value;
         localStorage.setItem(`moltbot_user_${key}`, value);
 
-        // Update relevant views
         if (this.state.view === 'settings' || this.state.view === 'dashboard') {
             this.render();
+            // Also update action links explicitly for responsiveness
+            if (key === 'phone') app.updateActionLink('settingsUserPhone', 'settingsCallBtn', 'tel:');
+            if (key === 'email') app.updateActionLink('settingsUserEmail', 'settingsMailBtn', 'mailto:');
         }
 
         // Sync if possible
@@ -803,7 +1005,12 @@ const app = {
                 },
                 updatedAt: Date.now(),
                 pushedBy: app.state.user.name,
-                pin: app.state.user.teamPin
+                pin: app.state.user.teamPin,
+                fixedCosts: app.state.fixedCosts,
+                financeArchive: app.state.financeArchive,
+                lastFixedCostsMonth: app.state.lastFixedCostsMonth,
+                savingsGoal: app.state.savingsGoal,
+                savingsBalance: app.state.savingsBalance
             };
 
             this.db.collection('moltbot_private_sync').doc(app.state.user.teamName).set({
@@ -1020,6 +1227,28 @@ const app = {
         if (!e.date) return false;
         const evDate = new Date(e.date);
 
+        // Normalize dates to midnight for comparison
+        const normalizedD = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const normalizedEvDate = new Date(evDate.getFullYear(), evDate.getMonth(), evDate.getDate()).getTime();
+
+        // Don't show recurring events before their start date
+        if (normalizedD < normalizedEvDate) return false;
+
+        // Recurrence Logic
+        if (e.recurrence === 'daily') return true;
+
+        if (e.recurrence === 'weekly') {
+            return evDate.getDay() === d.getDay();
+        }
+
+        if (e.recurrence === 'monthly') {
+            return evDate.getDate() === d.getDate();
+        }
+
+        if (e.recurrence === 'yearly') {
+            return evDate.getDate() === d.getDate() && evDate.getMonth() === d.getMonth();
+        }
+
         // Year-independent matching for birthdays and holidays
         if (e.category === 'birthday' || e.category === 'holiday') {
             return evDate.getDate() === d.getDate() && evDate.getMonth() === d.getMonth();
@@ -1137,6 +1366,7 @@ const app = {
 
             incoming.finance.forEach(incFin => {
                 const local = localFinMap.get(incFin.id);
+                // Respect soft deletes: don't re-add if we have a newer local tombstone
                 const incUpd = incFin.updatedAt || incFin.createdAt || 1;
                 const localUpd = local ? (local.updatedAt || local.createdAt || 0) : -1;
 
@@ -1146,7 +1376,7 @@ const app = {
                 }
             });
 
-            // Remove local items missing in incoming
+            // Remove local items missing in incoming (Hard delete propagation)
             this.state.finance.forEach(local => {
                 if (!incomingIds.has(local.id)) {
                     if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
@@ -1174,6 +1404,32 @@ const app = {
                 this.state.todoCategories = incoming.todoCategories;
                 changed = true;
             }
+        }
+
+        // Merge Fixed Costs
+        if (incoming.fixedCosts) {
+            if (JSON.stringify(this.state.fixedCosts) !== JSON.stringify(incoming.fixedCosts)) {
+                this.state.fixedCosts = incoming.fixedCosts;
+                changed = true;
+            }
+        }
+        if (incoming.lastFixedCostsMonth && incoming.lastFixedCostsMonth !== this.state.lastFixedCostsMonth) {
+            this.state.lastFixedCostsMonth = incoming.lastFixedCostsMonth;
+            changed = true;
+        }
+        if (incoming.financeArchive) {
+            if (JSON.stringify(this.state.financeArchive) !== JSON.stringify(incoming.financeArchive)) {
+                this.state.financeArchive = incoming.financeArchive;
+                changed = true;
+            }
+        }
+        if (incoming.savingsGoal !== undefined && incoming.savingsGoal !== this.state.savingsGoal) {
+            this.state.savingsGoal = incoming.savingsGoal;
+            changed = true;
+        }
+        if (incoming.savingsBalance !== undefined && incoming.savingsBalance !== this.state.savingsBalance) {
+            this.state.savingsBalance = incoming.savingsBalance;
+            changed = true;
         }
 
         // Sync Profile / App Name if newer
@@ -1334,7 +1590,12 @@ const app = {
         setVal('eventEmail', event ? (event.email || '') : '');
         setVal('eventNotes', event ? (event.notes || '') : '');
         setVal('eventCategory', event ? (event.category || 'work') : 'work');
+        setVal('eventRecurrence', event ? (event.recurrence || 'none') : 'none');
         setVal('eventColor', event ? (event.color || '#6366f1') : '#6366f1');
+
+        // Update Action Buttons
+        this.updateActionLink('eventPhone', 'eventCallBtn', 'tel:');
+        this.updateActionLink('eventEmail', 'eventMailBtn', 'mailto:');
 
         // Toggle Delete Button
         const delBtn = document.getElementById('deleteEventBtn');
@@ -1432,12 +1693,14 @@ const app = {
                         // Auto-fill if changed
                         if (contact.phone && phoneInput.value !== contact.phone) {
                             phoneInput.value = contact.phone;
+                            app.updateActionLink('eventPhone', 'eventCallBtn', 'tel:');
                             // Visual feedback (optional flash)
                             phoneInput.style.borderColor = 'var(--success)';
                             setTimeout(() => phoneInput.style.borderColor = 'var(--glass-border)', 1000);
                         }
                         if (contact.email && emailInput.value !== contact.email) {
                             emailInput.value = contact.email;
+                            app.updateActionLink('eventEmail', 'eventMailBtn', 'mailto:');
                             emailInput.style.borderColor = 'var(--success)';
                             setTimeout(() => emailInput.style.borderColor = 'var(--glass-border)', 1000);
                         }
@@ -1446,6 +1709,19 @@ const app = {
                 }
             });
         }
+
+        // Live Action Button Updates
+        ['eventPhone', 'eventEmail', 'contactPhone', 'contactEmail', 'settingsUserPhone', 'settingsUserEmail'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                const isSettings = id.includes('settings');
+                const btnId = isSettings ? (id.includes('Phone') ? 'settingsCallBtn' : 'settingsMailBtn') : (id.includes('event') ? (id.includes('Phone') ? 'eventCallBtn' : 'eventMailBtn') : (id.includes('Phone') ? 'contactCallBtn' : 'contactMailBtn'));
+                const prefix = id.includes('Phone') ? 'tel:' : 'mailto:';
+                el.addEventListener('input', () => app.updateActionLink(id, btnId, prefix));
+                // Also update on change for settings (since they have onchange handlers)
+                el.addEventListener('change', () => app.updateActionLink(id, btnId, prefix));
+            }
+        });
 
         // Form Submit
         document.getElementById('eventForm').onsubmit = (e) => {
@@ -1459,6 +1735,7 @@ const app = {
                 email: document.getElementById('eventEmail').value,
                 notes: document.getElementById('eventNotes').value,
                 category: document.getElementById('eventCategory').value,
+                recurrence: document.getElementById('eventRecurrence').value,
                 color: document.getElementById('eventCategory').value === 'urgent' ? '#ef4444' : document.getElementById('eventColor').value
             };
             e.target.reset();
@@ -1554,40 +1831,76 @@ const app = {
         };
     },
 
-    navigateTo(page, replace = false) {
+    async navigateTo(page, replace = false) {
         // Immediate Menu Close for responsiveness
         const sidebar = document.getElementById('sidebar');
         const overlay = document.querySelector('.sidebar-overlay');
         if (sidebar) sidebar.classList.remove('active');
         if (overlay) overlay.classList.remove('active');
 
-        // If clicking the same page, do nothing unless we need to close sidebar
-        // if (this.state.view === page && !replace) return;  
-
-        this.state.view = page;
-        localStorage.setItem('moltbot_view', page);
-
-        // Update History
-        if (!replace) {
-            history.pushState({ view: page }, '', '#' + page);
+        // Visual feedback: Start transition (Avoid "blur" as users find it "verschwommen")
+        const mainContent = document.querySelector('.content');
+        if (mainContent) {
+            mainContent.style.opacity = '0.6';
         }
 
-        document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
-        document.getElementById(`view-${page}`).classList.add('active');
+        // Small delay to let UI settle
+        await new Promise(r => setTimeout(r, 100));
 
-        document.querySelectorAll('.nav-item').forEach(btn => {
-            btn.classList.toggle('active', btn.getAttribute('data-page') === page);
-        });
+        try {
+            this.state.view = page;
+            localStorage.setItem('moltbot_view', page);
 
-        // Toggle Header buttons based on view
-        const addContactBtn = document.getElementById('addContactBtn');
+            // Update History
+            if (!replace) {
+                history.pushState({ view: page }, '', '#' + page);
+            }
 
-        if (addContactBtn) {
-            addContactBtn.style.display = (page === 'contacts') ? 'flex' : 'none';
+            document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
+            const targetView = document.getElementById(`view-${page}`);
+            if (targetView) targetView.classList.add('active');
+
+            document.querySelectorAll('.nav-item, .voice-side-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-page') === page);
+            });
+
+
+            // Toggle Header buttons based on view
+            const addContactBtn = document.getElementById('addContactBtn');
+            if (addContactBtn) {
+                addContactBtn.style.display = (page === 'contacts') ? 'flex' : 'none';
+            }
+
+            if (page === 'settings') {
+                this.renderWidgetSettings();
+
+                // Update wake word toggle state
+                const wakeWordToggle = document.getElementById('wakeWordToggle');
+                if (wakeWordToggle) {
+                    wakeWordToggle.checked = this.state.isWakeWordEnabled;
+                }
+            }
+
+            // --- Toggle Back Buttons ---
+            const backBtns = [document.getElementById('mobileBackBtn'), document.getElementById('desktopBackBtn')];
+            backBtns.forEach(btn => {
+                if (btn) btn.classList.toggle('hidden', page === 'dashboard');
+            });
+
+            this.render();
+
+        } catch (e) {
+            console.error("Navigation error:", e);
+        } finally {
+            // End transition ALWAYS (Removes the reported "verschwommen" look)
+            if (mainContent) {
+                mainContent.style.opacity = '1';
+                mainContent.style.filter = 'none';
+            }
         }
-
-        this.render();
     },
+
+
 
     toggleCard(header) {
         const card = header.closest('.collapsible-card');
@@ -1644,8 +1957,9 @@ const app = {
                 const currentCellDate = new Date(year, month, d);
                 const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
 
-                const dayEvents = this.state.events.filter(e => this.isEventOnDate(e, currentCellDate));
+                const dayEvents = app.state.events.filter(e => app.isEventOnDate(e, currentCellDate));
                 const hasEvent = dayEvents.length > 0;
+                const isEisverkauf = dayEvents.some(e => e.category === 'eisverkauf' || (e.title && e.title.toLowerCase().includes('eisverkauf')));
 
                 let styleStr = '';
                 if (hasEvent) {
@@ -1657,7 +1971,7 @@ const app = {
                     }
                 }
 
-                let classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''}`;
+                let classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''} ${isEisverkauf ? 'eisverkauf' : ''}`;
 
                 html += `<div class="${classStr}" style="${styleStr}" onclick="app.goToDay('${dateStr}')">${d}</div>`;
             }
@@ -1674,10 +1988,23 @@ const app = {
         const headerName = document.getElementById('headerUserName');
         if (headerName) headerName.textContent = this.state.user.name;
 
+        const userAvatar = this.state.user.avatar || 'logo.svg';
         const headerAvatar = document.getElementById('headerUserAvatar');
-        if (headerAvatar) {
-            headerAvatar.src = this.state.user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${this.state.user.name}`;
-        }
+        const headerAvatarMob = document.getElementById('headerUserAvatarMobile');
+        const headerAvatarSettings = document.getElementById('settingsUserAvatarPreview');
+
+        const updateAv = (el) => {
+            if (el) {
+                el.src = userAvatar;
+                el.style.border = `2px solid var(--primary)`;
+                el.style.borderRadius = '50%';
+                el.style.objectFit = 'cover';
+            }
+        };
+
+        updateAv(headerAvatar);
+        updateAv(headerAvatarMob);
+        updateAv(headerAvatarSettings);
 
 
 
@@ -1737,12 +2064,19 @@ const app = {
             if (nameInput) nameInput.value = this.state.user.name;
             const addrInput = document.getElementById('settingsUserAddress');
             if (addrInput) addrInput.value = this.state.user.address;
-            const phoneInput = document.getElementById('settingsUserPhone');
-            if (phoneInput) phoneInput.value = this.state.user.phone;
             const emailInput = document.getElementById('settingsUserEmail');
-            if (emailInput) emailInput.value = this.state.user.email;
+            if (emailInput) {
+                emailInput.value = this.state.user.email;
+                app.updateActionLink('settingsUserEmail', 'settingsMailBtn', 'mailto:');
+            }
             const bdayInput = document.getElementById('settingsUserBirthday');
             if (bdayInput) bdayInput.value = this.state.user.birthday;
+
+            const phoneInput = document.getElementById('settingsUserPhone');
+            if (phoneInput) {
+                phoneInput.value = this.state.user.phone;
+                app.updateActionLink('settingsUserPhone', 'settingsCallBtn', 'tel:');
+            }
 
             const avatarPreview = document.getElementById('settingsUserAvatarPreview');
             if (avatarPreview) {
@@ -1787,6 +2121,9 @@ const app = {
             document.querySelectorAll('.theme-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.getAttribute('data-theme') === this.state.theme);
             });
+
+            // Render menu order settings
+            this.renderMenuOrderSettings();
         } else if (this.state.view === 'alarm') {
             this.alarm.render();
         } else if (this.state.view === 'finance') {
@@ -1826,6 +2163,17 @@ const app = {
             settings: 'settings'
         };
 
+        const actionLabels = {
+            dashboard: 'Dash',
+            calendar: 'Plan',
+            finance: 'Geld',
+            team: 'Team',
+            contacts: 'Leute',
+            todo: 'ToDo',
+            alarm: 'Uhr',
+            settings: 'Setup'
+        };
+
         const dock = document.querySelector('.voice-dock');
         if (!dock) return;
 
@@ -1833,27 +2181,38 @@ const app = {
         dock.classList.toggle('is-full-bar', this.state.dockStyle === 'full');
 
         if (this.state.dockStyle === 'full') {
-            dock.innerHTML = `
-                <button class="voice-side-btn ${this.state.view === 'dashboard' ? 'active' : ''}" onclick="app.navigateTo('dashboard')"><i data-lucide="layout-dashboard"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'calendar' ? 'active' : ''}" onclick="app.navigateTo('calendar')"><i data-lucide="calendar"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'finance' ? 'active' : ''}" onclick="app.navigateTo('finance')"><i data-lucide="wallet"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'team' ? 'active' : ''}" onclick="app.navigateTo('team')"><i data-lucide="users"></i></button>
-                <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()"><i data-lucide="mic"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'contacts' ? 'active' : ''}" onclick="app.navigateTo('contacts')"><i data-lucide="book-user"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'todo' ? 'active' : ''}" onclick="app.navigateTo('todo')"><i data-lucide="check-square"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'alarm' ? 'active' : ''}" onclick="app.navigateTo('alarm')"><i data-lucide="alarm-clock"></i></button>
-                <button class="voice-side-btn ${this.state.view === 'settings' ? 'active' : ''}" onclick="app.navigateTo('settings')"><i data-lucide="settings"></i></button>
-            `;
+            const views = this.state.menuOrder;
+
+            let html = '';
+            views.forEach((v, idx) => {
+                // Add mic in the middle (after 4 items)
+                if (idx === 4) {
+                    html += `<button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()">
+                                <i data-lucide="mic"></i>
+                                <span class="dock-label">Pear</span>
+                            </button>`;
+                }
+                html += `
+                    <button class="voice-side-btn ${this.state.view === v ? 'active' : ''}" onclick="app.navigateTo('${v}')">
+                        <i data-lucide="${actionIcons[v]}"></i>
+                        <span class="dock-label">${actionLabels[v]}</span>
+                    </button>
+                `;
+            });
+            dock.innerHTML = html;
         } else {
             dock.innerHTML = `
                 <button id="qaLeftBtn" class="voice-side-btn left" onclick="app.navigateTo('${this.state.quickActionLeft}')">
                     <i data-lucide="${actionIcons[this.state.quickActionLeft] || 'star'}"></i>
+                    <span class="dock-label">${actionLabels[this.state.quickActionLeft]}</span>
                 </button>
                 <button id="voiceControlBtn" class="voice-btn" onclick="app.voice.start()">
                     <i data-lucide="mic"></i>
+                    <span class="dock-label">Pear</span>
                 </button>
                 <button id="qaRightBtn" class="voice-side-btn right" onclick="app.navigateTo('${this.state.quickActionRight}')">
                     <i data-lucide="${actionIcons[this.state.quickActionRight] || 'star'}"></i>
+                    <span class="dock-label">${actionLabels[this.state.quickActionRight]}</span>
                 </button>
             `;
         }
@@ -1861,6 +2220,112 @@ const app = {
         if (window.lucide) lucide.createIcons();
     },
 
+    renderMenuOrderSettings() {
+        const container = document.getElementById('menuOrderList');
+        if (!container) return;
+
+        const menuLabels = {
+            dashboard: 'Dashboard',
+            calendar: 'Kalender',
+            contacts: 'Kontakte',
+            todo: 'Aufgaben',
+            finance: 'Finanzen',
+            alarm: 'Wecker',
+            team: 'Team Sync',
+            settings: 'Einstellungen'
+        };
+
+        const menuIcons = {
+            dashboard: 'layout-dashboard',
+            calendar: 'calendar',
+            contacts: 'contact',
+            todo: 'check-square',
+            finance: 'wallet',
+            alarm: 'clock',
+            team: 'users',
+            settings: 'settings'
+        };
+
+        container.innerHTML = this.state.menuOrder.map((item, index) => `
+            <div class="menu-order-item" draggable="true" data-menu-id="${item}" 
+                style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: 12px; cursor: move; transition: all 0.2s;">
+                <i data-lucide="grip-vertical" size="18" style="color: var(--text-muted);"></i>
+                <i data-lucide="${menuIcons[item]}" size="20" style="color: var(--primary);"></i>
+                <span style="flex: 1; font-weight: 600;">${menuLabels[item]}</span>
+                <span style="font-size: 0.75rem; color: var(--text-muted); background: rgba(var(--primary-rgb), 0.1); padding: 4px 8px; border-radius: 6px;">#${index + 1}</span>
+            </div>
+        `).join('');
+
+        const items = container.querySelectorAll('.menu-order-item');
+        items.forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/html', item.innerHTML);
+                item.style.opacity = '0.4';
+            });
+
+            item.addEventListener('dragend', (e) => {
+                item.style.opacity = '1';
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const afterElement = this.getDragAfterElement(container, e.clientY);
+                const draggable = document.querySelector('.menu-order-item[style*="opacity: 0.4"]');
+                if (afterElement == null) {
+                    container.appendChild(draggable);
+                } else {
+                    container.insertBefore(draggable, afterElement);
+                }
+            });
+
+            item.addEventListener('drop', (e) => {
+                e.stopPropagation();
+                this.updateMenuOrderFromDOM();
+            });
+        });
+
+        if (window.lucide) lucide.createIcons();
+    },
+
+    getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('.menu-order-item:not([style*="opacity: 0.4"])')];
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    },
+
+    updateMenuOrderFromDOM() {
+        const container = document.getElementById('menuOrderList');
+        if (!container) return;
+
+        const items = container.querySelectorAll('.menu-order-item');
+        const newOrder = Array.from(items).map(item => item.getAttribute('data-menu-id'));
+
+        this.state.menuOrder = newOrder;
+        localStorage.setItem('moltbot_menu_order', JSON.stringify(newOrder));
+
+        this.renderMenuOrderSettings();
+        this.renderVoiceDock();
+        this.notify('Menü aktualisiert', 'Die Reihenfolge wurde gespeichert.', 'success');
+    },
+
+    resetMenuOrder() {
+        const defaultOrder = ['dashboard', 'calendar', 'contacts', 'todo', 'finance', 'alarm', 'team', 'settings'];
+        this.state.menuOrder = defaultOrder;
+        localStorage.setItem('moltbot_menu_order', JSON.stringify(defaultOrder));
+
+        this.renderMenuOrderSettings();
+        this.renderVoiceDock();
+        this.notify('Zurückgesetzt', 'Standardreihenfolge wiederhergestellt.', 'success');
+    },
 
 
     // --- FINANCE MODULE ---
@@ -1874,15 +2339,30 @@ const app = {
             if (form) form.reset();
             const dateInput = document.getElementById('quickFinDate');
             if (dateInput) dateInput.valueAsDate = new Date();
+
+            const title = modal.querySelector('h3');
+            if (title) title.textContent = 'Ausgabe hinzufügen';
+
             modal.classList.remove('hidden');
             document.getElementById('quickFinAmount').focus();
+        },
+
+        openIncomeAdd() {
+            this.openQuickAdd();
+            const typeSelect = document.getElementById('quickFinType');
+            if (typeSelect) typeSelect.value = 'income';
+
+            // Update title of modal if possible (optional but nice)
+            const title = document.querySelector('#quickExpenseModal h3');
+            if (title) title.textContent = 'Einnahme erfassen';
         },
 
         saveQuickAdd(e) {
             e.preventDefault();
             const amount = parseFloat(document.getElementById('quickFinAmount').value);
             const date = document.getElementById('quickFinDate').value;
-            const source = document.getElementById('quickFinSource').value || 'Ausgabe';
+            const source = document.getElementById('quickFinSource').value || 'Schnell-Eintrag';
+            const type = document.getElementById('quickFinType').value || 'expense';
 
             if (isNaN(amount)) return;
 
@@ -1890,6 +2370,7 @@ const app = {
                 id: Date.now().toString(),
                 amount,
                 date,
+                type,
                 source,
                 createdAt: Date.now()
             };
@@ -1899,19 +2380,18 @@ const app = {
             if (app.sync && app.sync.push) app.sync.push();
 
             document.getElementById('quickExpenseModal').classList.add('hidden');
-
-            // Refresh dashboard or finance view
-            if (app.state.view === 'dashboard') app.renderDashboard();
-            if (app.state.view === 'finance') this.render();
-
-            app.notify("Ausgabe gespeichert", `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} für ${source} erfasst.`);
+            app.render();
+            this.checkBudget(); // Trigger Warning Check
+            app.notify(type === 'income' ? "Einnahme gespeichert" : "Ausgabe gespeichert",
+                `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} für ${source} erfasst.`);
         },
 
         addEntry(e) {
             e.preventDefault();
             const amount = parseFloat(document.getElementById('finAmount').value);
             const date = document.getElementById('finDate').value;
-            const source = document.getElementById('finSource').value || 'Ausgabe';
+            const source = document.getElementById('finSource').value || 'Eintrag';
+            const type = document.getElementById('finType').value || 'expense';
 
             if (isNaN(amount)) return;
 
@@ -1919,6 +2399,7 @@ const app = {
                 id: Date.now().toString(),
                 amount,
                 date,
+                type,
                 source,
                 createdAt: Date.now()
             };
@@ -1930,35 +2411,125 @@ const app = {
             document.getElementById('financeForm').reset();
             const dateInput = document.getElementById('finDate');
             if (dateInput) dateInput.valueAsDate = new Date();
-            this.render();
+            app.render();
+            this.checkBudget(); // Trigger Warning Check
         },
 
 
+        editSavingsGoal() {
+            const newSavingsGoal = prompt("Wie viel möchtest du diesen Monat als Reserve sparen?", app.state.savingsGoal);
+            if (newSavingsGoal !== null) {
+                app.state.savingsGoal = parseFloat(newSavingsGoal) || 0;
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                app.render();
+            }
+        },
+
+        editSavingsBalance() {
+            const newBalanceValue = prompt("Aktueller Stand deines Sparkontos (€):", app.state.savingsBalance);
+            if (newBalanceValue !== null) {
+                app.state.savingsBalance = parseFloat(newBalanceValue) || 0;
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                app.render();
+            }
+        },
+
+        depositToSavings(amount, source = "Monats-Überschuss") {
+            if (amount <= 0) return;
+            if (confirm(`Möchtest du ${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} auf dein Sparkonto einzahlen?`)) {
+                app.state.savingsBalance += amount;
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                app.render();
+                app.notify("Sparkonto Update", `${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} wurden eingezahlt.`);
+            }
+        },
+
         editBudget() {
-            const newBudget = prompt('Bitte gib dein monatliches Budget ein (€):', app.state.monthlyBudget);
+            const newBudget = prompt('Bitte gib dein monatliches Budget Limit ein (€):', app.state.monthlyBudget);
             if (newBudget !== null) {
                 const b = parseFloat(newBudget);
                 app.state.monthlyBudget = isNaN(b) ? 0 : b;
                 localStorage.setItem('moltbot_budget', app.state.monthlyBudget);
-                this.render();
+                app.render();
+            }
+        },
+
+        editBudgetWarning() {
+            const newLimit = prompt('Ab welchem Restbetrag soll ich dich warnen? (€):', app.state.budgetWarningLimit);
+            if (newLimit !== null) {
+                const l = parseFloat(newLimit);
+                app.state.budgetWarningLimit = isNaN(l) ? 0 : l;
+                localStorage.setItem('moltbot_budget_warning', app.state.budgetWarningLimit);
+                app.render();
+            }
+        },
+
+        checkBudget() {
+            if (app.state.monthlyBudget <= 0) return;
+
+            const currentMonth = new Date().toISOString().substring(0, 7);
+            const monthlyExpenses = app.state.finance
+                .filter(e => e.date.startsWith(currentMonth) && e.type === 'expense')
+                .reduce((acc, curr) => acc + curr.amount, 0);
+
+            const remaining = app.state.monthlyBudget - monthlyExpenses;
+
+            if (remaining <= 0) {
+                app.notify("Budget Alarm! 🚨", "Du hast dein monatliches Budget Limit erreicht oder überschritten!", "danger");
+                if (window.vibrate) window.vibrate([200, 100, 200]);
+            } else if (remaining <= app.state.budgetWarningLimit) {
+                app.notify("Budget Warnung! ⚠️", `Dein Budget neigt sich dem Ende zu. Nur noch ${remaining.toFixed(2)}€ übrig.`, "warning");
             }
         },
 
         deleteEntry(id) {
-            if (confirm("Ausgabe wirklich löschen?")) {
-                app.state.finance = app.state.finance.filter(e => e.id !== id);
-                app.saveLocal();
-                this.render();
-                if (app.sync && app.sync.push) app.sync.push();
+            if (confirm("Eintrag wirklich löschen?")) {
+                const entry = app.state.finance.find(e => e.id === id);
+                if (entry) {
+                    entry.deleted = true;
+                    entry.updatedAt = Date.now();
+                    app.saveLocal();
+                    if (app.sync && app.sync.push) app.sync.push();
+                    app.render();
+                }
             }
+        },
+
+        editEntry(id) {
+            const e = app.state.finance.find(entry => entry.id === id);
+            if (!e) return;
+
+            const newSource = prompt("Beschreibung:", e.source);
+            if (newSource === null) return;
+            const newAmountStr = prompt("Betrag in €:", e.amount);
+            if (newAmountStr === null) return;
+            const newDate = prompt("Datum (JJJJ-MM-TT):", e.date);
+            if (newDate === null) return;
+            const newType = confirm(`Ist dies eine EINNAHME?\n\n(OK = Einnahme, Abbrechen = Ausgabe)`) ? 'income' : 'expense';
+
+            e.source = newSource;
+            e.amount = parseFloat(newAmountStr) || 0;
+            e.date = newDate;
+            e.type = newType;
+            e.updatedAt = Date.now();
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+            app.render();
         },
 
         clearAll() {
             if (confirm('Möchtest du wirklich den gesamten Finanzverlauf löschen?')) {
-                app.state.finance = [];
+                const now = Date.now();
+                app.state.finance.forEach(e => {
+                    e.deleted = true;
+                    e.updatedAt = now;
+                });
                 app.saveLocal();
-                this.render();
                 if (app.sync && app.sync.push) app.sync.push();
+                app.render();
             }
         },
 
@@ -1977,40 +2548,72 @@ const app = {
             // Today's start
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
             // Start of this week (Monday)
-            const currentDay = now.getDay();
-            const diff = now.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
-            const weekStart = new Date(now.setDate(diff)).setHours(0, 0, 0, 0);
+            const freshNowForWeek = new Date();
+            const currentDay = freshNowForWeek.getDay();
+            const diff = freshNowForWeek.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+            const weekStart = new Date(new Date(freshNowForWeek).setDate(diff)).setHours(0, 0, 0, 0);
 
-            // Re-fetch now because setDate mutates
-            const freshNow = new Date();
-
-            // Calculate Stats (tracking expenses)
+            // Calculate Stats
             let dailyExpenses = 0;
             let weeklyExpenses = 0;
             let monthlyExpenses = 0;
-            let yearlyExpenses = 0;
+            let monthlyIncome = 0;
+            let yearlyBalance = 0;
+            let bookedFixedExpenses = 0;
 
             app.state.finance.forEach(e => {
+                if (e.deleted) return;
                 const d = new Date(e.date);
                 const time = d.getTime();
+                const isIncome = e.type === 'income';
 
                 if (d.getFullYear() === currentYear) {
-                    yearlyExpenses += e.amount;
+                    yearlyBalance += isIncome ? e.amount : -e.amount;
                     if (d.getMonth() === currentMonth) {
-                        monthlyExpenses += e.amount;
+                        if (isIncome) monthlyIncome += e.amount;
+                        else {
+                            monthlyExpenses += e.amount;
+                            if (e.source && e.source.startsWith('FIX:')) {
+                                bookedFixedExpenses += e.amount;
+                            }
+                        }
                     }
                 }
 
-                if (time >= todayStart) {
+                if (time >= todayStart && !isIncome) {
                     dailyExpenses += e.amount;
                 }
 
-                if (time >= weekStart) {
+                if (time >= weekStart && !isIncome) {
                     weeklyExpenses += e.amount;
                 }
             });
 
-            const remaining = app.state.monthlyBudget - monthlyExpenses;
+            // Variable Expenses = All expenses that are NOT fixed costs
+            const variableExpenses = monthlyExpenses - bookedFixedExpenses;
+
+            const balance = monthlyIncome - monthlyExpenses;
+            const remainingBudget = app.state.monthlyBudget - monthlyExpenses;
+
+            // Calculate Fixed Costs Plan
+            let plannedFixedExpenses = 0;
+            let plannedFixedIncome = 0;
+            app.state.fixedCosts.forEach(f => {
+                if (f.type === 'income') plannedFixedIncome += f.amount;
+                else plannedFixedExpenses += f.amount;
+            });
+
+            // "Netto" calculation based on MASTER PLAN (Templates)
+            const nettoPlan = plannedFixedIncome - plannedFixedExpenses;
+
+            // "Verfügbar" calculation: Planned Netto - Already spent variable costs - Savings Goal
+            // This tells the user how much of their PLANNED profit is still left after daily spending
+            const totalAvailable = nettoPlan - variableExpenses - app.state.savingsGoal;
+
+            // Intelligent Daily Budget Calculation
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const remainingDays = lastDayOfMonth - now.getDate() + 1; // Includes today
+            const dailyLimit = totalAvailable > 0 ? (totalAvailable / remainingDays) : 0;
 
             // Update UI
             if (document.getElementById('finTodayTotal')) {
@@ -2020,43 +2623,117 @@ const app = {
                 document.getElementById('finWeekTotal').textContent = weeklyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
             }
 
-            document.getElementById('finTotalIncome').textContent = monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            if (document.getElementById('finTotalIncome')) {
+                // Now showing the PLANNED income from fixed costs list
+                document.getElementById('finTotalIncome').textContent = plannedFixedIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+            if (document.getElementById('finTotalExpenses')) {
+                document.getElementById('finTotalExpenses').textContent = monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+            if (document.getElementById('finVariableExpenses')) {
+                document.getElementById('finVariableExpenses').textContent = variableExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+            if (document.getElementById('finFixedPlanDisplay')) {
+                document.getElementById('finFixedPlanDisplay').textContent = '-' + plannedFixedExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                document.getElementById('finFixedPlanDisplay').style.color = 'var(--danger)';
+            }
+            if (document.getElementById('finNetto')) {
+                const nettoEl = document.getElementById('finNetto');
+                // Now showing the fixed Netto from the plan
+                nettoEl.textContent = (nettoPlan < 0 ? '-' : '+') + Math.abs(nettoPlan).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                nettoEl.style.color = nettoPlan < 0 ? 'var(--danger)' : 'var(--success)';
+            }
+            if (document.getElementById('finSavingsGoal')) {
+                document.getElementById('finSavingsGoal').textContent = app.state.savingsGoal.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+
+            // Automatic Savings Calculation: Historical Balance + Current Month Balance
+            const currentMonthBalance = monthlyIncome - monthlyExpenses;
+            const totalSavingsAutomatic = app.state.savingsBalance + currentMonthBalance;
+
+            if (document.getElementById('finSavingsBalance')) {
+                document.getElementById('finSavingsBalance').textContent = totalSavingsAutomatic.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+
+            if (document.getElementById('finDailyAvailable')) {
+                const dailyEl = document.getElementById('finDailyAvailable');
+                dailyEl.textContent = (totalAvailable < 0 ? '-' : '+') + Math.abs(totalAvailable).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                dailyEl.style.color = totalAvailable < 0 ? 'var(--danger)' : 'var(--success)';
+            }
+
+            // New: Daily Intelligent Limit
+            if (document.getElementById('finDailyLimit')) {
+                const limitEl = document.getElementById('finDailyLimit');
+                limitEl.textContent = dailyLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                limitEl.style.color = dailyLimit <= 0 ? 'var(--danger)' : 'var(--primary)';
+            }
+            if (document.getElementById('finDaysLeft')) {
+                document.getElementById('finDaysLeft').textContent = `noch ${remainingDays} Tage im Monat`;
+            }
+
+            if (document.getElementById('finBalance')) {
+                const balanceEl = document.getElementById('finBalance');
+                balanceEl.textContent = (balance < 0 ? '-' : '+') + Math.abs(balance).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                balanceEl.style.color = balance < 0 ? 'var(--danger)' : 'var(--success)';
+            }
+
             document.getElementById('finTotalBudget').textContent = app.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-            document.getElementById('finRemaining').textContent = (remaining < 0 ? '-' : '') + Math.abs(remaining).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-            document.getElementById('finYearTotal').textContent = yearlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            document.getElementById('finRemaining').textContent = (remainingBudget < 0 ? '-' : '') + Math.abs(remainingBudget).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+
+            const yearTotalEl = document.getElementById('finYearTotal');
+            if (yearTotalEl) {
+                yearTotalEl.textContent = (yearlyBalance < 0 ? '-' : '+') + Math.abs(yearlyBalance).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                yearTotalEl.style.color = yearlyBalance < 0 ? 'var(--danger)' : 'var(--success)';
+            }
+
+            if (document.getElementById('finWarningLimit')) {
+                document.getElementById('finWarningLimit').textContent = app.state.budgetWarningLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+            }
+
+            // Update settings inputs if they exist
+            if (document.getElementById('settingsMonthlyBudget')) {
+                document.getElementById('settingsMonthlyBudget').value = app.state.monthlyBudget;
+            }
+            if (document.getElementById('settingsBudgetWarning')) {
+                document.getElementById('settingsBudgetWarning').value = app.state.budgetWarningLimit;
+            }
 
             // Apply warning color if budget is exceeded
             const remainingEl = document.getElementById('finRemaining');
             if (remainingEl) {
-                remainingEl.style.color = remaining < 0 ? 'var(--danger)' : 'var(--text-bright)';
+                remainingEl.style.color = remainingBudget < 0 ? 'var(--danger)' : (remainingBudget <= app.state.budgetWarningLimit ? 'var(--warning)' : 'var(--text-bright)');
             }
 
-            // Render Table (Expenses)
-            const sorted = [...app.state.finance].sort((a, b) => new Date(b.date) - new Date(a.date));
+            // Render Table (Filter out deleted entries)
+            const sorted = [...app.state.finance]
+                .filter(e => !e.deleted)
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
             tableBody.innerHTML = sorted.map(e => `
-                <tr class="contact-row">
-                    <td>${new Date(e.date).toLocaleDateString('de-DE')}</td>
-                    <td>${e.source}</td>
-                    <td class="text-danger" style="font-weight:600;">- ${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</td>
-                    <td>
-                        <button class="btn-icon-danger" onclick="app.finance.deleteEntry('${e.id}')">
-                            <i data-lucide="trash-2" size="16"></i>
+                <tr class="contact-row" style="border-bottom: 1px solid var(--glass-border);">
+                    <td style="padding: 16px; color: var(--text-muted); font-size: 0.9rem;">${new Date(e.date).toLocaleDateString('de-DE')}</td>
+                    <td style="padding: 16px; font-weight: 500;">${e.source}</td>
+                    <td class="${e.type === 'income' ? 'text-success' : 'text-danger'}" style="padding: 16px; font-weight: 700; text-align: right;">
+                        ${e.type === 'income' ? '+' : '-'} ${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                    </td>
+                    <td style="padding: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+                        <button class="btn-icon" onclick="app.finance.editEntry('${e.id}')" style="width: 32px; height: 32px; background: var(--bg-hover); border-radius: var(--radius-sm); border: none; color: var(--text-muted);">
+                            <i data-lucide="edit-3" size="14"></i>
+                        </button>
+                        <button class="btn-icon-danger" onclick="app.finance.deleteEntry('${e.id}')" style="width: 32px; height: 32px; border-radius: var(--radius-sm);">
+                            <i data-lucide="trash-2" size="14"></i>
                         </button>
                     </td>
                 </tr>
             `).join('');
 
             this.updateChart();
+            this.renderFixedCosts(); // New: Keep templates list updated
             if (window.lucide) lucide.createIcons();
         },
 
         updateChart() {
             const ctx = document.getElementById('financeChart');
             if (!ctx) return;
-
-            // Simplified data for a round (doughnut) chart
-            // Categories: Needs, Wants, Savings (or based on source)
-            // For now, let's group by source or just show a breakdown of expenses vs budget
 
             const now = new Date();
             const currentMonth = now.getMonth();
@@ -2066,8 +2743,9 @@ const app = {
             const sourceTotals = {};
 
             app.state.finance.forEach(e => {
+                if (e.deleted) return;
                 const d = new Date(e.date);
-                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+                if (d.getFullYear() === currentYear && d.getMonth() === currentMonth && e.type !== 'income') {
                     monthlyExpenses += e.amount;
                     sourceTotals[e.source] = (sourceTotals[e.source] || 0) + e.amount;
                 }
@@ -2079,7 +2757,7 @@ const app = {
 
             // Add remaining budget as a segment
             if (remaining > 0) {
-                labels.push('Verbleibend');
+                labels.push('Budget Frei');
                 values.push(remaining);
             }
 
@@ -2093,7 +2771,7 @@ const app = {
                         data: values,
                         backgroundColor: [
                             '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6',
-                            '#ec4899', '#64748b', '#22c55e', '#eab308'
+                            '#ec4899', '#64748b', '#22c55e', '#eab308', '#a1a1aa'
                         ],
                         borderWidth: 0,
                         hoverOffset: 10
@@ -2111,10 +2789,394 @@ const app = {
                                 usePointStyle: true,
                                 padding: 20
                             }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    const val = context.raw;
+                                    return `${context.label}: ${val.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}`;
+                                }
+                            }
                         }
                     }
                 }
             });
+        },
+
+        // --- FIXED COSTS (TEMPLATES) ---
+        addFixedCost() {
+            const name = document.getElementById('fixedCostName').value.trim();
+            const amount = parseFloat(document.getElementById('fixedCostAmount').value);
+            const type = document.getElementById('fixedCostType').value;
+
+            if (!name || isNaN(amount)) return;
+
+            // 1. Vorlage erstellen
+            app.state.fixedCosts.push({
+                id: Date.now().toString(),
+                name,
+                amount,
+                type
+            });
+
+            // 2. Sofort für den aktuellen Monat buchen
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            app.state.finance.push({
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                amount: amount,
+                date: dateStr,
+                type: type,
+                source: `FIX: ${name}`,
+                createdAt: Date.now()
+            });
+
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+
+            document.getElementById('fixedCostName').value = '';
+            document.getElementById('fixedCostAmount').value = '';
+
+            app.render();
+            app.notify("Fixkosten gespeichert", "Vorlage erstellt und für diesen Monat gebucht.", "success");
+        },
+
+        createBaseTemplates() {
+            const items = [
+                { name: 'Gehalt 💰', amount: 2500, type: 'income' },
+                { name: 'Miete/Wohnen 🏠', amount: 850, type: 'expense' },
+                { name: 'Strom/Wasser ⚡', amount: 120, type: 'expense' },
+                { name: 'Internet/Mobilfunk 🌐', amount: 50, type: 'expense' },
+                { name: 'Versicherung 🛡️', amount: 80, type: 'expense' },
+                { name: 'Einkaufen (Plan) 🛒', amount: 400, type: 'expense' },
+                { name: 'Tanken (Plan) 🚗', amount: 150, type: 'expense' }
+            ];
+
+            if (confirm("Möchtest du Standard-Vorlagen hinzufügen? Bereits vorhandene Vorlagen (gleicher Name) werden nicht doppelt erstellt.")) {
+                items.forEach(item => {
+                    if (!app.state.fixedCosts.find(f => f.name === item.name)) {
+                        app.state.fixedCosts.push({
+                            id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                            ...item
+                        });
+                    }
+                });
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                this.renderFixedCosts();
+                this.render();
+                app.notify("Setup abgeschlossen", "Deine Vorlagen wurden aktualisiert.");
+            }
+        },
+
+        deleteFixedCost(id) {
+            const index = app.state.fixedCosts.findIndex(f => f.id === id);
+            if (index > -1) {
+                app.state.fixedCosts.splice(index, 1);
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                app.render();
+            }
+        },
+
+        editFixedCost(id) {
+            const f = app.state.fixedCosts.find(cost => cost.id === id);
+            if (!f) return;
+
+            const newName = prompt("Name der Fixkosten:", f.name);
+            if (newName === null) return;
+            const newAmountStr = prompt("Betrag in €:", f.amount);
+            if (newAmountStr === null) return;
+
+            f.name = newName;
+            f.amount = parseFloat(newAmountStr) || 0;
+
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+            app.render();
+        },
+
+        checkAndApplyAutoFixedCosts() {
+            const now = new Date();
+            const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+
+            // 1. Check if already marked as applied via Month-Key
+            if (app.state.lastFixedCostsMonth === currentMonthKey) return;
+
+            // Archivieren der alten Daten, bevor der neue Monat startet
+            this.archiveFinance();
+
+            // NEW: Auto-Harvest Savings from Previous Month before starting new one
+            if (app.state.lastFixedCostsMonth) {
+                const [y, m] = app.state.lastFixedCostsMonth.split('-').map(Number);
+                let prevMonthIncome = 0;
+                let prevMonthExpenses = 0;
+
+                app.state.finance.forEach(e => {
+                    if (e.deleted) return;
+                    const d = new Date(e.date);
+                    if (d.getFullYear() === y && d.getMonth() === (m - 1)) {
+                        if (e.type === 'income') prevMonthIncome += e.amount;
+                        else prevMonthExpenses += e.amount;
+                    }
+                });
+
+                const prevBalance = prevMonthIncome - prevMonthExpenses;
+                if (prevBalance > 0) {
+                    console.log(`Auto-Harvesting ${prevBalance} € from last month into Savings Account.`);
+                    app.state.savingsBalance += prevBalance;
+                }
+            }
+
+            // 2. Extra Safety: Check if entries starting with "FIX:" already exist for this month
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+            const entriesExist = app.state.finance.some(e => {
+                const d = new Date(e.date);
+                return !e.deleted &&
+                    d.getFullYear() === currentYear &&
+                    d.getMonth() === currentMonth &&
+                    e.source.startsWith('FIX:');
+            });
+
+            if (entriesExist) {
+                app.state.lastFixedCostsMonth = currentMonthKey;
+                app.saveLocal();
+                return;
+            }
+
+            // If no templates, just update the tracker to current month
+            if (!app.state.fixedCosts || app.state.fixedCosts.length === 0) {
+                app.state.lastFixedCostsMonth = currentMonthKey;
+                app.saveLocal();
+                return;
+            }
+
+            console.log(`Auto-Applying Fixed Costs for ${currentMonthKey}`);
+
+            // Create the first-of-month date string
+            const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+            app.state.fixedCosts.forEach(f => {
+                app.state.finance.push({
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                    amount: f.amount,
+                    date: dateStr,
+                    type: f.type,
+                    source: `FIX: ${f.name}`,
+                    createdAt: Date.now()
+                });
+            });
+
+            app.state.lastFixedCostsMonth = currentMonthKey;
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+
+            if (app.state.view === 'finance') this.render();
+
+            app.notify("Automatischer Finanzplaner", `${app.state.fixedCosts.length} Fixkosten wurden für diesen Monat automatisch gebucht.`);
+        },
+
+        applyFixedCosts() {
+            if (app.state.fixedCosts.length === 0) {
+                alert("Du hast noch keine Fixkosten-Vorlagen erstellt.");
+                return;
+            }
+
+            if (!confirm(`Möchtest du deinen Finanzplan für diesen Monat aktualisieren? Bestehende Buchungen werden aktualisiert, fehlende werden hinzugefügt.`)) return;
+
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            const dateStr = now.toISOString().split('T')[0];
+
+            let updatedCount = 0;
+            let addedCount = 0;
+
+            app.state.fixedCosts.forEach(f => {
+                const sourceName = `FIX: ${f.name}`;
+                // Suche nach bestehendem Eintrag diesen Monat
+                const existingEntry = app.state.finance.find(e => {
+                    if (e.deleted) return false;
+                    const d = new Date(e.date);
+                    return d.getMonth() === currentMonth &&
+                        d.getFullYear() === currentYear &&
+                        e.source === sourceName;
+                });
+
+                if (existingEntry) {
+                    // Update
+                    existingEntry.amount = f.amount;
+                    existingEntry.type = f.type;
+                    existingEntry.updatedAt = Date.now();
+                    updatedCount++;
+                } else {
+                    // Neu hinzufügen
+                    app.state.finance.push({
+                        id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                        amount: f.amount,
+                        date: dateStr,
+                        type: f.type,
+                        source: sourceName,
+                        createdAt: Date.now()
+                    });
+                    addedCount++;
+                }
+            });
+
+            app.saveLocal();
+            if (app.sync && app.sync.push) app.sync.push();
+
+            app.render();
+            app.notify("Finanzplan aktualisiert", `${updatedCount} Positionen aktualisiert, ${addedCount} neu hinzugefügt.`, "success");
+        },
+
+        archiveFinance() {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            // Filtere alle Einträge, die NICHT zum aktuellen Monat gehören
+            const toArchive = app.state.finance.filter(e => {
+                if (e.deleted) return false;
+                const d = new Date(e.date);
+                return d.getMonth() !== currentMonth || d.getFullYear() !== currentYear;
+            });
+
+            if (toArchive.length > 0) {
+                // In das Archiv verschieben
+                app.state.financeArchive = [...app.state.financeArchive, ...toArchive];
+
+                // Aus der aktiven Liste entfernen (indem wir nur aktuelle behalten)
+                app.state.finance = app.state.finance.filter(e => {
+                    if (e.deleted) return false;
+                    const d = new Date(e.date);
+                    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                });
+
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                console.log(`${toArchive.length} Einträge ins Archiv verschoben.`);
+            }
+        },
+
+        renderArchive() {
+            const list = document.getElementById('financeArchiveList');
+            if (!list) return;
+
+            if (!app.state.financeArchive || app.state.financeArchive.length === 0) {
+                list.innerHTML = '<div class="empty-state">Keine archivierten Einträge vorhanden.</div>';
+                return;
+            }
+
+            // Gruppiere nach Monat
+            const byMonth = {};
+            app.state.financeArchive.forEach(e => {
+                const date = new Date(e.date);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                if (!byMonth[monthKey]) byMonth[monthKey] = [];
+                byMonth[monthKey].push(e);
+            });
+
+            // Sortiere Monate absteigend
+            const sortedMonths = Object.keys(byMonth).sort().reverse();
+
+            list.innerHTML = sortedMonths.map(monthKey => {
+                const entries = byMonth[monthKey];
+                const [year, month] = monthKey.split('-');
+                const monthName = new Date(year, parseInt(month) - 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+
+                const totalIncome = entries.filter(e => e.type === 'income').reduce((sum, e) => sum + e.amount, 0);
+                const totalExpense = entries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+                const balance = totalIncome - totalExpense;
+
+                return `
+                    <div class="glass" style="padding: 15px; border-radius: var(--radius-md); border: 1px solid var(--glass-border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h4 style="margin: 0; font-size: 1rem; font-weight: 700;">${monthName}</h4>
+                            <div style="font-size: 0.85rem; color: ${balance >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 700;">
+                                ${balance >= 0 ? '+' : ''}${balance.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                            </div>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+                            ${entries.length} Einträge • 
+                            <span style="color: var(--success);">+${totalIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span> • 
+                            <span style="color: var(--danger);">-${totalExpense.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        </div>
+                        <details style="margin-top: 10px;">
+                            <summary style="cursor: pointer; font-size: 0.85rem; color: var(--primary); font-weight: 600;">Details anzeigen</summary>
+                            <div style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
+                                ${entries.sort((a, b) => new Date(b.date) - new Date(a.date)).map(e => `
+                                    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--glass-border); font-size: 0.85rem;">
+                                        <div>
+                                            <div style="font-weight: 600;">${e.source}</div>
+                                            <div style="color: var(--text-muted); font-size: 0.75rem;">${new Date(e.date).toLocaleDateString('de-DE')}</div>
+                                        </div>
+                                        <div style="font-weight: 700; color: ${e.type === 'income' ? 'var(--success)' : 'var(--danger)'};">
+                                            ${e.type === 'income' ? '+' : '-'}${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </details>
+                    </div>
+                `;
+            }).join('');
+
+            if (window.lucide) lucide.createIcons();
+        },
+
+        clearArchive() {
+            if (confirm('Möchtest du wirklich das gesamte Finanz-Archiv löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) {
+                app.state.financeArchive = [];
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                this.renderArchive();
+                app.notify("Archiv geleert", "Alle archivierten Transaktionen wurden gelöscht.", "success");
+            }
+        },
+
+        renderFixedCosts() {
+            const list = document.getElementById('fixedCostsList');
+            if (!list) return;
+
+            if (!app.state.fixedCosts || app.state.fixedCosts.length === 0) {
+                list.innerHTML = '<p class="text-muted" style="text-align:center; padding:20px; font-style:italic;">Noch keine Vorlagen vorhanden.</p>';
+                return;
+            }
+
+            list.innerHTML = app.state.fixedCosts.map(f => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-radius: var(--radius-md); background: var(--bg-element); border: 1px solid var(--glass-border); margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div style="width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${f.type === 'income' ? 'var(--success)' : 'var(--danger)'}; color: var(--bg-card);">
+                            <i data-lucide="${f.type === 'income' ? 'trending-up' : 'trending-down'}" size="18"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${f.name}</div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">${f.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-icon" onclick="app.finance.editFixedCost('${f.id}')" style="width: 36px; height: 36px; background: var(--bg-hover); border-radius: var(--radius-sm); border: none; color: var(--text-muted);">
+                            <i data-lucide="edit-3" size="16"></i>
+                        </button>
+                        <button class="btn-icon-danger" onclick="app.finance.deleteFixedCost('${f.id}')" style="width: 36px; height: 36px; border-radius: var(--radius-sm);">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            if (window.lucide) lucide.createIcons();
+        },
+
+        showToast(text, color) {
+            // Helper if not defined globally
+            if (app.alarm && app.alarm.showToast) {
+                app.alarm.showToast(text, color);
+            } else {
+                console.log("Toast:", text);
+            }
         }
     },
 
@@ -2155,6 +3217,13 @@ const app = {
 
             if (depTimeStr === currentTimeStr) isAnyUrgent = true;
 
+            // Check for phone
+            let phone = e.phone;
+            if (!phone) {
+                const contact = this.state.contacts.find(c => c.name && e.title.includes(c.name));
+                if (contact) phone = contact.phone;
+            }
+
             return `
                 <div style="display: flex; align-items: flex-start; gap: 12px; position: relative; padding-bottom: ${index === driveEvents.length - 1 ? '0' : '20px'};">
                     ${index !== driveEvents.length - 1 ? '<div style="position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: rgba(var(--primary-rgb), 0.2);"></div>' : ''}
@@ -2164,8 +3233,15 @@ const app = {
                     <div style="flex: 1;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${e.title}</div>
-                            <div style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; font-weight: 800;">
-                                Abfahrt: ${depTimeStr}
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                ${phone ? `
+                                    <a href="tel:${phone}" onclick="event.stopPropagation()" class="btn-icon-subtle" style="width: 28px; height: 28px; color: var(--success); background: rgba(var(--success-rgb), 0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                        <i data-lucide="phone" size="14"></i>
+                                    </a>
+                                ` : ''}
+                                <div style="background: rgba(var(--primary-rgb), 0.1); color: var(--primary); font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; font-weight: 800;">
+                                    Abfahrt: ${depTimeStr}
+                                </div>
                             </div>
                         </div>
                         <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 5px;">
@@ -2353,9 +3429,143 @@ const app = {
     },
 
     renderDashboard() {
+        const grid = document.querySelector('.dashboard-grid');
+        if (!grid) return;
+
+        // Clear children to re-render in specified order
+        grid.innerHTML = '';
+
+        // Definition of widgets and their container templates
+        const widgetTemplates = {
+            'special': '<div id="dashboardSpecialContainer" style="grid-column: 1 / -1; display:none;"></div>',
+            'drive': '<div id="dashboardDriveMode" style="grid-column: 1 / -1; display: none;"></div>',
+            'kpis': '<div id="dashboardBudgetWidget" style="grid-column: 1 / -1; display: none;"></div>',
+            'events': `
+                <div class="card glass next-events collapsible-card is-collapsed">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+                            <h3 style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin:0;">Termine & Wichtiges</h3>
+                            <span id="eventCountBadge" style="background: rgba(var(--primary-rgb), 0.15); color: var(--primary); padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; flex-shrink:0;">0</span>
+                            <button class="btn-icon-mini" onclick="event.stopPropagation(); app.editEvent()" 
+                                style="background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer; margin-left: 5px;">
+                                <i data-lucide="plus" size="18"></i>
+                            </button>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                            <button class="btn-text" style="font-size: 0.75rem; padding: 4px 8px;" onclick="event.stopPropagation(); app.navigateTo('calendar')">Alle ansehen</button>
+                            <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
+                        </div>
+                    </div>
+                    <div class="card-content" style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Urgent Section -->
+                        <div id="dashboardUrgentTodos" style="display:none;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border);">
+                                <i data-lucide="alert-circle" size="18" style="color:#ef4444;"></i>
+                                <h4 style="margin: 0; color:#ef4444; font-size: 0.9rem; font-weight: 700;">Dringend / Wichtig</h4>
+                            </div>
+                            <div id="dashboardUrgentList" style="display:flex; flex-direction:column; gap:8px;"></div>
+                        </div>
+                        
+                        <!-- Events Section -->
+                        <div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border);">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <i data-lucide="calendar" size="18" style="color:var(--primary);"></i>
+                                    <h4 style="margin: 0; color:var(--primary); font-size: 0.9rem; font-weight: 700;">Nächste Termine</h4>
+                                </div>
+                                <button class="btn-icon-mini" onclick="app.editEvent()" 
+                                    style="background: rgba(var(--primary-rgb), 0.1); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer;">
+                                    <i data-lucide="plus" size="14"></i>
+                                </button>
+                            </div>
+                            <div class="event-list" id="dashboardEventList">
+                                <div class="empty-state">Lade Termine...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`,
+            'mini_calendar': `
+                <div class="card glass mini-calendar collapsible-card">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <div style="display: flex; align-items: center; gap: 10px; width: 100%; justify-content: space-between;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h3 id="miniCalendarMonth">Kalender</h3>
+                                <button class="btn-icon-mini" onclick="event.stopPropagation(); app.editEvent()" 
+                                    style="background: rgba(var(--primary-rgb), 0.1); border-radius: 8px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer;">
+                                    <i data-lucide="plus" size="18"></i>
+                                </button>
+                            </div>
+                            <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
+                        </div>
+                    </div>
+                    <div class="card-content">
+                        <div class="calendar-grid small" id="miniCalendarGrid"></div>
+                    </div>
+                </div>`,
+            'quick_finance': `
+                <div class="card glass collapsible-card">
+                    <div class="card-header-toggle" onclick="app.toggleCard(this)">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <h3>Eintrag hinzufügen</h3>
+                            <i data-lucide="chevron-up" class="toggle-icon" size="20"></i>
+                        </div>
+                    </div>
+                    <div class="card-content">
+                        <form onsubmit="app.finance.saveQuickAdd(event)" style="display: flex; flex-direction: column; gap: 12px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div class="form-group" style="margin: 0;">
+                                    <label style="font-size: 0.85rem; margin-bottom: 4px; display: block;">Betrag (€)</label>
+                                    <input type="number" id="quickFinAmount" step="0.01" placeholder="0.00" required 
+                                        style="width: 100%; padding: 10px; background: var(--bg-solid-2); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main);">
+                                </div>
+                                <div class="form-group" style="margin: 0;">
+                                    <label style="font-size: 0.85rem; margin-bottom: 4px; display: block;">Datum</label>
+                                    <input type="date" id="quickFinDate" required
+                                        style="width: 100%; padding: 10px; background: var(--bg-solid-2); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main);">
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div class="form-group" style="margin: 0;">
+                                    <label style="font-size: 0.85rem; margin-bottom: 4px; display: block;">Typ</label>
+                                    <select id="quickFinType" 
+                                        style="width: 100%; padding: 10px; background: var(--bg-solid-2); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main);">
+                                        <option value="expense">Ausgabe</option>
+                                        <option value="income">Einnahme</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin: 0;">
+                                    <label style="font-size: 0.85rem; margin-bottom: 4px; display: block;">Beschreibung</label>
+                                    <input type="text" id="quickFinSource" placeholder="z.B. Miete..." required
+                                        style="width: 100%; padding: 10px; background: var(--bg-solid-2); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-main);">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700;">
+                                <i data-lucide="plus" size="18"></i> Eintragen
+                            </button>
+                        </form>
+                    </div>
+                </div>`
+        };
+
+        // Create containers in order
+        this.state.widgetOrder.forEach(key => {
+            if (this.state.widgetVisibility[key] && widgetTemplates[key]) {
+                const temp = document.createElement('div');
+                temp.innerHTML = widgetTemplates[key];
+                const element = temp.firstElementChild;
+                grid.appendChild(element);
+
+                // Set initial display to block if it was hidden by template ID (except kpis/drive which are handled specifically)
+                if (element.id && !['dashboardBudgetWidget', 'dashboardDriveMode', 'dashboardSpecialContainer'].includes(element.id)) {
+                    element.style.display = 'block';
+                }
+            }
+        });
+
         const title = document.getElementById('dashboardWelcomeTitle');
+        const userAvatar = this.state.user.avatar || 'logo.svg';
         const pearLogo = `
-        <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="vertical-align: bottom; margin-left: 5px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
+        <svg width="24" height="24" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-left: 2px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
             <defs>
                 <linearGradient id="rainbowGradDash" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" style="stop-color:#FF0000;stop-opacity:1" />
@@ -2376,45 +3586,118 @@ const app = {
             <path d="M50,10 Q50,0 60,5 C55,8 52,10 50,10" fill="url(#rainbowGradDash)" />
         </svg>`;
 
-        if (title) title.innerHTML = `Willkommen zurück, ${this.state.user.name}! ${pearLogo}`;
+        if (title) {
+            title.style.display = 'flex';
+            title.style.alignItems = 'center';
+            title.style.gap = '15px';
+            title.innerHTML = `
+                <div class="avatar-hero-container" onclick="app.navigateTo('settings')" style="cursor: pointer; position: relative; flex-shrink: 0;">
+                    <div style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--primary); padding: 3px; background: rgba(var(--primary-rgb), 0.1); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3);">
+                        <img src="${userAvatar}" alt="Profil" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                    </div>
+                    <div style="position: absolute; bottom: 0; right: 0; width: 16px; height: 16px; background: var(--success); border: 2px solid #0a0c10; border-radius: 50%; box-shadow: 0 0 10px var(--success);"></div>
+                </div>
+                <div style="display: flex; flex-direction: column;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500; margin-bottom: -4px;">Willkommen zurück,</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-weight: 800; font-size: 1.8rem; background: linear-gradient(to right, #fff, var(--text-muted)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                            ${this.state.user.name.split(' ')[0]}
+                        </span>
+                        ${pearLogo}
+                    </div>
+                </div>
+            `;
+        }
 
-        // CALCULATE BUDGET FOR DASHBOARD WIDGET
+        // CALCULATE METRICS FOR DASHBOARD KPI GRID
         const budgetWidget = document.getElementById('dashboardBudgetWidget');
         if (budgetWidget) {
+            budgetWidget.style.display = 'block';
+
             const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+
+            // 1. Daily Expenses (only expenses)
+            let dailyExpenses = 0;
+            this.state.finance.forEach(e => {
+                if (!e.deleted && e.date === todayStr && e.type !== 'income') dailyExpenses += e.amount;
+            });
+
+            // 2. Monthly Stats (Income & Expenses)
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
+            let monthlyIncome = 0;
             let monthlyExpenses = 0;
+            let bookedFixedExpenses = 0;
             this.state.finance.forEach(e => {
+                if (e.deleted) return;
                 const d = new Date(e.date);
                 if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
-                    monthlyExpenses += e.amount;
+                    if (e.type === 'income') monthlyIncome += e.amount;
+                    else {
+                        monthlyExpenses += e.amount;
+                        if (e.source && e.source.startsWith('FIX:')) {
+                            bookedFixedExpenses += e.amount;
+                        }
+                    }
                 }
             });
-            const remaining = this.state.monthlyBudget - monthlyExpenses;
-            const percent = Math.min(100, Math.max(0, (monthlyExpenses / this.state.monthlyBudget) * 100));
-            const isOver = remaining < 0;
 
-            budgetWidget.style.display = 'block'; // Ensure it's visible
+            // Variable Expenses (Daily spendings)
+            const variableExpenses = monthlyExpenses - bookedFixedExpenses;
+
+            // Calculate Fixed Costs Plan for Intelligence
+            let plannedFixedExpenses = 0;
+            app.state.fixedCosts.forEach(f => {
+                if (f.type !== 'income') plannedFixedExpenses += f.amount;
+            });
+
+            const nettoRemaining = monthlyIncome - plannedFixedExpenses;
+            const totalAvailable = nettoRemaining - variableExpenses - app.state.savingsGoal;
+
+            // Intelligent Daily Budget
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const remainingDays = lastDayOfMonth - now.getDate() + 1;
+            const dailyLimit = totalAvailable > 0 ? (totalAvailable / remainingDays) : 0;
+
+            const budgetPercent = this.state.monthlyBudget > 0 ? Math.min(100, Math.round((monthlyExpenses / this.state.monthlyBudget) * 100)) : 0;
+            const isOverBudget = this.state.monthlyBudget > 0 && monthlyExpenses > this.state.monthlyBudget;
+
+            // 3. Next Appointment
+            const futureEvents = this.getFilteredEvents().filter(e => e.date >= todayStr && e.category !== 'holiday').sort((a, b) => a.date.localeCompare(b.date) || (a.time || '00:00').localeCompare(b.time || '00:00'));
+            const nextEvent = futureEvents[0];
+
+            const remainingBudget = this.state.monthlyBudget - monthlyExpenses;
+            const isWarning = remainingBudget > 0 && remainingBudget <= this.state.budgetWarningLimit;
+
             budgetWidget.innerHTML = `
-            <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOver ? 'rgba(239, 68, 68, 0.4)' : 'var(--glass-border)'}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
-                <div class="card-header-toggle" onclick="app.toggleCard(this)">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="icon-circle" style="background: ${isOver ? 'rgba(239,68,68,0.1)' : 'rgba(var(--primary-rgb), 0.1)'}; color: ${isOver ? '#ef4444' : 'var(--primary)'}; width: 36px; height: 36px; border-radius: 10px;">
-                            <i data-lucide="wallet" size="18"></i>
+            <div class="card glass animate-in collapsible-card is-collapsed" style="margin-bottom: 20px; border: 1px solid ${isOverBudget ? 'rgba(239, 68, 68, 0.4)' : (isWarning ? 'rgba(245, 158, 11, 0.4)' : 'var(--glass-border)')}; background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(0,0,0,0));">
+                <div class="card-header-toggle" onclick="app.toggleCard(this)" style="position: relative;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+                        <div class="icon-circle" style="background: ${isOverBudget ? 'rgba(239,68,68,0.1)' : (isWarning ? 'rgba(245,158,11,0.1)' : 'rgba(var(--primary-rgb), 0.1)')}; color: ${isOverBudget ? '#ef4444' : (isWarning ? '#f59e0b' : 'var(--primary)')}; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;">
+                            <i data-lucide="${isOverBudget ? 'alert-octagon' : (isWarning ? 'bell-ring' : 'wallet')}" size="18"></i>
                         </div>
-                        <div>
-                            <h3 style="font-size: 1rem; margin: 0;">Monats-Budget</h3>
-                            <small style="color: var(--text-muted);">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
+                        <div style="overflow: hidden;">
+                            <h3 style="font-size: 0.95rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                ${isOverBudget ? 'Budget Überschritten! 🚨' : (isWarning ? 'Budget wird knapp! ⚠️' : 'Finanz-Status')}
+                            </h3>
+                            <small style="color: var(--text-muted); white-space: nowrap; font-size: 0.75rem;">${now.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</small>
                         </div>
                     </div>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <button class="btn-text highlight" style="font-size: 0.75rem; padding: 5px 10px; background: rgba(var(--primary-rgb), 0.1); border-radius: 8px;" onclick="event.stopPropagation(); app.finance.openQuickAdd()">
-                            <i data-lucide="plus-circle" size="14"></i> Ausgabe
-                        </button>
-                        <div style="text-align: right;" class="hide-on-collapse">
-                            <div style="font-size: 1.1rem; font-weight: 800; color: ${isOver ? '#ef4444' : 'var(--text-main)'};">
-                                ${remaining.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                    
+                    <!-- Quick Add Button -->
+                    <button onclick="event.stopPropagation(); app.finance.openQuickAdd();" 
+                        class="dashboard-finance-add-btn"
+                        title="Schnell Ausgabe/Einnahme hinzufügen"
+                        style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); border: none; color: white; font-size: 1.4rem; font-weight: 300; cursor: pointer; box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin: 0 8px;">
+                        +
+                    </button>
+                    
+                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                        <div style="text-align: right; margin-right: 5px;">
+                            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">Verf. für restl. Monat 🗓️:</div>
+                            <div style="font-size: 1.1rem; font-weight: 800; color: ${isOverBudget ? '#ef4444' : (isWarning ? '#f59e0b' : 'var(--success)')};">
+                                ${totalAvailable.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
                             </div>
                         </div>
                         <i data-lucide="chevron-down" class="toggle-icon" size="20"></i>
@@ -2422,25 +3705,57 @@ const app = {
                 </div>
                 
                 <div class="card-content">
-                    <div style="height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; margin-top: 15px;">
-                        <div style="width: ${percent}%; height: 100%; background: ${isOver ? '#ef4444' : 'var(--primary)'}; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                    <!-- Warning Message -->
+                    ${isOverBudget ? `
+                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: #ef4444; display: flex; align-items: center; gap: 10px;">
+                            <i data-lucide="alert-circle" size="16"></i>
+                            <span>Achtung: Du hast dein Limit um ${Math.abs(remainingBudget).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} überschritten!</span>
+                        </div>
+                    ` : (isWarning ? `
+                        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: #f59e0b; display: flex; align-items: center; gap: 10px;">
+                            <i data-lucide="info" size="16"></i>
+                            <span>Hinweis: Du hast nur noch ${remainingBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} bis zum Monatsende.</span>
+                        </div>
+                    ` : '')}
+
+                    <!-- KPIs Row -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div style="background: var(--bg-element); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--glass-border);">
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Tageslimit</small>
+                            <div style="font-weight: 700; color: var(--primary); font-size: 1.1rem;">${dailyLimit.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                        </div>
+                        <div style="background: var(--bg-element); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--glass-border);">
+                            <small style="display: block; color: var(--text-muted); margin-bottom: 4px; font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">Ausgaben Heute</small>
+                            <div style="font-weight: 700; color: var(--danger); font-size: 1.1rem;">${dailyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Section -->
+                    <div style="height: 10px; background: var(--bg-element); border-radius: 5px; overflow: hidden; margin-bottom: 12px;">
+                        <div style="width: ${budgetPercent}%; height: 100%; background: ${isOverBudget ? 'var(--danger)' : (isWarning ? 'var(--warning)' : 'var(--primary)')}; transition: width 1s cubic-bezier(0.2, 0, 0, 1);"></div>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted);">
-                        <span>Ausgegeben: ${monthlyExpenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
-                        <span>Ziel: ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        <span>Gesamt-Eingänge: ${monthlyIncome.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
+                        <span>Budget-Limit (Gehalt): ${this.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</span>
                     </div>
                 </div>
             </div>
-        `;
-
+            `;
             if (window.lucide) lucide.createIcons();
         }
+
 
         // Auto-archive past events before rendering dashboard
         this.archivePastEvents();
 
         // Render Drive Mode widget
         this.renderDriveMode();
+
+        // Set today's date in quick finance form
+        const quickFinDate = document.getElementById('quickFinDate');
+        if (quickFinDate && !quickFinDate.value) {
+            quickFinDate.value = new Date().toISOString().split('T')[0];
+        }
 
         const list = document.getElementById('dashboardEventList');
         if (!list) return;
@@ -2489,11 +3804,11 @@ const app = {
 
         if (specials.length > 0) {
             specialHtml += `
-                <div class="special-reminders animate-in" style="margin-bottom: 25px; background: linear-gradient(135deg, #ffd700, #ff9f43); padding: 20px; border-radius: 20px; color: #000; box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3);">
-                    <div style="display:flex; align-items:center; gap:15px; margin-bottom:15px;">
-                        <i data-lucide="party-popper" size="32"></i>
+                <div class="special-reminders animate-in" style="margin-bottom: 24px; background: var(--bg-element); border: 2px solid var(--primary); padding: 24px; border-radius: var(--radius-lg);">
+                    <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
+                        <i data-lucide="party-popper" size="28" style="color: var(--primary);"></i>
                         <div>
-                            <h3 style="margin:0; font-size:1.4rem;">Heute ist was Besonderes!</h3>
+                            <h3 style="margin:0; font-size:1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">Besondere Anlässe</h3>
                         </div>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:10px;">
@@ -2508,11 +3823,11 @@ const app = {
                 }
 
                 return `
-                            <div style="background:rgba(255,255,255,0.2); padding:10px 15px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-weight:600; font-size:1.1rem;">${s.title} ${s.category === 'birthday' ? '🎂' : '🎊'}</span>
+                            <div style="background: var(--bg-card); padding: 14px 20px; border-radius: var(--radius-md); display: flex; border: 1px solid var(--glass-border); justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 600; font-size: 1rem; color: var(--text-main);">${s.title} ${s.category === 'birthday' ? '🎂' : '🎊'}</span>
                                 ${phone ? `
-                                    <a href="tel:${phone}" class="btn-primary" style="background:white; color:#d97706; border:none; padding:8px 15px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.1); display:flex; align-items:center; gap:5px; text-decoration:none;">
-                                        <i data-lucide="phone" size="16"></i> Anrufen
+                                    <a href="tel:${phone}" class="btn-primary" style="min-height: 40px; padding: 0 16px; font-size: 0.9rem; text-decoration: none;">
+                                        <i data-lucide="phone" size="14"></i> Anrufen
                                     </a>
                                 ` : ''}
                             </div>
@@ -2596,21 +3911,17 @@ const app = {
             if (eventCard) {
                 eventCard.style.display = 'block';
                 eventCard.style.border = '1px solid var(--glass-border)';
-                eventCard.style.boxShadow = 'none';
             }
-            list.innerHTML = `<div class="empty-state" style="text-align:center; padding:30px; color:var(--text-muted);">
-                <i data-lucide="calendar-off" size="48" style="margin-bottom:10px; opacity:0.5;"></i>
-                <p>Keine anstehenden Termine.</p>
-                <button class="btn-text" onclick="app.editEvent()" style="margin-top:10px;">+ Termin erstellen</button>
+            list.innerHTML = `<div class="empty-state" style="text-align:center; padding:40px; color:var(--text-muted);">
+                <i data-lucide="calendar-off" size="40" style="margin-bottom:12px; opacity:0.3;"></i>
+                <p style="font-size: 0.9rem;">Keine anstehenden Termine.</p>
+                <button class="btn-text" onclick="app.editEvent()" style="margin-top:12px;">+ Termin erstellen</button>
             </div>`;
         } else {
-            // Show the card and mark it green
+            // Show the card
             if (eventCard) {
                 eventCard.style.display = 'block';
-                // Green indicator that content is available
-                // Apply a distinct border and subtle glow
-                eventCard.style.border = '1px solid rgba(16, 185, 129, 0.6)';
-                eventCard.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.15)';
+                eventCard.style.border = '1px solid var(--glass-border)';
             }
 
             list.innerHTML = html + future.map(e => {
@@ -2618,52 +3929,91 @@ const app = {
                 const day = d.getDate();
                 const month = d.toLocaleString('de-DE', { month: 'short' });
 
-                const eventColor = e.color || 'var(--primary)';
+                const eventColor = this.getEventColor ? this.getEventColor(e) : (e.color || 'var(--primary)');
+                const isYellow = (eventColor === '#fbbf24' || eventColor === '#f59e0b' || eventColor === '#eab308');
+                const badgeTextColor = isYellow ? '#000000' : '#ffffff';
+
                 const itemStyle = `
                     cursor: pointer; 
                     position: relative; 
-                    border-left: 4px solid ${eventColor};
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 5px ${eventColor}20;
+                    background: linear-gradient(135deg, ${eventColor}cc, ${eventColor});
+                    border-radius: 12px;
+                    padding: 12px;
+                    margin-bottom: 8px;
+                    color: ${badgeTextColor};
+                    box-shadow: 0 4px 15px -3px ${eventColor}66, 0 2px 4px -2px rgba(0,0,0,0.1);
+                    border: 1px solid rgba(255,255,255,0.1);
                 `;
 
-                // Check for phone
+                // Check for phone & email
                 let phone = e.phone;
-                if (!phone) {
+                let email = e.email;
+                if (!phone || !email) {
                     const contact = this.state.contacts.find(c => c.name && e.title.includes(c.name));
-                    if (contact) phone = contact.phone;
+                    if (contact) {
+                        if (!phone) phone = contact.phone;
+                        if (!email) email = contact.email;
+                    }
                 }
 
                 return `
-                    <div class="event-item" onclick="app.editEvent('${e.id}')" style="${itemStyle}">
-                        <div class="event-time-box">
-                            <span class="event-day">${day}</span>
-                            <span class="event-month">${month}</span>
+                    <div class="event-item" onclick="app.editEvent('${e.id}')" style="${itemStyle} display:grid; grid-template-columns: auto 1fr auto; align-items:center; gap:16px;">
+                        
+                        <div class="event-time-box" style="background:rgba(255,255,255,0.25); color:${badgeTextColor}; padding:8px 14px; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:55px; backdrop-filter: blur(4px);">
+                            <span class="event-day" style="font-weight:900; font-size:1.25rem; line-height:1; letter-spacing: -0.5px;">${day}</span>
+                            <span class="event-month" style="font-size:0.75rem; text-transform:uppercase; font-weight:700; opacity:0.95; letter-spacing: 0.5px; margin-top: 2px;">${month}</span>
                         </div>
-                        <div class="event-info">
-                            <h4 style="color:var(--text-main); font-weight:700;">${e.title}</h4>
-                            <p style="opacity:0.8;">${e.time || '--:--'} Uhr ${e.location ? `• ${e.location}` : ''}</p>
+
+                        <div class="event-info" style="min-width:0; display:flex; flex-direction:column; gap:4px;">
+                            <h4 style="color:${badgeTextColor}; font-weight:800; font-size:1.1rem; margin:0; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
+                                ${e.title}
+                            </h4>
+                            <div style="font-size:0.9rem; opacity:0.9; color:${badgeTextColor}; display:flex; align-items:center; flex-wrap: wrap; gap:8px; font-weight: 500;">
+                                <div style="display:flex; align-items:center; gap:4px;">
+                                    <i data-lucide="clock" size="14"></i> 
+                                    <span>${e.time || 'Ganztägig'}</span>
+                                </div>
+                                ${e.location ? `
+                                <div style="display:flex; align-items:center; gap:4px; opacity: 0.9;">
+                                    <span style="opacity: 0.6;">•</span>
+                                    <span>${e.location}</span>
+                                </div>` : ''}
+                                ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="12" style="opacity:0.8;"></i>` : ''}
+                            </div>
                         </div>
-                        <div style="display:flex; align-items:center; gap:12px; margin-left:auto;">
+
+                        <div style="display:flex; align-items:center; gap:8px;">
                             ${phone ? `
-                                <a href="tel:${phone}" class="icon-btn-subtle" onclick="event.stopPropagation()" title="Anrufen" style="color:#d97706; background:rgba(217,119,6,0.1);">
-                                    <i data-lucide="phone" size="20"></i>
+                                <a href="tel:${phone}" onclick="event.stopPropagation()" title="Anrufen" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
+                                    <i data-lucide="phone" size="18"></i>
+                                </a>
+                            ` : ''}
+                            ${email ? `
+                                <a href="mailto:${email}" onclick="event.stopPropagation()" title="E-Mail" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
+                                    <i data-lucide="mail" size="18"></i>
                                 </a>
                             ` : ''}
                             ${e.location ? `
-                                <button class="icon-btn-subtle" onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte öffnen">
-                                    <i data-lucide="map" size="20"></i>
+                                <button onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
+                                    <i data-lucide="map" size="18"></i>
                                 </button>
                             ` : ''}
-                            <div class="event-category-badge category-${e.category}" style="${e.color ? `background:${e.color}; color:white;` : ''}">${e.category}</div>
+                            
                             <div class="event-hover-actions">
-                                <button onclick="event.stopPropagation(); app.deleteEvent('${e.id}')" class="btn-delete-subtle" title="Löschen">
+                                <button onclick="event.stopPropagation(); app.deleteEvent('${e.id}')" title="Löschen" style="color:${badgeTextColor}; background:rgba(220,38,38,0.2); width: 36px; height: 36px; border-radius: 10px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
                                     <i data-lucide="trash-2" size="18"></i>
                                 </button>
                             </div>
                         </div>
                     </div>
-                `;
+    `;
             }).join('');
+        }
+
+        // Update event count badge
+        const eventCountBadge = document.getElementById('eventCountBadge');
+        if (eventCountBadge) {
+            eventCountBadge.textContent = future.length;
         }
 
         // Urgent Todos & Contacts Logic for Dashboard
@@ -2682,41 +4032,43 @@ const app = {
 
             // Render Urgent Contacts (First!)
             urgentHtml += urgentContacts.map(c => `
-                <div onclick="${c.phone ? `window.location.href='tel:${c.phone}'` : `app.navigateTo('contacts')`}" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.15); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <i data-lucide="${c.phone ? 'phone-call' : 'user'}" size="16" style="color:#ef4444;"></i>
-                        <span style="font-weight:700; font-size:0.9rem;">${c.name}</span>
-                    </div>
-                    ${c.phone ? '<span style="font-size:0.75rem; background:#ef4444; color:white; padding:2px 6px; border-radius:4px;">ANRUFEN!</span>' : '<span style="font-size:0.75rem; color:#ef4444;">Dringend</span>'}
+    <div class="urgent-item-accent" onclick="${c.phone ? `window.location.href='tel:${c.phone}'` : `app.navigateTo('contacts')`}">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="${c.phone ? 'phone-call' : 'user'}" size="18" style="color:#ef4444;"></i>
+            <span style="font-weight:700; font-size:1rem;">${c.name}</span>
+        </div>
+                    ${c.phone ? '<span class="urgent-badge-pill">ANRUFEN!</span>' : '<span style="font-size:0.75rem; color:#ef4444; font-weight:800;">DRINGEND</span>'}
                 </div>
-            `).join('');
+    `).join('');
 
             // Render Urgent Events
             urgentHtml += urgentEvents.map(e => `
-                <div onclick="app.editEvent('${e.id}')" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.1); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <i data-lucide="calendar-clock" size="16" style="color:#ef4444;"></i>
-                        <div style="display:flex; flex-direction:column;">
-                            <span style="font-weight:700; font-size:0.9rem;">${e.title}</span>
-                            <span style="font-size:0.7rem; opacity:0.8;">${new Date(e.date).toLocaleDateString('de-DE')} ${e.time || ''}</span>
-                        </div>
-                    </div>
+    <div class="urgent-item-accent" onclick="app.editEvent('${e.id}')">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <i data-lucide="calendar-clock" size="18" style="color:#ef4444;"></i>
+            <div style="display:flex; flex-direction:column;">
+                <span style="font-weight:700; font-size:1rem;">${e.title}</span>
+                <span style="font-size:0.8rem; opacity:0.9;">Heute ${e.time || ''}</span>
+            </div>
+        </div>
                     ${e.phone ?
-                    `<a href="tel:${e.phone}" onclick="event.stopPropagation()" style="font-size:0.75rem; background:#ef4444; color:white; padding:4px 8px; border-radius:4px; text-decoration:none; display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="12"></i> ${e.phone}</a>`
-                    : `<span style="font-size:0.75rem; color:#ef4444; border:1px solid #ef4444; padding:1px 5px; border-radius:4px;">TERMIN</span>`
+                    `<a href="tel:${e.phone}" class="urgent-badge-pill" onclick="event.stopPropagation()" style="text-decoration:none; display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="12"></i> ANRUFEN</a>`
+                    : `<span class="urgent-badge-pill">TERMIN</span>`
                 }
                 </div>
-            `).join('');
+    `).join('');
 
             // Render Urgent Todos
             urgentHtml += urgentTodos.map(t => `
-                <div onclick="app.navigateTo('todo')" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(239, 68, 68, 0.1); border-radius:8px; cursor:pointer; border-left: 3px solid #ef4444; margin-bottom:5px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <i data-lucide="check-square" size="16" style="color:#ef4444;"></i>
-                        <span style="font-weight:600; font-size:0.9rem;">${t.text}</span>
+    <div class="urgent-item-accent" onclick="app.navigateTo('todo')">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <i data-lucide="check-square" size="18" style="color:#ef4444;"></i>
+                        <span style="font-weight:700; font-size:1rem;">${t.text}</span>
                     </div>
+                    <span class="urgent-badge-pill">TODO</span>
                 </div>
-            `).join('');
+    `).join('');
+
 
             if (urgentTodos.length > 0 || urgentContacts.length > 0 || urgentEvents.length > 0) {
                 urgentContainer.style.display = 'block';
@@ -2761,7 +4113,7 @@ const app = {
         }
 
         container.innerHTML = favs.map(c => `
-            <div class="quick-contact-item" title="${c.name}">
+    <div class="quick-contact-item" title="${c.name}">
                 <div class="avatar-circle" onclick="app.contacts.edit('${c.id}')">
                     ${c.name.charAt(0).toUpperCase()}
                 </div>
@@ -2777,7 +4129,7 @@ const app = {
                     </button>
                 </div>
             </div>
-        `).join('');
+    `).join('');
 
         if (window.lucide) lucide.createIcons();
     },
@@ -2831,6 +4183,7 @@ const app = {
 
             const dayEvents = this.state.events.filter(e => !e.archived && this.isEventOnDate(e, currentCellDate));
             const hasEvent = dayEvents.length > 0;
+            const isEisverkauf = dayEvents.some(e => e.category === 'eisverkauf' || (e.title && e.title.toLowerCase().includes('eisverkauf')));
 
             let visualContent = `${d}`;
             if (hasEvent) {
@@ -2841,8 +4194,8 @@ const app = {
                 visualContent += `<div class="mini-event-dots">${dotsHtml}</div>`;
             }
 
-            let classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''} ${isSelected ? 'selected-day' : ''}`;
-            let styleStr = isSelected ? `border-color: var(--text-main); background: rgba(255,255,255,0.1);` : '';
+            const classStr = `calendar-cell ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''} ${isSelected ? 'selected-day' : ''} ${isEisverkauf ? 'eisverkauf' : ''}`;
+            const styleStr = isSelected ? `border-color: var(--text-main); background: rgba(255, 255, 255, 0.1);` : '';
 
             // Update click to select date
             html += `<div class="${classStr}" style="${styleStr}" onclick="app.selectDashboardDate('${dateStr}')">${visualContent}</div>`;
@@ -2856,7 +4209,13 @@ const app = {
             const dateDisplay = selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
 
             let listHtml = `<div style="margin-top:15px; border-top:1px solid var(--glass-border); padding-top:10px; animation:fadeIn 0.3s;">
-                <h5 style="margin:0 0 10px 0; color:var(--text-muted); font-size:0.9rem;">Termine am ${dateDisplay}</h5>`;
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h5 style="margin:0; color:var(--text-muted); font-size:0.9rem;">Termine am ${dateDisplay}</h5>
+        <button onclick="app.editEvent()" class="btn-icon-mini"
+            style="background: rgba(var(--primary-rgb), 0.1); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; color: var(--primary); cursor: pointer;">
+            <i data-lucide="plus" size="14"></i>
+        </button>
+    </div>`;
 
             if (events.length === 0) {
                 listHtml += `<div class="text-muted" style="font-size:0.8rem; text-align:center; padding:10px;">Keine Termine</div>`;
@@ -2864,13 +4223,16 @@ const app = {
                 events.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
                 listHtml += `<div style="display:flex; flex-direction:column; gap:8px;">`;
                 listHtml += events.map(e => `
-                    <div onclick="app.editEvent('${e.id}')" class="scale-hover" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:12px; cursor:pointer; border-left: 3px solid ${e.color || 'var(--primary)'};">
+    <div onclick="app.editEvent('${e.id}')" class="scale-hover" style="display:flex; align-items:center; gap:10px; padding:10px; background:rgba(255,255,255,0.05); border-radius:12px; cursor:pointer; border-left: 3px solid ${e.color || 'var(--primary)'};">
                         <span style="font-weight:700; font-size:0.9rem; min-width:45px;">${e.time || '--:--'}</span>
                         <div style="overflow:hidden;">
-                            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.title}</div>
+                            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display: flex; align-items: center; gap: 4px;">
+                                ${e.title}
+                                ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="10" style="opacity:0.6;"></i>` : ''}
+                            </div>
                         </div>
                     </div>
-                 `).join('');
+    `).join('');
                 listHtml += `</div>`;
             }
             listHtml += `</div>`;
@@ -2898,6 +4260,7 @@ const app = {
         const filteredEvents = this.getFilteredEvents();
 
         // Inject Contact Birthdays for the current view year
+        // Inject Contact Birthdays for the current view year
         const viewYear = date.getFullYear();
         this.state.contacts.forEach(c => {
             if (c.birthday && !c.archived) {
@@ -2918,11 +4281,19 @@ const app = {
             }
         });
 
-        // Update headers and grid classes
-        grid.className = `calendar-grid-large view-${this.state.calendarView}`;
+        // Show/Hide Toggle Button
+        const toggleBtn = document.getElementById('monthLayoutToggle');
+        if (toggleBtn) {
+            const isYear = this.state.calendarView === 'year';
+            toggleBtn.style.display = isYear ? 'none' : 'inline-flex';
 
-        // Show weekday header only in month view
-        weekdayHeader.style.display = (this.state.calendarView === 'month') ? 'grid' : 'none';
+            const view = this.state.calendarView;
+            const mode = this.state[`${view} LayoutMode`] || 'modern';
+            toggleBtn.innerHTML = mode === 'modern' ? '<i data-lucide="list"></i>' : '<i data-lucide="layout"></i>';
+            toggleBtn.title = mode === 'modern' ? 'Listenansicht' : 'Kartenansicht';
+
+            if (window.lucide) lucide.createIcons();
+        }
 
         if (this.state.calendarView === 'year') {
             monthHeader.textContent = year;
@@ -2938,7 +4309,7 @@ const app = {
             const endOfWeek = new Date(startOfWeek);
             endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-            monthHeader.textContent = `${startOfWeek.getDate()}. - ${endOfWeek.getDate()}. ${endOfWeek.toLocaleString('de-DE', { month: 'short', year: 'numeric' })}`;
+            monthHeader.textContent = `${startOfWeek.getDate()}.- ${endOfWeek.getDate()}. ${endOfWeek.toLocaleString('de-DE', { month: 'short', year: 'numeric' })} `;
             weekdayHeader.innerHTML = '';
             this.renderWeekView(grid, startOfWeek, filteredEvents);
         } else if (this.state.calendarView === 'day') {
@@ -2951,10 +4322,10 @@ const app = {
     renderEventActions(e) {
         let customStyle = '';
         if (e.color) {
-            customStyle = `background: ${e.color}E6; border-left-color: ${e.color};`;
+            customStyle = `background: ${e.color} E6; border - left - color: ${e.color}; `;
         }
         let html = `<div class="event-pill ${e.category}" title="${e.title}" onclick="event.stopPropagation(); app.editEvent('${e.id}')" style="cursor: pointer; ${customStyle}">
-            <div style="font-weight:600;">${e.time ? e.time + ' ' : ''}${e.title}</div>`;
+    <div style="font-weight:600;">${e.time ? e.time + ' ' : ''}${e.title}</div>`;
 
         if (e.location || e.phone || e.email) {
             html += `<div style="display:flex; gap:6px; margin-top:4px;">`;
@@ -2968,23 +4339,18 @@ const app = {
         return html;
     },
 
-    toggleMonthLayout() {
-        this.state.monthViewMode = this.state.monthViewMode === 'grid' ? 'list' : 'grid';
+    toggleCalendarLayout() {
+        const view = this.state.calendarView;
+        const key = `${view} LayoutMode`;
+        this.state[key] = (this.state[key] || 'modern') === 'modern' ? 'classic' : 'modern';
+        localStorage.setItem(`moltbot_calendar_layout_${view} `, this.state[key]);
         this.render();
     },
 
     renderMonthView(grid, year, month, filteredEvents) {
-        const mode = this.state.monthViewMode || 'list';
+        const mode = this.state.monthLayoutMode || 'modern';
 
-        // Show/Hide Toggle Button
-        const toggleBtn = document.getElementById('monthLayoutToggle');
-        if (toggleBtn) {
-            toggleBtn.style.display = 'inline-flex';
-            toggleBtn.innerHTML = mode === 'grid' ? '<i data-lucide="list"></i>' : '<i data-lucide="grid"></i>';
-            toggleBtn.title = mode === 'grid' ? 'Listenansicht' : 'Kalenderansicht';
-        }
-
-        if (mode === 'grid') {
+        if (mode === 'modern') {
             this.renderMonthGridView(grid, year, month, filteredEvents);
         } else {
             this.renderMonthListView(grid, year, month, filteredEvents);
@@ -3000,7 +4366,7 @@ const app = {
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(year, month, d);
             // FIX: Manual date string to match local time, avoiding UTC rollback
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dateStr = `${year} -${String(month + 1).padStart(2, '0')} -${String(d).padStart(2, '0')} `;
             const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
             const isToday = date.toDateString() === new Date().toDateString();
 
@@ -3026,15 +4392,24 @@ const app = {
 
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(year, month, d);
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dateStr = `${year} -${String(month + 1).padStart(2, '0')} -${String(d).padStart(2, '0')} `;
             const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
 
-            // Sort: Birthdays first, then by time
+            // Check for Eisverkauf
+            const isEisverkauf = dayEvents.some(e => e.category === 'eisverkauf' || (e.title && e.title.toLowerCase().includes('eisverkauf')));
+
+            // Sort: Eisverkauf first, then Birthdays, then by time
             dayEvents.sort((a, b) => {
+                const aIsEis = (a.category === 'eisverkauf' || (a.title && a.title.toLowerCase().includes('eisverkauf')));
+                const bIsEis = (b.category === 'eisverkauf' || (b.title && b.title.toLowerCase().includes('eisverkauf')));
+                if (aIsEis && !bIsEis) return -1;
+                if (!aIsEis && bIsEis) return 1;
+
                 const aIsBday = a.category === 'birthday';
                 const bIsBday = b.category === 'birthday';
                 if (aIsBday && !bIsBday) return -1;
                 if (!aIsBday && bIsBday) return 1;
+
                 return (a.time || '00:00').localeCompare(b.time || '00:00');
             });
             const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
@@ -3043,14 +4418,15 @@ const app = {
             // Limit to 3-4 to avoid overflow
             const visibleEvents = dayEvents.slice(0, 4);
             const eventHtml = visibleEvents.map(e => {
-                let style = e.color ? `background-color:${e.color};` : '';
+                const eventColor = this.getEventColor ? this.getEventColor(e) : (e.color || '#6366f1');
+                let style = `background-color:${eventColor};`;
                 // Add visibility enhancements
                 style += `
-                    font-weight: 700;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-                    border: 1px solid rgba(255,255,255,0.2);
-                `;
+                            font-weight: 700;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+                            border: 1px solid rgba(255,255,255,0.2);
+                        `;
 
                 // Extra styling for birthdays
                 if (e.category === 'birthday') {
@@ -3058,14 +4434,17 @@ const app = {
                 }
 
                 return `<div class="month-event-pill ${e.category}" style="${style}" title="${e.title}">
-                    <span class="truncate" style="color:white;">${e.time || ''} ${e.title}</span>
-                </div>`;
+                                <span class="truncate" style="color:white; display:flex; align-items:center; gap:4px;">
+                                    ${e.time || ''} ${e.title}
+                                    ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="10" style="opacity:0.8;"></i>` : ''}
+                                </span>
+                            </div>`;
             }).join('');
 
             const moreCount = dayEvents.length - visibleEvents.length;
 
             html += `
-                <div class="calendar-cell-large ${isToday ? 'today-full' : ''}" onclick="app.goToDay('${dateStr}')">
+    <div class="calendar-cell-large ${isToday ? 'today-full' : ''} ${isEisverkauf ? 'eisverkauf' : ''}" onclick="app.goToDay('${dateStr}')">
                     <div class="cell-header">
                         <span class="day-num">${d}</span>
                     </div>
@@ -3074,7 +4453,7 @@ const app = {
                         ${moreCount > 0 ? `<div class="more-events">+${moreCount}</div>` : ''}
                     </div>
                 </div>
-            `;
+    `;
         }
         grid.innerHTML = html;
         if (window.lucide) lucide.createIcons();
@@ -3094,7 +4473,7 @@ const app = {
         archived.sort((a, b) => new Date(b.date) - new Date(a.date)); // Newest archived first
 
         container.innerHTML = archived.map(e => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border:1px solid var(--glass-border);">
+    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border:1px solid var(--glass-border);">
                 <div>
                     <div style="font-weight:600; color:var(--text-main);">${e.title}</div>
                     <div style="font-size:0.8rem; color:var(--text-muted);">${new Date(e.date).toLocaleDateString('de-DE')}</div>
@@ -3108,7 +4487,7 @@ const app = {
                     </button>
                 </div>
             </div>
-        `).join('');
+    `).join('');
 
         if (window.lucide) lucide.createIcons();
     },
@@ -3168,16 +4547,102 @@ const app = {
     },
 
     renderWeekView(grid, startOfWeek, filteredEvents) {
-        // Generate array of 7 days
-        const days = [];
+        const mode = this.state.weekLayoutMode || 'modern';
+
+        if (mode === 'modern') {
+            this.renderWeekMosaicView(grid, startOfWeek, filteredEvents);
+        } else {
+            this.renderWeekListView(grid, startOfWeek, filteredEvents);
+        }
+    },
+
+    renderWeekListView(grid, startOfWeek, filteredEvents) {
+        grid.className = 'calendar-list-view';
+        let html = '<div class="agenda-view-container">';
         for (let i = 0; i < 7; i++) {
             const date = new Date(startOfWeek);
             date.setDate(startOfWeek.getDate() + i);
-            days.push(date);
+            const dateStr = date.toISOString().split('T')[0];
+            const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+            const isToday = date.toDateString() === new Date().toDateString();
+            html += `<div ${isToday ? 'id="agenda-today"' : ''}>${this.renderDayListRow(date, dayEvents, isToday, dateStr)}</div>`;
         }
+        html += '</div>';
+        grid.innerHTML = html;
 
-        // Use the vertical Time Grid (same as Day View)
-        this.renderTimeGrid(grid, days, filteredEvents, 'week');
+        // Auto-scroll to today
+        setTimeout(() => {
+            const todayEl = document.getElementById('agenda-today');
+            if (todayEl) {
+                todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 300);
+
+        if (window.lucide) lucide.createIcons();
+    },
+
+    renderWeekMosaicView(grid, startOfWeek, filteredEvents) {
+        grid.className = 'lifestyle-week-grid';
+        let html = '';
+
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(startOfWeek);
+            date.setDate(startOfWeek.getDate() + i);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const dateStr = date.toISOString().split('T')[0];
+            const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+
+            // Sort events: Eisverkauf first, then time
+            dayEvents.sort((a, b) => {
+                const aIsEis = (a.category === 'eisverkauf' || (a.title && a.title.toLowerCase().includes('eisverkauf')));
+                const bIsEis = (b.category === 'eisverkauf' || (b.title && b.title.toLowerCase().includes('eisverkauf')));
+                if (aIsEis && !bIsEis) return -1;
+                if (!aIsEis && bIsEis) return 1;
+                return (a.time || '00:00').localeCompare(b.time || '00:00');
+            });
+
+            const isEisverkauf = dayEvents.some(e => e.category === 'eisverkauf' || (e.title && e.title.toLowerCase().includes('eisverkauf')));
+            const intensity = Math.min(100, dayEvents.length * 20);
+
+            html += `
+    <div class="mosaic-day-card ${isToday ? 'today' : ''} ${isEisverkauf ? 'eisverkauf' : ''}" ${isToday ? 'id="mosaic-today"' : ''} onclick="app.goToDay('${dateStr}')">
+                    <div class="mosaic-header">
+                        <div style="display:flex; flex-direction:column;">
+                            <span class="mosaic-day-name">${date.toLocaleDateString('de-DE', { weekday: 'short' })}</span>
+                            <span class="mosaic-date-label">${date.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}</span>
+                        </div>
+                        ${dayEvents.length > 0 ? `<div class="status-dot" style="background:var(--primary); width:10px; height:10px; border-radius:50%;"></div>` : ''}
+                    </div>
+                    <div class="mosaic-events-stack">
+                        ${dayEvents.slice(0, 3).map(e => {
+                // Use centralized color logic
+                const eventColor = this.getEventColor ? this.getEventColor(e) : (e.color || 'var(--primary)');
+                return `
+                            <div class="mosaic-event-item" style="border-left-color: ${eventColor}">
+                                <span class="m-time">${e.time || '--:--'}</span>
+                                <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.title}</span>
+                            </div>
+                        `}).join('')}
+                        ${dayEvents.length > 3 ? `<div class="text-muted" style="font-size:0.75rem; padding-left:14px;">+ ${dayEvents.length - 3} weitere</div>` : ''}
+                        ${dayEvents.length === 0 ? `<div style="padding:20px 0; font-size:0.8rem; opacity:0.5; text-align:center;">Freier Tag 🕊️</div>` : ''}
+                    </div>
+                    <div class="mosaic-intensity-bar">
+                        <div class="intensity-fill" style="width:${intensity}%"></div>
+                    </div>
+                </div>
+    `;
+        }
+        grid.innerHTML = html;
+
+        // Auto-scroll to today
+        setTimeout(() => {
+            const todayEl = document.getElementById('mosaic-today');
+            if (todayEl) {
+                todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 300);
+
+        if (window.lucide) lucide.createIcons();
     },
 
     renderDayListRow(date, events, isToday, dateStr) {
@@ -3192,20 +4657,36 @@ const app = {
             const sorted = [...events].sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
             eventsHtml = sorted.map(e => {
                 const colorStyle = e.color ? `border-left: 3px solid ${e.color};` : '';
+
+                // Contact Link Logic
+                let phone = e.phone;
+                let email = e.email;
+                if (!phone || !email) {
+                    const contact = this.state.contacts.find(c => c.name && e.title.toLowerCase().includes(c.name.toLowerCase()));
+                    if (contact) {
+                        if (!phone) phone = contact.phone;
+                        if (!email) email = contact.email;
+                    }
+                }
+
                 return `
-                <div class="agenda-event-item" onclick="app.editEvent('${e.id}')" style="${colorStyle}">
+    <div class="agenda-event-item" onclick="app.editEvent('${e.id}')" style="${colorStyle}">
                     <div class="agenda-time">${e.time || 'Ganztägig'}</div>
                     <div class="agenda-details">
-                        <div class="agenda-title">${e.title}</div>
+                        <div class="agenda-title">${e.title} ${(e.recurrence && e.recurrence !== 'none') ? `<i data-lucide="repeat" size="12" style="margin-left: 5px; opacity: 0.5; vertical-align: middle;"></i>` : ''}</div>
                         ${e.location ? `<div class="agenda-loc"><i data-lucide="map-pin" size="12"></i> ${e.location}</div>` : ''}
+                        <div style="display:flex; gap:8px; margin-top:4px;">
+                            ${phone ? `<a href="tel:${phone}" onclick="event.stopPropagation()" class="text-link" style="font-size:0.75rem; color:var(--success); display:flex; align-items:center; gap:4px;"><i data-lucide="phone" size="11"></i> ${phone}</a>` : ''}
+                            ${email ? `<a href="mailto:${email}" onclick="event.stopPropagation()" class="text-link" style="font-size:0.75rem; color:var(--primary); display:flex; align-items:center; gap:4px;"><i data-lucide="mail" size="11"></i> E-Mail</a>` : ''}
+                        </div>
                     </div>
                 </div>`;
             }).join('');
         }
 
         return `
-            <div class="agenda-day-card ${isToday ? 'today-highlight' : ''}">
-                <div class="agenda-day-header" onclick="app.openCreateAt('${dateStr}')">
+    <div class="agenda-day-card ${isToday ? 'today-highlight' : ''}">
+                <div class="agenda-day-header" onclick="app.goToDay('${dateStr}')">
                     <span class="agenda-day-name">${dayName}</span>
                     <span class="agenda-day-date">${dayDate}</span>
                     <button class="btn-icon-small"><i data-lucide="plus"></i></button>
@@ -3214,11 +4695,180 @@ const app = {
                     ${eventsHtml}
                 </div>
             </div>
-        `;
+    `;
+    },
+
+    goToDay(dateStr) {
+        if (!dateStr) return;
+        const parts = dateStr.split('-');
+        const date = new Date(parts[0], parts[1] - 1, parts[2]);
+        this.state.currentDate = date;
+        this.state.calendarView = 'day';
+
+        // Update View Selector
+        const selector = document.getElementById('calendarViewSelector');
+        if (selector) {
+            selector.querySelectorAll('button').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-view') === 'day');
+            });
+        }
+
+        this.render();
     },
 
     renderDayView(grid, date, filteredEvents) {
-        this.renderTimeGrid(grid, [date], filteredEvents, 'day');
+        const mode = this.state.dayLayoutMode || 'modern';
+        if (mode === 'modern') {
+            this.renderDayTimelineView(grid, date, filteredEvents);
+        } else {
+            this.renderDayListView(grid, date, filteredEvents);
+        }
+    },
+
+    renderDayListView(grid, date, filteredEvents) {
+        grid.className = 'calendar-list-view';
+        const dateStr = date.toISOString().split('T')[0];
+        const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+        const isToday = date.toDateString() === new Date().toDateString();
+        grid.innerHTML = `< div class="agenda-view-container" > ${this.renderDayListRow(date, dayEvents, isToday, dateStr)}</div > `;
+        if (window.lucide) lucide.createIcons();
+    },
+
+    renderDayTimelineView(grid, date, filteredEvents) {
+        grid.className = 'lifestyle-day-container';
+        const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, date));
+
+        if (dayEvents.length === 0) {
+            grid.innerHTML = `
+    < div class="lifestyle-empty-day" >
+                    <i data-lucide="calendar-off" size="48" style="opacity:0.2; margin-bottom:20px;"></i>
+                    <h2 style="font-size:2rem; font-weight:800;">Alles entspannt! 🕊️</h2>
+                    <p>Keine festen Termine für diesen Tag.</p>
+                    <button class="btn-primary" onclick="app.editEvent()" style="margin:20px auto; width:fit-content;">
+                        <i data-lucide="plus"></i> Termin planen
+                    </button>
+                </div > `;
+            if (window.lucide) lucide.createIcons();
+            return;
+        }
+
+        // Sort by time
+        dayEvents.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+
+        // Helper for contrast color
+        const getContrastColor = (hex) => {
+            if (!hex) return '#ffffff';
+            if (hex.startsWith('#') && hex.length === 7) {
+                const r = parseInt(hex.substr(1, 2), 16);
+                const g = parseInt(hex.substr(3, 2), 16);
+                const b = parseInt(hex.substr(5, 2), 16);
+                const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+                return (yiq >= 128) ? '#000000' : '#ffffff';
+            }
+            return '#ffffff'; // Fallback
+        };
+
+        // Helper to get base color
+        const getBaseColor = (e) => {
+            if (e.color) return e.color;
+            const cat = (e.category || '').toLowerCase();
+            if (cat === 'eisverkauf') return '#fbbf24';
+            if (cat.includes('arbeit') || cat === 'work') return '#3b82f6';
+            if (cat.includes('privat') || cat === 'private') return '#10b981';
+            if (cat.includes('geburt') || cat === 'birthday') return '#eab308';
+            if (cat.includes('feiertag') || cat === 'holiday') return '#0891b2';
+            return '#6366f1'; // Default Indigo
+        };
+
+        grid.innerHTML = dayEvents.map((e, idx) => {
+            const baseColor = this.getEventColor(e);
+
+            // Helper for contrast color - INLINE
+            const getContrastColor = (hex) => {
+                if (!hex) return '#ffffff';
+                if (hex.startsWith('#') && hex.length === 7) {
+                    const r = parseInt(hex.substr(1, 2), 16);
+                    const g = parseInt(hex.substr(3, 2), 16);
+                    const b = parseInt(hex.substr(5, 2), 16);
+                    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+                    return (yiq >= 128) ? '#000000' : '#ffffff';
+                }
+                return '#ffffff';
+            };
+
+            // Special check for yellow contrast
+            const isYellow = (baseColor === '#fbbf24' || baseColor === '#f59e0b' || baseColor === '#eab308');
+            const textColor = isYellow ? '#000000' : getContrastColor(baseColor);
+
+            // Prepare shadow color (ensure valid format if hex)
+            let shadowColor = baseColor;
+            if (baseColor && baseColor.startsWith('#') && baseColor.length === 7) {
+                shadowColor = baseColor + '66'; // Add alpha
+            }
+
+            // Use CSS Variables to allow hover effects in CSS to work
+            const cardStyle = `
+                --event-color: ${baseColor};
+                --event-text: ${textColor};
+                --event-shadow: ${shadowColor};
+            `;
+
+            return `
+            <div class="timeline-entry" style="animation-delay: ${idx * 0.1}s">
+                <div class="timeline-time-col">
+                    <div class="time-bubble">${e.time || 'Alle'}</div>
+                    <div class="timeline-dot" style="background: ${baseColor}; box-shadow: 0 0 10px ${baseColor}88;"></div>
+                </div>
+                <div class="timeline-content-col">
+                    <div class="lifestyle-event-card ${e.category || ''}" onclick="app.editEvent('${e.id}')" style="${cardStyle}">
+                        <div class="event-category-label">
+                            ${e.category || 'Termin'}
+                        </div>
+                        <h3>${e.title} ${(e.recurrence && e.recurrence !== 'none') ? `<i data-lucide="repeat" size="16" style="margin-left: 8px; opacity: 0.6; vertical-align: middle;" title="Wiederholung"></i>` : ''}</h3>
+                        <div class="event-meta-row">
+                            ${e.location ? `
+                                <div class="event-meta-item">
+                                    <i data-lucide="map-pin" size="14"></i>
+                                    <span>${e.location}</span>
+                                </div>` : ''}
+                            ${e.time ? `
+                                <div class="event-meta-item">
+                                    <i data-lucide="clock" size="14"></i>
+                                    <span>${e.time} Uhr</span>
+                                </div>` : ''}
+                        </div>
+                        ${e.notes ? `<div class="event-notes-preview">${e.notes}</div>` : ''}
+                    </div>
+                </div>
+            </div >
+    `}).join('');
+
+        if (window.lucide) lucide.createIcons();
+    },
+
+    getEventColor(e) {
+        if (!e) return '#6366f1';
+
+        // Normalize Content
+        const cat = (e.category || '').toLowerCase();
+        const title = (e.title || '').toLowerCase();
+
+        // STRICT RULE: Eisverkauf must be Yellow (#fbbf24 = amber-400 / #f59e0b = amber-500)
+        if (cat === 'eisverkauf' || title.includes('eisverkauf')) return '#fbbf24';
+
+        // Other Strict Categories
+        if (cat === 'work' || cat === 'arbeit' || cat.includes('arbeit')) return '#3b82f6'; // Blue
+        if (cat === 'private' || cat === 'privat' || cat.includes('privat')) return '#10b981'; // Green
+        if (cat === 'birthday' || cat === 'geburtstag' || title.includes('geburtstag')) return '#eab308'; // Gold straight yellow
+
+        // Default Fallback to stored color if no strict rule matches
+        if (e.color && e.color !== '#6366f1') return e.color;
+
+        // Additional Category Fallbacks
+        if (cat === 'urgent' || cat === 'dringend') return '#dc2626'; // Red
+        if (cat === 'holiday' || cat === 'feiertag') return '#0891b2'; // Cyan
+
+        return '#6366f1'; // Default Indigo
     },
 
 
@@ -3238,7 +4888,7 @@ const app = {
             if (e.allDay || !e.time) {
                 endTs = new Date(e.date + 'T23:59:59').getTime();
             } else {
-                const start = new Date(`${e.date}T${e.time}`);
+                const start = new Date(`${e.date}T${e.time} `);
                 // Default duration 1h
                 endTs = start.getTime() + (60 * 60 * 1000);
             }
@@ -3266,32 +4916,22 @@ const app = {
         const duration = e.duration || 60;
 
         const el = document.createElement('div');
-        el.className = `event-card ${e.category || ''} ${e.archived ? 'archived' : ''}`;
-        el.style.top = `${startMin}px`;
-        el.style.height = `${duration}px`;
+        el.className = `event - card ${e.category || ''} ${e.archived ? 'archived' : ''} `;
+        el.style.top = `${startMin} px`;
+        el.style.height = `${duration} px`;
 
         // Handle overlapping columns within a day
-        el.style.left = `${offsetPercent}%`;
-        el.style.width = `calc(${widthPercent}% - 6px)`;
+        el.style.left = `${offsetPercent}% `;
+        el.style.width = `calc(${widthPercent} % - 6px)`;
 
         // Styling options (color)
-        let baseColor = e.color;
-        if (!baseColor) {
-            const cat = (e.category || '').toLowerCase();
-            // Fallback to category colors (English and common German names)
-            if (cat === 'work' || cat === 'arbeit' || cat === '💼 arbeit') baseColor = '#4f46e5';
-            else if (cat === 'private' || cat === 'privat' || cat === '👤 privat') baseColor = '#9333ea';
-            else if (cat === 'urgent' || cat === 'dringend' || cat === 'wichtig') baseColor = '#dc2626';
-            else if (cat === 'birthday' || cat === 'geburtstag') baseColor = '#eab308';
-            else if (cat === 'holiday' || cat === 'feiertag') baseColor = '#0891b2';
-            else baseColor = '#64748b'; // default slate
-        }
+        let baseColor = this.getEventColor ? this.getEventColor(e) : (e.color || '#6366f1');
 
         if (e.archived) baseColor = '#94a3b8';
 
         // Use stronger opacities for better readability (77 = 47%, 44 = 27%)
-        el.style.background = `linear-gradient(135deg, ${baseColor}77, ${baseColor}44)`;
-        el.style.borderLeft = `4px solid ${baseColor}`;
+        el.style.background = `linear - gradient(135deg, ${baseColor}77, ${baseColor}44)`;
+        el.style.borderLeft = `4px solid ${baseColor} `;
         el.style.color = 'var(--text-main)';
 
         if (e.archived) el.style.opacity = '0.8';
@@ -3308,21 +4948,21 @@ const app = {
         else if (e.location) icon = 'map-pin';
 
         el.innerHTML = `
-            <div class="event-card-inner">
+    < div class="event-card-inner" >
                 <div class="event-card-header">
                     <i data-lucide="${icon}" size="12"></i>
                     <span class="event-time">${e.time || '--:--'}</span>
                 </div>
                 <div class="event-title">${e.title}</div>
                 ${e.location ? `<div class="event-loc"><i data-lucide="map-pin" size="10"></i> ${e.location}</div>` : ''}
-            </div>
-        `;
+            </div >
+    `;
         return el;
     },
 
     renderTimeGrid(container, days, events, viewType) {
         container.innerHTML = '';
-        container.className = `time-grid-container view-${viewType}`;
+        container.className = `time - grid - container view - ${viewType} `;
 
         const header = this.renderTimeGridHeader(days, viewType);
         const allDayRow = this.renderAllDayRow(days, events);
@@ -3367,7 +5007,7 @@ const app = {
         header.className = 'time-grid-header';
 
         // Time gutter spacer (matches the width of time-axis in body)
-        header.innerHTML += `<div class="time-gutter-header"></div>`;
+        header.innerHTML += `< div class="time-gutter-header" ></div > `;
 
         days.forEach(date => {
             const isToday = new Date().toDateString() === date.toDateString();
@@ -3381,15 +5021,15 @@ const app = {
             if (isToday) dayClasses += ' today';
 
             header.innerHTML += `
-                <div class="${dayClasses}" data-date="${date.toISOString()}">
+    < div class="${dayClasses}" data - date="${date.toISOString()}" >
                     <div class="header-day-name">${dayName}</div>
                     <div class="header-day-num">${dayNum}</div>
-                </div>
-            `;
+                </div >
+    `;
         });
 
         // Scrollbar spacer
-        header.innerHTML += `<div class="scrollbar-spacer"></div>`;
+        header.innerHTML += `< div class="scrollbar-spacer" ></div > `;
 
         return header;
     },
@@ -3410,7 +5050,7 @@ const app = {
             const dayAllDayEvents = events.filter(e => e.allDay && this.isEventOnDate(e, date));
             dayAllDayEvents.forEach(e => {
                 const pill = document.createElement('div');
-                pill.className = `all-day-pill ${e.category || ''}`;
+                pill.className = `all - day - pill ${e.category || ''} `;
                 if (e.color) pill.style.background = e.color;
                 pill.textContent = e.title;
                 pill.onclick = () => app.editEvent(e.id);
@@ -3438,15 +5078,15 @@ const app = {
             const relativeY = ev.clientY - rect.top;
             const hour = Math.floor(relativeY / 60);
             const minutes = Math.floor((relativeY % 60) / 15) * 15;
-            const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')} `;
             // Default to first day in current view
             app.openCreateAt(days[0].toISOString().split('T')[0], timeStr);
         };
         for (let h = 0; h <= 23; h++) {
             const label = document.createElement('div');
             label.className = 'time-label-slot';
-            label.style.top = `${h * 60}px`;
-            label.innerHTML = `<span>${String(h).padStart(2, '0')}:00</span>`;
+            label.style.top = `${h * 60} px`;
+            label.innerHTML = `< span > ${String(h).padStart(2, '0')}:00</span > `;
             timeAxis.appendChild(label);
         }
         content.appendChild(timeAxis);
@@ -3458,13 +5098,13 @@ const app = {
             // Hour Line
             const line = document.createElement('div');
             line.className = 'horizontal-line';
-            line.style.top = `${h * 60}px`;
+            line.style.top = `${h * 60} px`;
             gridLines.appendChild(line);
 
             // Half-Hour Line (except for the last hour maybe, but let's go full 24)
             const halfLine = document.createElement('div');
             halfLine.className = 'half-hour-line';
-            halfLine.style.top = `${h * 60 + 30}px`;
+            halfLine.style.top = `${h * 60 + 30} px`;
             gridLines.appendChild(halfLine);
         }
         content.appendChild(gridLines);
@@ -3476,7 +5116,7 @@ const app = {
         days.forEach((date, dayIndex) => {
             const col = document.createElement('div');
             col.className = 'day-column';
-            col.style.width = `${100 / days.length}%`;
+            col.style.width = `${100 / days.length}% `;
 
             const dayEvents = events.filter(e => !e.allDay && this.isEventOnDate(e, date));
 
@@ -3512,10 +5152,10 @@ const app = {
                 const topPx = now.getHours() * 60 + now.getMinutes();
                 const marker = document.createElement('div');
                 marker.className = 'now-marker';
-                marker.style.top = `${topPx}px`;
+                marker.style.top = `${topPx} px`;
 
                 // Add a small time badge to the marker
-                marker.innerHTML = `<div class="now-time-badge">${nowTime}</div>`;
+                marker.innerHTML = `< div class="now-time-badge" > ${nowTime}</div > `;
 
                 col.appendChild(marker);
             }
@@ -3530,7 +5170,7 @@ const app = {
                 const hour = Math.floor(totalMinutes / 60);
                 const minutes = Math.floor((totalMinutes % 60) / 15) * 15;
 
-                const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')} `;
                 app.openCreateAt(date.toISOString().split('T')[0], timeStr);
             };
 
@@ -3560,11 +5200,11 @@ const app = {
         // We use calc()
 
         return `
-            top: ${top}%;
-            height: ${height}%;
-            left: calc(60px + (100% - 60px) * ${colIndex} / ${totalCols});
-            width: calc((100% - 60px) / ${totalCols} - 4px);
-        `;
+top: ${top}%;
+height: ${height}%;
+left: calc(60px + (100 % - 60px) * ${colIndex} / ${totalCols});
+width: calc((100 % - 60px) / ${totalCols} - 4px);
+`;
     },
 
     addMinutes(time, mins) {
@@ -3582,7 +5222,7 @@ const app = {
         const totalMinutes = Math.floor(y / 2.5); // Scaled
         const hours = Math.floor(totalMinutes / 60);
         const minutes = Math.floor((totalMinutes % 60) / 15) * 15; // Snap to 15m
-        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} `;
         this.openCreateAt(date, timeStr);
     },
 
@@ -3609,43 +5249,89 @@ const app = {
     },
 
     renderYearView(grid, year, filteredEvents) {
+        const mode = this.state.calendarLayoutMode || 'modern';
+        grid.className = 'lifestyle-year-container';
         let html = '';
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
+        const currentDate = today.getDate();
+
         for (let m = 0; m < 12; m++) {
-            const monthDate = new Date(year, m, 1);
-            const monthName = monthDate.toLocaleString('de-DE', { month: 'long' });
-            const daysInMonth = new Date(year, m + 1, 0).getDate();
-            const firstDay = new Date(year, m, 1).getDay();
-            let emptyCells = firstDay === 0 ? 6 : firstDay - 1;
+            const monthName = new Date(year, m, 1).toLocaleString('de-DE', { month: 'long' });
 
-            html += `<div class="year-month-card">
-                <h4>${monthName}</h4>
-                <div class="year-mini-grid">`;
+            html += `
+                <div class="year-feed-month-section" id="month-section-${m}">
+                    <div class="month-label-sticky">
+                        <h2>${monthName}</h2>
+                    </div>
+                    <div class="year-month-card-modern">`;
 
-            for (let i = 0; i < emptyCells; i++) html += '<div class="year-mini-cell"></div>';
-            for (let d = 1; d <= daysInMonth; d++) {
-                const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const dailyEvents = filteredEvents.filter(e => e.date === dateStr);
-                let classStr = 'year-mini-cell';
-                let styleStr = ''; // No full background
-                let visualContent = `${d}`;
+            if (mode === 'modern') {
+                html += `<div class="year-mini-grid-large">`;
+                const firstDay = new Date(year, m, 1).getDay();
+                const daysInMonth = new Date(year, m + 1, 0).getDate();
+                let emptyCells = (firstDay + 6) % 7;
 
-                if (dailyEvents.length > 0) {
-                    classStr += ' has-event';
-                    if (dailyEvents.length > 2) classStr += ' has-event-many';
-
-                    const dotsHtml = dailyEvents.slice(0, 3).map(e => {
-                        const color = e.color || 'var(--primary)';
-                        return `<div class="mini-event-dot" style="background: ${color}; width:3px; height:3px;"></div>`;
-                    }).join('');
-                    visualContent += `<div class="mini-event-dots" style="justify-content:center; margin-top:0;">${dotsHtml}</div>`;
+                for (let i = 0; i < emptyCells; i++) {
+                    html += '<div class="year-mini-cell-large empty" style="background:transparent; opacity:0;"></div>';
                 }
 
-                // Change click action to navigate to Day View
-                html += `<div class="${classStr}" style="${styleStr}" onclick="app.goToDay('${dateStr}')">${visualContent}</div>`;
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const dailyEvents = filteredEvents.filter(e => e.date === dateStr);
+                    const isToday = (year === currentYear && m === currentMonth && d === currentDate);
+                    let classStr = 'year-mini-cell-large';
+                    if (dailyEvents.length > 0) classStr += ' has-event';
+                    if (isToday) classStr += ' is-today';
+
+                    let dotsHtml = '';
+                    if (dailyEvents.length > 0) {
+                        dotsHtml = `<div class="mini-event-dots" style="position:absolute; bottom:4px; gap:2px;">
+                            ${dailyEvents.slice(0, 3).map(e => `<div class="mini-event-dot" style="background:${isToday ? 'white' : (e.color || 'var(--primary)')}; width:4px; height:4px;"></div>`).join('')}
+                        </div>`;
+                    }
+                    html += `<div class="${classStr}" onclick="app.goToDay('${dateStr}')" style="position:relative;">${d}${dotsHtml}</div>`;
+                }
+                html += `</div>`;
+            } else {
+                html += `<div class="year-agenda-list">`;
+                const daysInMonth = new Date(year, m + 1, 0).getDate();
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const date = new Date(year, m, d);
+                    const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const dailyEvents = filteredEvents.filter(e => e.date === dateStr);
+                    const isToday = (year === currentYear && m === currentMonth && d === currentDate);
+                    const dayName = date.toLocaleDateString('de-DE', { weekday: 'short' });
+
+                    html += `
+                        <div class="year-agenda-day-row ${isToday ? 'is-today' : ''}" onclick="app.goToDay('${dateStr}')">
+                            <div class="y-day-num">${d}</div>
+                            <div class="y-day-name">${dayName}</div>
+                            <div class="y-day-content">
+                                ${dailyEvents.length > 0 ? dailyEvents.map(e => `
+                                    <div class="y-event-mini" style="border-left-color: ${e.color || 'var(--primary)'}">
+                                        ${e.time ? e.time + ' ' : ''}${e.title}
+                                    </div>
+                                `).join('') : '<div class="y-empty-day">Keine Termine</div>'}
+                            </div>
+                        </div>`;
+                }
+                html += `</div>`;
             }
+
             html += `</div></div>`;
         }
         grid.innerHTML = html;
+
+        if (year === currentYear) {
+            setTimeout(() => {
+                const currentMonthEl = document.getElementById(`month-section-${currentMonth}`);
+                if (currentMonthEl) {
+                    currentMonthEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 500);
+        }
     },
 
     goToDay(dateStr) {
@@ -3663,7 +5349,26 @@ const app = {
             const formattedTime = time.includes(':') ? (time.split(':')[0].padStart(2, '0') + ':00') : time;
             document.getElementById('eventTime').value = formattedTime;
         }
+        // Reset action buttons for new event
+        this.updateActionLink('eventPhone', 'eventCallBtn', 'tel:');
+        this.updateActionLink('eventEmail', 'eventMailBtn', 'mailto:');
+
         document.getElementById('modalOverlay').classList.remove('hidden');
+    },
+
+    updateActionLink(inputId, btnId, prefix) {
+        const input = document.getElementById(inputId);
+        const btn = document.getElementById(btnId);
+        if (!input || !btn) return;
+
+        const val = input.value.trim();
+        if (val) {
+            btn.href = prefix + val;
+            btn.classList.remove('hidden');
+        } else {
+            btn.href = '#';
+            btn.classList.add('hidden');
+        }
     },
 
     // --- CREATE MENU ---
@@ -3960,9 +5665,12 @@ const app = {
             document.getElementById('contactAddress').value = contact.address || '';
             document.getElementById('contactBirthday').value = contact.birthday || '';
             document.getElementById('contactNotes').value = contact.notes || '';
-            document.getElementById('contactNotes').value = contact.notes || '';
             document.getElementById('contactIsFavorite').checked = !!contact.isFavorite;
             if (document.getElementById('contactIsUrgent')) document.getElementById('contactIsUrgent').checked = !!contact.isUrgent;
+
+            // Update Action Buttons
+            app.updateActionLink('contactPhone', 'contactCallBtn', 'tel:');
+            app.updateActionLink('contactEmail', 'contactMailBtn', 'mailto:');
 
             const delBtn = document.getElementById('deleteContactBtn');
             if (delBtn) delBtn.style.display = 'block';
@@ -3998,6 +5706,11 @@ const app = {
             app.state.editingContactId = null;
             document.getElementById('contactModalTitle').textContent = "Kontakt hinzufügen";
             document.getElementById('contactForm').reset();
+
+            // Reset action buttons
+            app.updateActionLink('contactPhone', 'contactCallBtn', 'tel:');
+            app.updateActionLink('contactEmail', 'contactMailBtn', 'mailto:');
+
             const delBtn = document.getElementById('deleteContactBtn');
             if (delBtn) delBtn.style.display = 'none';
             document.getElementById('contactModalOverlay').classList.remove('hidden');
@@ -4267,7 +5980,7 @@ const app = {
                             ${filtered.map(c => `
                                 <tr class="contact-row">
                                     <td>
-                                        <div class="avatar-small" style="background: linear-gradient(135deg, var(--primary), var(--secondary));">
+                                        <div class="avatar-small" style="background: var(--bg-hover); color: var(--primary); border: 1px solid var(--glass-border); font-weight: 700;">
                                             ${c.name.charAt(0).toUpperCase()}
                                         </div>
                                     </td>
@@ -4303,7 +6016,7 @@ const app = {
                     ${filtered.map(c => `
                         <div class="contact-card glass">
                             <div class="card-top">
-                                <div class="avatar-large" style="background: linear-gradient(135deg, var(--primary), var(--secondary));">
+                                <div class="avatar-large" style="background: var(--bg-hover); color: var(--primary); border: 1px solid var(--glass-border); font-weight: 800;">
                                     ${c.name.charAt(0).toUpperCase()}
                                 </div>
                                 <div class="card-actions">
@@ -4445,13 +6158,45 @@ const app = {
             if (!app.state.isAutoNightclockEnabled) return;
 
             const current = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-            if (current === app.state.nightModeStart && !app.state.isNightClockFullscreen) {
+            const startTimeStr = app.state.nightModeStart; // e.g. "22:00"
+            const [sH, sM] = startTimeStr.split(':').map(Number);
+            const cH = now.getHours();
+            const cM = now.getMinutes();
+
+            // Notify exactly at start time if backgrounded
+            const isExactStart = (cH === sH && cM === sM);
+            if (isExactStart && document.visibilityState !== 'visible' && !this._hasNotifiedNight) {
+                app.notify("Pear Nachtuhr", "Es ist Zeit für den Nachtmodus. Tippe hier, um die Uhr zu aktivieren.", "#view-alarm");
+                this._hasNotifiedNight = true;
+                setTimeout(() => this._hasNotifiedNight = false, 70000); // Reset after 1 min
+            }
+
+            // Determine if we are "in night mode period" (Start -> 05:00)
+            let isNightTime = false;
+            // Case 1: Start is evening (e.g. 22:00) -> Active if >= 22 OR < 5
+            if (sH >= 12) {
+                if (cH >= sH || cH < 5) isNightTime = true;
+                if (cH === sH && cM < sM) isNightTime = false; // Before minute
+            }
+            // Case 2: Start is morning (e.g. 01:00) -> Active if >= 1 AND < 5
+            else {
+                if (cH >= sH && cH < 5) isNightTime = true;
+                if (cH === sH && cM < sM) isNightTime = false;
+            }
+
+            // Auto-Activate Logic
+            // Activates if: Is Night Time AND Not Fullscreen AND Not Dismissed manually this session
+            if (isNightTime && !app.state.isNightClockFullscreen && !app.state.nightModeDismissed) {
+                console.log("Auto-Activating Night Mode (In Period)");
                 this.toggleFullscreen(true);
-                // Also ensure wake lock is on (if user wants auto-nightclock, they likely want wake lock too)
+
+                // Force Wake Lock
                 const wakeCheck = document.getElementById('wakeLockCheck');
                 if (wakeCheck && !wakeCheck.checked) {
                     wakeCheck.checked = true;
-                    this.toggleWakeLock();
+                    this.toggleWakeLock(true);
+                } else if (!app.state.wakeLock) {
+                    this.toggleWakeLock(true);
                 }
             }
         },
@@ -4535,18 +6280,22 @@ const app = {
             toast.className = 'glass animate-in';
             toast.style.cssText = `
                 position: fixed; 
-                top: 20px; 
-                right: 20px; 
-                background: ${color || 'var(--primary)'}; 
-                color: white; 
-                padding: 15px 20px; 
-                border-radius: 12px; 
+                top: 24px; 
+                right: 24px; 
+                background: var(--bg-card); 
+                color: var(--text-main); 
+                padding: 16px 24px; 
+                border-radius: var(--radius-md); 
                 z-index: 10000; 
-                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                display: flex; align-items: center; gap: 10px;
-                min-width: 250px;
+                box-shadow: var(--card-shadow);
+                display: flex; 
+                align-items: center; 
+                gap: 12px;
+                min-width: 320px;
+                border: 1px solid var(--primary);
+                animation: slideInRight 0.4s cubic-bezier(0.2, 0, 0, 1);
             `;
-            toast.innerHTML = `<i data-lucide="bell" size="20"></i> <div style="font-weight:600;">${text}</div>`;
+            toast.innerHTML = `<i data-lucide="bell" size="20" style="color: var(--primary);"></i> <div style="font-weight:600; font-size: 0.95rem;">${text}</div>`;
             document.body.appendChild(toast);
 
             if (window.lucide) lucide.createIcons();
@@ -4564,6 +6313,9 @@ const app = {
 
         toggleFullscreen(force = null) {
             const desiredState = force !== null ? force : !app.state.isNightClockFullscreen;
+            if (!desiredState && app.state.isNightClockFullscreen) {
+                app.state.nightModeDismissed = true;
+            }
             app.state.isNightClockFullscreen = desiredState;
 
             const overlay = document.getElementById('nightClockFullscreen');
@@ -4952,7 +6704,9 @@ const app = {
     // --- VOICE CONTROL MODULE ---
     voice: {
         recognition: null,
+        wakeWordRecognition: null,
         isListening: false,
+        isWakeWordActive: false,
 
         init() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -4961,6 +6715,7 @@ const app = {
                 return;
             }
 
+            // Main recognition for commands
             this.recognition = new SpeechRecognition();
             this.recognition.lang = 'de-DE';
             this.recognition.interimResults = true;
@@ -4994,7 +6749,101 @@ const app = {
 
             this.recognition.onend = () => {
                 this.isListening = false;
+                // Restart wake word listening after command is done
+                if (this.isWakeWordActive) {
+                    setTimeout(() => this.startWakeWord(), 500);
+                }
             };
+
+            // Wake Word Recognition (continuous listening for "Pear")
+            this.wakeWordRecognition = new SpeechRecognition();
+            this.wakeWordRecognition.lang = 'de-DE';
+            this.wakeWordRecognition.interimResults = true;
+            this.wakeWordRecognition.continuous = true; // Keep listening
+
+            this.wakeWordRecognition.onresult = (event) => {
+                const transcript = Array.from(event.results)
+                    .map(result => result[0])
+                    .map(result => result.transcript)
+                    .join('').toLowerCase();
+
+                // Check for wake word "pear" or "peer" or "pir"
+                if (transcript.includes('pear') || transcript.includes('peer') || transcript.includes('pir') || transcript.includes('pia')) {
+                    console.log("Wake word detected:", transcript);
+                    this.wakeWordRecognition.stop();
+
+                    // Play activation sound
+                    this.playActivationSound();
+
+                    // Start main recognition
+                    setTimeout(() => this.start(), 300);
+                }
+            };
+
+            this.wakeWordRecognition.onerror = (e) => {
+                if (e.error !== 'no-speech' && e.error !== 'aborted') {
+                    console.error("Wake Word Recognition Error:", e);
+                }
+                // Auto-restart on error
+                if (this.isWakeWordActive) {
+                    setTimeout(() => this.startWakeWord(), 1000);
+                }
+            };
+
+            this.wakeWordRecognition.onend = () => {
+                // Auto-restart wake word listening
+                if (this.isWakeWordActive && !this.isListening) {
+                    setTimeout(() => this.startWakeWord(), 500);
+                }
+            };
+        },
+
+        startWakeWord() {
+            if (!this.wakeWordRecognition) this.init();
+            if (this.wakeWordRecognition && !this.isListening) {
+                try {
+                    this.isWakeWordActive = true;
+                    app.state.isWakeWordEnabled = true;
+                    localStorage.setItem('moltbot_wake_word_enabled', 'true');
+                    this.wakeWordRecognition.start();
+                    console.log("Wake word listening started...");
+                } catch (e) {
+                    console.error("Wake word start error:", e);
+                }
+            }
+        },
+
+        stopWakeWord() {
+            this.isWakeWordActive = false;
+            app.state.isWakeWordEnabled = false;
+            localStorage.setItem('moltbot_wake_word_enabled', 'false');
+            if (this.wakeWordRecognition) {
+                try {
+                    this.wakeWordRecognition.stop();
+                    console.log("Wake word listening stopped.");
+                } catch (e) {
+                    console.error("Wake word stop error:", e);
+                }
+            }
+        },
+
+        playActivationSound() {
+            // Play a short beep to indicate activation
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
         },
 
         start() {
@@ -5038,7 +6887,14 @@ const app = {
                 return;
             }
 
-            // 1. PROFILE QUERIES
+            // 1. NAVIGATION
+            if (input.includes('dashboard') || input.includes('startseite') || input.includes('home') || (input.includes('öffne') && (input.includes('start') || input.includes('app')))) {
+                app.navigateTo('dashboard');
+                this.showFeedback("Okay, ich öffne das Dashboard.");
+                return;
+            }
+
+            // 1.5. PROFILE QUERIES
             if (input.includes('wie heiße ich') || input.includes('mein name') || input.includes('wer bin ich')) {
                 this.showFeedback(`Dein Name ist ${app.state.user.name}.`);
                 return;
@@ -5061,12 +6917,70 @@ const app = {
                 return;
             }
 
+            // 1.5 TEAM QUERIES
+            if (input.includes('team') || input.includes('verbunden') || input.includes('online')) {
+                const isConnected = !!app.state.user.teamName;
+                if (!isConnected) {
+                    this.showFeedback("Du bist aktuell nicht mit einem Team verbunden. Du kannst dich im Bereich 'Team Sync' anmelden.");
+                    app.navigateTo('team');
+                    return;
+                }
+
+                const list = document.getElementById('presenceList');
+                let memberNames = [];
+                if (list) {
+                    memberNames = Array.from(list.querySelectorAll('.member-name'))
+                        .map(m => m.textContent.replace('(Ich)', '').trim())
+                        .filter(name => name !== app.state.user.name);
+                }
+
+                if (memberNames.length > 0) {
+                    const membersStr = memberNames.join(', ');
+                    this.showFeedback(`Du bist aktuell im Team "${app.state.user.teamName}" mit ${membersStr} verbunden.`);
+                } else {
+                    this.showFeedback(`Du bist im Team "${app.state.user.teamName}", aber aktuell sind keine anderen Mitglieder online.`);
+                }
+                app.navigateTo('team');
+                return;
+            }
+
             // 2. FINANCE DETECTION
-            if (input.includes('euro') || input.includes('betrag') || input.includes('ausgabe') || input.includes('kosten') || input.includes('€') || input.includes('budget')) {
+            if (input.includes('euro') || input.includes('betrag') || input.includes('ausgabe') || input.includes('kosten') || input.includes('€') || input.includes('budget') || input.includes('gehalt')) {
+                // If setting budget/salary
+                if ((input.includes('setze') || input.includes('mein') || input.includes('ist')) && (input.includes('budget') || input.includes('gehalt'))) {
+                    const amountMatches = text.match(/(\d+([,.]\d+)?)/);
+                    if (amountMatches) {
+                        const amount = parseFloat(amountMatches[1].replace(',', '.'));
+                        app.state.monthlyBudget = amount;
+                        localStorage.setItem('moltbot_budget', amount);
+                        this.showFeedback(`Dein monatliches Budget (Gehalt) wurde auf ${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} festgelegt.`);
+                        app.finance.render();
+                        return;
+                    }
+                }
+
+                // If setting warning threshold
+                if ((input.includes('warn-schwelle') || input.includes('warnung')) && input.includes('euro')) {
+                    const amountMatches = text.match(/(\d+([,.]\d+)?)/);
+                    if (amountMatches) {
+                        const amount = parseFloat(amountMatches[1].replace(',', '.'));
+                        app.state.budgetWarningLimit = amount;
+                        localStorage.setItem('moltbot_budget_warning', amount);
+                        this.showFeedback(`Die Warn-Schwelle wurde auf ${amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} festgelegt.`);
+                        app.finance.render();
+                        return;
+                    }
+                }
+
                 // If just "wie ist mein budget"
-                if (input.includes('wie ist') || input.includes('wieviel')) {
-                    const monthlyExpenses = app.state.finance.reduce((acc, curr) => acc + curr.amount, 0); // simplified for this turn
-                    this.showFeedback(`Dein monatliches Budget beträgt ${app.state.monthlyBudget}€. Möchtest du eine Ausgabe eintragen?`);
+                if (input.includes('wie ist') || input.includes('wieviel') || input.includes('kontostand')) {
+                    const currentMonth = new Date().toISOString().substring(0, 7);
+                    const monthlyExpenses = app.state.finance
+                        .filter(e => e.date.startsWith(currentMonth) && e.type === 'expense')
+                        .reduce((acc, curr) => acc + curr.amount, 0);
+                    const remaining = app.state.monthlyBudget - monthlyExpenses;
+
+                    this.showFeedback(`Dein Budget beträgt ${app.state.monthlyBudget.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}. Aktuell hast du noch ${remaining.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} übrig.`);
                 } else {
                     this.handleFinance(text);
                 }
@@ -5120,6 +7034,7 @@ const app = {
             app.saveLocal();
             app.navigateTo('finance');
             this.showFeedback(`Betrag gespeichert: ${amount}€ für ${source}`);
+            app.finance.checkBudget(); // Trigger Warning Check
         },
 
         handleTodo(text, forcedCategory = null) {
@@ -5184,6 +7099,13 @@ const app = {
                 date = d.toISOString().split('T')[0];
             }
 
+            // 5. Parse Recurrence
+            let recurrence = 'none';
+            if (input.includes('täglich') || input.includes('jeden tag')) recurrence = 'daily';
+            else if (input.includes('wöchentlich') || input.includes('jede woche')) recurrence = 'weekly';
+            else if (input.includes('monatlich') || input.includes('jeden monat')) recurrence = 'monthly';
+            else if (input.includes('jährlich') || input.includes('jedes jahr') || input.includes('jahrestag')) recurrence = 'yearly';
+
             const newEvent = {
                 id: Date.now().toString(),
                 title: title,
@@ -5191,6 +7113,7 @@ const app = {
                 time: time,
                 location: location,
                 category: 'work',
+                recurrence: recurrence,
                 notes: notes,
                 createdAt: Date.now(),
                 updatedAt: Date.now()
@@ -5254,6 +7177,90 @@ const app = {
                 utterance.rate = 1.0;
                 window.speechSynthesis.speak(utterance);
             }
+        }
+    },
+
+    updateWidgetVisibility(widget, visible) {
+        if (!this.state.widgetVisibility) this.state.widgetVisibility = {};
+        this.state.widgetVisibility[widget] = visible;
+        localStorage.setItem('moltbot_widgets', JSON.stringify(this.state.widgetVisibility));
+        if (this.state.view === 'dashboard') this.renderDashboard();
+        if (this.state.view === 'settings') this.renderWidgetSettings();
+    },
+
+    moveWidget(index, direction) {
+        const order = this.state.widgetOrder;
+        if (direction === 'up' && index > 0) {
+            [order[index], order[index - 1]] = [order[index - 1], order[index]];
+        } else if (direction === 'down' && index < order.length - 1) {
+            [order[index], order[index + 1]] = [order[index + 1], order[index]];
+        }
+        this.state.widgetOrder = [...order];
+        localStorage.setItem('moltbot_widget_order', JSON.stringify(this.state.widgetOrder));
+
+        if (this.state.view === 'dashboard') this.renderDashboard();
+        if (this.state.view === 'settings') this.renderWidgetSettings();
+    },
+
+    renderWidgetSettings() {
+        const list = document.getElementById('widgetOrderList');
+        if (!list) return;
+
+        const widgetNames = {
+            'special': 'Besonderheiten (Geburtstage/Feiertage)',
+            'drive': 'Drive Mode (Smart Navigation)',
+            'kpis': 'Finanz-Kennzahlen & Übersicht',
+            'quick_finance': 'Schnell-Eingabe Ausgaben',
+            'events': 'Termine & Wichtiges',
+            'mini_calendar': 'Mini-Monatskalender'
+        };
+
+        const widgetIcons = {
+            'special': 'party-popper',
+            'drive': 'car',
+            'kpis': 'trending-up',
+            'quick_finance': 'wallet',
+            'events': 'calendar',
+            'mini_calendar': 'grid'
+        };
+
+        list.innerHTML = this.state.widgetOrder.map((key, index) => {
+            const isVisible = this.state.widgetVisibility[key];
+            return `
+            <div class="widget-settings-item" style="display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.03); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <button class="btn-icon-mini" onclick="app.moveWidget(${index}, 'up')" ${index === 0 ? 'disabled style="opacity:0.3"' : ''}>
+                        <i data-lucide="chevron-up" size="14"></i>
+                    </button>
+                    <button class="btn-icon-mini" onclick="app.moveWidget(${index}, 'down')" ${index === this.state.widgetOrder.length - 1 ? 'disabled style="opacity:0.3"' : ''}>
+                        <i data-lucide="chevron-down" size="14"></i>
+                    </button>
+                </div>
+                
+                <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(var(--primary-rgb), 0.1); display: flex; align-items: center; justify-content: center; color: var(--primary);">
+                    <i data-lucide="${widgetIcons[key]}" size="20"></i>
+                </div>
+
+                <div style="flex: 1;">
+                    <span style="font-weight: 600; font-size: 0.95rem;">${widgetNames[key]}</span>
+                </div>
+
+                <label class="custom-switch" style="cursor: pointer;">
+                    <input type="checkbox" ${isVisible ? 'checked' : ''} onchange="app.updateWidgetVisibility('${key}', this.checked)" style="width: 20px; height: 20px; accent-color: var(--primary);">
+                </label>
+            </div>
+            `;
+        }).join('');
+
+        if (window.lucide) lucide.createIcons();
+    },
+
+
+    showFeedback() {
+        const f = prompt("Wie können wir MoltBot verbessern? Deine Meinung ist uns wichtig!");
+        if (f) {
+            alert("Vielen Dank! Dein Feedback wurde gespeichert.");
+            console.log("UX Feedback:", f);
         }
     }
 };
