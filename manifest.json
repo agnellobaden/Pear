@@ -1,55 +1,21 @@
 {
-    "name": "Pear App | Smart Team Organizer",
+    "name": "Pear App",
     "short_name": "Pear",
-    "description": "Der intelligente Team-Organizer mit Echtzeit-Synchronisation für Termine, Aufgaben und Finanzen.",
     "start_url": "./index.html",
     "display": "standalone",
-    "background_color": "#09090b",
-    "theme_color": "#09090b",
+    "background_color": "#0a0c10",
+    "theme_color": "#0a0c10",
     "orientation": "portrait",
     "icons": [
         {
-            "src": "icon-192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "icon-512.png",
+            "src": "logo.svg",
             "sizes": "512x512",
-            "type": "image/png"
+            "type": "image/svg+xml"
         },
         {
             "src": "logo.svg",
-            "sizes": "any",
+            "sizes": "192x192",
             "type": "image/svg+xml"
-        }
-    ],
-    "categories": [
-        "productivity",
-        "finance",
-        "utilities"
-    ],
-    "shortcuts": [
-        {
-            "name": "Kalender",
-            "url": "./index.html#calendar",
-            "icons": [
-                {
-                    "src": "icon-192.png",
-                    "sizes": "192x192"
-                }
-            ]
-        },
-        {
-            "name": "Aufgaben",
-            "url": "./index.html#todo",
-            "icons": [
-                {
-                    "src": "icon-192.png",
-                    "sizes": "192x192"
-                }
-            ]
         }
     ]
 }
