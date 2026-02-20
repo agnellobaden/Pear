@@ -1311,16 +1311,25 @@ const app = {
                 const incUpd = incTodo.updatedAt || incTodo.createdAt || 1;
                 const localUpd = local ? (local.updatedAt || local.createdAt || 0) : -1;
 
-                if (!local || incUpd > localUpd) {
+                if (!local) {
+                    // Only add if incoming payload is newer than our last local deletion
+                    // (Prevents resurrecting items we just deleted while push is pending)
+                    if ((incoming.updatedAt || 0) > (app.state.lastDeleteTime || 0)) {
+                        localTodoMap.set(incTodo.id, incTodo);
+                        changed = true;
+                    }
+                } else if (incUpd > localUpd) {
                     localTodoMap.set(incTodo.id, incTodo);
                     changed = true;
                 }
             });
 
-            // Remove local items missing in incoming
+            // 2. Remove local items missing in incoming
             this.state.todos.forEach(local => {
                 if (!incomingIds.has(local.id)) {
-                    if (incoming.updatedAt > (local.updatedAt || local.createdAt || 0)) {
+                    // Only delete locally if incoming is NEWER than our last local deletion
+                    // This prevents re-adding items we just deleted while cloud push is in progress
+                    if ((incoming.updatedAt || 0) > (app.state.lastDeleteTime || 0)) {
                         localTodoMap.delete(local.id);
                         changed = true;
                     }
@@ -1366,11 +1375,15 @@ const app = {
 
             incoming.finance.forEach(incFin => {
                 const local = localFinMap.get(incFin.id);
-                // Respect soft deletes: don't re-add if we have a newer local tombstone
                 const incUpd = incFin.updatedAt || incFin.createdAt || 1;
                 const localUpd = local ? (local.updatedAt || local.createdAt || 0) : -1;
 
-                if (!local || incUpd > localUpd) {
+                if (!local) {
+                    if ((incoming.updatedAt || 0) > (app.state.lastDeleteTime || 0)) {
+                        localFinMap.set(incFin.id, incFin);
+                        changed = true;
+                    }
+                } else if (incUpd > localUpd) {
                     localFinMap.set(incFin.id, incFin);
                     changed = true;
                 }
@@ -1564,6 +1577,7 @@ const app = {
 
         if (confirm("Termin wirklich löschen?")) {
             this.state.events = this.state.events.filter(e => e.id !== id);
+            this.state.lastDeleteTime = Date.now();
             this.state.editingEventId = null;
             this.saveLocal();
             this.sync.push();
@@ -1806,9 +1820,10 @@ const app = {
         const prev = document.getElementById('prevMonth');
         const next = document.getElementById('nextMonth');
         if (prev) prev.onclick = () => {
-            const step = this.state.calendarView === 'year' ? 12 : (this.state.calendarView === 'month' ? 1 : 0);
-            if (step) {
-                this.state.currentDate.setMonth(this.state.currentDate.getMonth() - step);
+            if (this.state.calendarView === 'year') {
+                this.state.currentDate.setFullYear(this.state.currentDate.getFullYear() - 1);
+            } else if (this.state.calendarView === 'month') {
+                this.state.currentDate.setMonth(this.state.currentDate.getMonth() - 1);
             } else if (this.state.calendarView === 'week') {
                 this.state.currentDate.setDate(this.state.currentDate.getDate() - 7);
             } else {
@@ -1818,9 +1833,10 @@ const app = {
             this.render();
         };
         if (next) next.onclick = () => {
-            const step = this.state.calendarView === 'year' ? 12 : (this.state.calendarView === 'month' ? 1 : 0);
-            if (step) {
-                this.state.currentDate.setMonth(this.state.currentDate.getMonth() + step);
+            if (this.state.calendarView === 'year') {
+                this.state.currentDate.setFullYear(this.state.currentDate.getFullYear() + 1);
+            } else if (this.state.calendarView === 'month') {
+                this.state.currentDate.setMonth(this.state.currentDate.getMonth() + 1);
             } else if (this.state.calendarView === 'week') {
                 this.state.currentDate.setDate(this.state.currentDate.getDate() + 7);
             } else {
@@ -2487,14 +2503,11 @@ const app = {
 
         deleteEntry(id) {
             if (confirm("Eintrag wirklich löschen?")) {
-                const entry = app.state.finance.find(e => e.id === id);
-                if (entry) {
-                    entry.deleted = true;
-                    entry.updatedAt = Date.now();
-                    app.saveLocal();
-                    if (app.sync && app.sync.push) app.sync.push();
-                    app.render();
-                }
+                app.state.finance = app.state.finance.filter(e => e.id !== id);
+                app.state.lastDeleteTime = Date.now();
+                app.saveLocal();
+                if (app.sync && app.sync.push) app.sync.push();
+                app.render();
             }
         },
 
@@ -2522,11 +2535,8 @@ const app = {
 
         clearAll() {
             if (confirm('Möchtest du wirklich den gesamten Finanzverlauf löschen?')) {
-                const now = Date.now();
-                app.state.finance.forEach(e => {
-                    e.deleted = true;
-                    e.updatedAt = now;
-                });
+                app.state.finance = [];
+                app.state.lastDeleteTime = Date.now();
                 app.saveLocal();
                 if (app.sync && app.sync.push) app.sync.push();
                 app.render();
@@ -2562,7 +2572,6 @@ const app = {
             let bookedFixedExpenses = 0;
 
             app.state.finance.forEach(e => {
-                if (e.deleted) return;
                 const d = new Date(e.date);
                 const time = d.getTime();
                 const isIncome = e.type === 'income';
@@ -2706,25 +2715,35 @@ const app = {
 
             // Render Table (Filter out deleted entries)
             const sorted = [...app.state.finance]
-                .filter(e => !e.deleted)
                 .sort((a, b) => new Date(b.date) - new Date(a.date));
-            tableBody.innerHTML = sorted.map(e => `
-                <tr class="contact-row" style="border-bottom: 1px solid var(--glass-border);">
-                    <td style="padding: 16px; color: var(--text-muted); font-size: 0.9rem;">${new Date(e.date).toLocaleDateString('de-DE')}</td>
-                    <td style="padding: 16px; font-weight: 500;">${e.source}</td>
-                    <td class="${e.type === 'income' ? 'text-success' : 'text-danger'}" style="padding: 16px; font-weight: 700; text-align: right;">
-                        ${e.type === 'income' ? '+' : '-'} ${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                    <td style="padding: 16px; display: flex; gap: 8px; justify-content: flex-end;">
-                        <button class="btn-icon" onclick="app.finance.editEntry('${e.id}')" style="width: 32px; height: 32px; background: var(--bg-hover); border-radius: var(--radius-sm); border: none; color: var(--text-muted);">
-                            <i data-lucide="edit-3" size="14"></i>
-                        </button>
-                        <button class="btn-icon-danger" onclick="app.finance.deleteEntry('${e.id}')" style="width: 32px; height: 32px; border-radius: var(--radius-sm);">
-                            <i data-lucide="trash-2" size="14"></i>
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
+            tableBody.innerHTML = sorted.map(e => {
+                const isIncome = e.type === 'income';
+                return `
+                    <div class="transaction-item glass" onclick="app.finance.editEntry('${e.id}')" 
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px; margin-bottom: 10px; border-radius: 16px; border: 1px solid var(--glass-border); cursor: pointer; transition: all 0.2s;">
+                        <div style="display: flex; align-items: center; gap: 15px; min-width: 0;">
+                            <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(var(${isIncome ? '--success-rgb' : '--danger-rgb'}), 0.1); color: var(${isIncome ? '--success' : '--danger'}); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <i data-lucide="${isIncome ? 'arrow-up-right' : 'arrow-down-right'}" size="20"></i>
+                            </div>
+                            <div style="min-width: 0;">
+                                <h4 style="margin: 0; font-size: 1rem; font-weight: 600; color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${e.source}</h4>
+                                <small style="color: var(--text-muted); font-size: 0.8rem;">${new Date(e.date).toLocaleDateString('de-DE')}</small>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 15px; flex-shrink: 0;">
+                            <div style="text-align: right;">
+                                <div class="${isIncome ? 'text-success' : 'text-danger'}" style="font-weight: 800; font-size: 1.1rem;">
+                                    ${isIncome ? '+' : '-'} ${e.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                </div>
+                            </div>
+                            <button class="btn-icon-danger" onclick="event.stopPropagation(); app.finance.deleteEntry('${e.id}')" 
+                                style="width: 32px; height: 32px; border-radius: 10px; opacity: 0.6; background: rgba(239, 68, 68, 0.1); border: none;">
+                                <i data-lucide="trash-2" size="14"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
 
             this.updateChart();
             this.renderFixedCosts(); // New: Keep templates list updated
@@ -2743,7 +2762,6 @@ const app = {
             const sourceTotals = {};
 
             app.state.finance.forEach(e => {
-                if (e.deleted) return;
                 const d = new Date(e.date);
                 if (d.getFullYear() === currentYear && d.getMonth() === currentMonth && e.type !== 'income') {
                     monthlyExpenses += e.amount;
@@ -2913,7 +2931,6 @@ const app = {
                 let prevMonthExpenses = 0;
 
                 app.state.finance.forEach(e => {
-                    if (e.deleted) return;
                     const d = new Date(e.date);
                     if (d.getFullYear() === y && d.getMonth() === (m - 1)) {
                         if (e.type === 'income') prevMonthIncome += e.amount;
@@ -2997,7 +3014,6 @@ const app = {
                 const sourceName = `FIX: ${f.name}`;
                 // Suche nach bestehendem Eintrag diesen Monat
                 const existingEntry = app.state.finance.find(e => {
-                    if (e.deleted) return false;
                     const d = new Date(e.date);
                     return d.getMonth() === currentMonth &&
                         d.getFullYear() === currentYear &&
@@ -3038,7 +3054,6 @@ const app = {
 
             // Filtere alle Einträge, die NICHT zum aktuellen Monat gehören
             const toArchive = app.state.finance.filter(e => {
-                if (e.deleted) return false;
                 const d = new Date(e.date);
                 return d.getMonth() !== currentMonth || d.getFullYear() !== currentYear;
             });
@@ -3049,7 +3064,6 @@ const app = {
 
                 // Aus der aktiven Liste entfernen (indem wir nur aktuelle behalten)
                 app.state.finance = app.state.finance.filter(e => {
-                    if (e.deleted) return false;
                     const d = new Date(e.date);
                     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
                 });
@@ -3943,6 +3957,7 @@ const app = {
                     color: ${badgeTextColor};
                     box-shadow: 0 4px 15px -3px ${eventColor}66, 0 2px 4px -2px rgba(0,0,0,0.1);
                     border: 1px solid rgba(255,255,255,0.1);
+                    width: 100%;
                 `;
 
                 // Check for phone & email
@@ -3957,52 +3972,48 @@ const app = {
                 }
 
                 return `
-                    <div class="event-item" onclick="app.editEvent('${e.id}')" style="${itemStyle} display:grid; grid-template-columns: auto 1fr auto; align-items:center; gap:16px;">
+                    <div class="event-item" onclick="app.editEvent('${e.id}')" style="${itemStyle} display:grid; grid-template-columns: 50px 1fr; gap:12px; align-items:start;">
                         
-                        <div class="event-time-box" style="background:rgba(255,255,255,0.25); color:${badgeTextColor}; padding:8px 14px; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:55px; backdrop-filter: blur(4px);">
-                            <span class="event-day" style="font-weight:900; font-size:1.25rem; line-height:1; letter-spacing: -0.5px;">${day}</span>
-                            <span class="event-month" style="font-size:0.75rem; text-transform:uppercase; font-weight:700; opacity:0.95; letter-spacing: 0.5px; margin-top: 2px;">${month}</span>
+                        <div class="event-time-box" style="background:rgba(255,255,255,0.25); color:${badgeTextColor}; width: 50px; height: 50px; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; backdrop-filter: blur(4px);">
+                            <span class="event-day" style="font-weight:900; font-size:1.2rem; line-height:1;">${day}</span>
+                            <span class="event-month" style="font-size:0.65rem; text-transform:uppercase; font-weight:700; opacity:0.9; margin-top: 2px;">${month}</span>
                         </div>
 
-                        <div class="event-info" style="min-width:0; display:flex; flex-direction:column; gap:4px;">
-                            <h4 style="color:${badgeTextColor}; font-weight:800; font-size:1.1rem; margin:0; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
-                                ${e.title}
-                            </h4>
-                            <div style="font-size:0.9rem; opacity:0.9; color:${badgeTextColor}; display:flex; align-items:center; flex-wrap: wrap; gap:8px; font-weight: 500;">
+                        <div class="event-content" style="min-width:0; display:flex; flex-direction:column; gap:6px;">
+                            <div style="display:flex; justify-content:space-between; align-items:start; gap:8px;">
+                                <h4 style="color:${badgeTextColor}; font-weight:800; font-size:1.05rem; margin:0; line-height: 1.2; word-break: break-word; overflow: visible; flex: 1;">
+                                    ${e.title}
+                                </h4>
+                                <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                                    ${phone ? `
+                                        <a href="tel:${phone}" onclick="event.stopPropagation()" title="Anrufen" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 30px; height: 30px; border-radius: 8px; display:flex; align-items:center; justify-content:center;">
+                                            <i data-lucide="phone" size="14"></i>
+                                        </a>
+                                    ` : ''}
+                                    ${email ? `
+                                        <a href="mailto:${email}" onclick="event.stopPropagation()" title="E-Mail" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 30px; height: 30px; border-radius: 8px; display:flex; align-items:center; justify-content:center;">
+                                            <i data-lucide="mail" size="14"></i>
+                                        </a>
+                                    ` : ''}
+                                    ${e.location ? `
+                                        <button onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 30px; height: 30px; border-radius: 8px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+                                            <i data-lucide="map" size="14"></i>
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            
+                            <div style="font-size:0.85rem; opacity:0.9; color:${badgeTextColor}; display:flex; align-items:center; flex-wrap: wrap; gap:10px; font-weight: 500;">
                                 <div style="display:flex; align-items:center; gap:4px;">
                                     <i data-lucide="clock" size="14"></i> 
                                     <span>${e.time || 'Ganztägig'}</span>
                                 </div>
                                 ${e.location ? `
                                 <div style="display:flex; align-items:center; gap:4px; opacity: 0.9;">
-                                    <span style="opacity: 0.6;">•</span>
-                                    <span>${e.location}</span>
+                                    <i data-lucide="map-pin" size="14"></i>
+                                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${e.location}</span>
                                 </div>` : ''}
                                 ${e.recurrence && e.recurrence !== 'none' ? `<i data-lucide="repeat" size="12" style="opacity:0.8;"></i>` : ''}
-                            </div>
-                        </div>
-
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            ${phone ? `
-                                <a href="tel:${phone}" onclick="event.stopPropagation()" title="Anrufen" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
-                                    <i data-lucide="phone" size="18"></i>
-                                </a>
-                            ` : ''}
-                            ${email ? `
-                                <a href="mailto:${email}" onclick="event.stopPropagation()" title="E-Mail" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
-                                    <i data-lucide="mail" size="18"></i>
-                                </a>
-                            ` : ''}
-                            ${e.location ? `
-                                <button onclick="event.stopPropagation(); app.openRoute('${e.location}')" title="Karte" style="color:${badgeTextColor}; background:rgba(255,255,255,0.25); width: 36px; height: 36px; border-radius: 10px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
-                                    <i data-lucide="map" size="18"></i>
-                                </button>
-                            ` : ''}
-                            
-                            <div class="event-hover-actions">
-                                <button onclick="event.stopPropagation(); app.deleteEvent('${e.id}')" title="Löschen" style="color:${badgeTextColor}; background:rgba(220,38,38,0.2); width: 36px; height: 36px; border-radius: 10px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;">
-                                    <i data-lucide="trash-2" size="18"></i>
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -4062,7 +4073,7 @@ const app = {
             urgentHtml += urgentTodos.map(t => `
     <div class="urgent-item-accent" onclick="app.navigateTo('todo')">
                     <div style="display:flex; align-items:center; gap:12px;">
-                        <i data-lucide="check-square" size="18" style="color:#ef4444;"></i>
+                        <i data-lucide="square" size="18" style="color:#ef4444;"></i>
                         <span style="font-weight:700; font-size:1rem;">${t.text}</span>
                     </div>
                     <span class="urgent-badge-pill">TODO</span>
@@ -4284,8 +4295,8 @@ const app = {
         // Show/Hide Toggle Button
         const toggleBtn = document.getElementById('monthLayoutToggle');
         if (toggleBtn) {
-            const isYear = this.state.calendarView === 'year';
-            toggleBtn.style.display = isYear ? 'none' : 'inline-flex';
+            // Always show to allow switching layout even in Year view (Modern vs Agenda)
+            toggleBtn.style.display = 'inline-flex';
 
             const view = this.state.calendarView;
             const mode = this.state[`${view} LayoutMode`] || 'modern';
@@ -4300,7 +4311,7 @@ const app = {
             weekdayHeader.innerHTML = '';
             this.renderYearView(grid, year, filteredEvents);
         } else if (this.state.calendarView === 'month') {
-            monthHeader.textContent = date.toLocaleString('de-DE', { month: 'long', year: 'numeric' });
+            monthHeader.textContent = `${new Date(year, month, 1).toLocaleString('de-DE', { month: 'long' })} ${year}`;
             weekdayHeader.innerHTML = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(d => `<div>${d}</div>`).join('');
             this.renderMonthView(grid, year, month, filteredEvents);
         } else if (this.state.calendarView === 'week') {
@@ -4345,6 +4356,96 @@ const app = {
         this.state[key] = (this.state[key] || 'modern') === 'modern' ? 'classic' : 'modern';
         localStorage.setItem(`moltbot_calendar_layout_${view} `, this.state[key]);
         this.render();
+    },
+
+    renderAllMonthsView(grid, year, filteredEvents, currentMonth) {
+        const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+        const today = new Date();
+        const todayYear = today.getFullYear();
+        const todayMonth = today.getMonth();
+        const todayDate = today.getDate();
+
+        // Wrapper
+        grid.className = 'all-months-view';
+
+        let html = '';
+        for (let m = 0; m < 12; m++) {
+            const monthName = new Date(year, m, 1).toLocaleString('de-DE', { month: 'long' });
+            const firstDay = new Date(year, m, 1).getDay();
+            const daysInMonth = new Date(year, m + 1, 0).getDate();
+            let emptyCells = (firstDay + 6) % 7;
+
+            const isCurrentMonth = (year === todayYear && m === todayMonth);
+
+            html += `<div class="all-months-section" id="all-month-${m}">
+                <div class="all-months-header ${isCurrentMonth ? 'is-current-month' : ''}">
+                    <h3>${monthName} ${year}</h3>
+                </div>
+                <div class="all-months-weekdays">
+                    ${weekdays.map(d => `<div>${d}</div>`).join('')}
+                </div>
+                <div class="all-months-grid">`;
+
+            // Empty cells
+            for (let i = 0; i < emptyCells; i++) {
+                html += '<div class="am-cell empty"></div>';
+            }
+
+            // Day cells
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const dayDate = new Date(year, m, d);
+                const dayEvents = filteredEvents.filter(e => this.isEventOnDate(e, dayDate));
+                const isToday = (year === todayYear && m === todayMonth && d === todayDate);
+                const isWeekend = (dayDate.getDay() === 0 || dayDate.getDay() === 6);
+
+                // Sort events
+                dayEvents.sort((a, b) => {
+                    const aIsEis = (a.category === 'eisverkauf' || (a.title && a.title.toLowerCase().includes('eisverkauf')));
+                    const bIsEis = (b.category === 'eisverkauf' || (b.title && b.title.toLowerCase().includes('eisverkauf')));
+                    if (aIsEis && !bIsEis) return -1;
+                    if (!aIsEis && bIsEis) return 1;
+                    const aIsBday = a.category === 'birthday';
+                    const bIsBday = b.category === 'birthday';
+                    if (aIsBday && !bIsBday) return -1;
+                    if (!aIsBday && bIsBday) return 1;
+                    return (a.time || '00:00').localeCompare(b.time || '00:00');
+                });
+
+                const visibleEvents = dayEvents.slice(0, 3);
+                const moreCount = dayEvents.length - visibleEvents.length;
+
+                const eventHtml = visibleEvents.map(e => {
+                    const color = this.getEventColor ? this.getEventColor(e) : (e.color || '#6366f1');
+                    return `<div class="am-event-pill" style="background:${color};" title="${e.title}">${e.title}</div>`;
+                }).join('');
+
+                html += `<div class="am-cell ${isToday ? 'am-today' : ''} ${isWeekend ? 'am-weekend' : ''} ${dayEvents.length > 0 ? 'am-has-events' : ''}"
+                    onclick="app.goToDay('${dateStr}')">
+                    <div class="am-day-num">${d}</div>
+                    <div class="am-events">${eventHtml}${moreCount > 0 ? `<div class="am-more">+${moreCount}</div>` : ''}</div>
+                </div>`;
+            }
+
+            html += `</div></div>`; // close grid + section
+        }
+
+        grid.innerHTML = html;
+
+        // Scroll to current month
+        setTimeout(() => {
+            const currentMonthEl = document.getElementById(`all-month-${currentMonth}`);
+            if (currentMonthEl) {
+                const calendarBody = document.querySelector('.calendar-body');
+                if (calendarBody) {
+                    calendarBody.scrollTo({ top: currentMonthEl.offsetTop - 10, behavior: 'smooth' });
+                } else {
+                    currentMonthEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+        }, 150);
+
+        if (window.lucide) lucide.createIcons();
     },
 
     renderMonthView(grid, year, month, filteredEvents) {
@@ -4415,8 +4516,8 @@ const app = {
             const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
 
             // Render Events as colored bars/pills for visibility
-            // Limit to 3-4 to avoid overflow
-            const visibleEvents = dayEvents.slice(0, 4);
+            // Limit to 5 on PC/Tablet to avoid too much overflow, but show more than before
+            const visibleEvents = dayEvents.slice(0, 5);
             const eventHtml = visibleEvents.map(e => {
                 const eventColor = this.getEventColor ? this.getEventColor(e) : (e.color || '#6366f1');
                 let style = `background-color:${eventColor};`;
@@ -5249,7 +5350,7 @@ width: calc((100 % - 60px) / ${totalCols} - 4px);
     },
 
     renderYearView(grid, year, filteredEvents) {
-        const mode = this.state.calendarLayoutMode || 'modern';
+        const mode = this.state['year LayoutMode'] || 'modern';
         grid.className = 'lifestyle-year-container';
         let html = '';
         const today = new Date();
@@ -5269,6 +5370,11 @@ width: calc((100 % - 60px) / ${totalCols} - 4px);
 
             if (mode === 'modern') {
                 html += `<div class="year-mini-grid-large">`;
+                // Add mini weekday headers
+                ['M', 'D', 'M', 'D', 'F', 'S', 'S'].forEach(wd => {
+                    html += `<div class="year-mini-weekday">${wd}</div>`;
+                });
+
                 const firstDay = new Date(year, m, 1).getDay();
                 const daysInMonth = new Date(year, m + 1, 0).getDate();
                 let emptyCells = (firstDay + 6) % 7;
@@ -5287,8 +5393,8 @@ width: calc((100 % - 60px) / ${totalCols} - 4px);
 
                     let dotsHtml = '';
                     if (dailyEvents.length > 0) {
-                        dotsHtml = `<div class="mini-event-dots" style="position:absolute; bottom:4px; gap:2px;">
-                            ${dailyEvents.slice(0, 3).map(e => `<div class="mini-event-dot" style="background:${isToday ? 'white' : (e.color || 'var(--primary)')}; width:4px; height:4px;"></div>`).join('')}
+                        dotsHtml = `<div class="mini-event-dots" style="position:absolute; bottom:2px; gap:1px; display:flex; justify-content:center; width:100%;">
+                            ${dailyEvents.slice(0, 3).map(e => `<div class="mini-event-dot" style="background:${isToday ? 'white' : (e.color || 'var(--primary)')}; width:3px; height:3px; border-radius:50%;"></div>`).join('')}
                         </div>`;
                     }
                     html += `<div class="${classStr}" onclick="app.goToDay('${dateStr}')" style="position:relative;">${d}${dotsHtml}</div>`;
@@ -5455,7 +5561,7 @@ width: calc((100 % - 60px) / ${totalCols} - 4px);
             // Reset urgent checkbox
             if (document.getElementById('todoUrgent')) document.getElementById('todoUrgent').checked = false;
             app.saveLocal();
-            this.render();
+            app.render();
 
             app.notify("Aufgabe erstellt", text);
 
@@ -5468,17 +5574,23 @@ width: calc((100 % - 60px) / ${totalCols} - 4px);
             if (todo) {
                 todo.completed = !todo.completed;
                 app.saveLocal();
-                this.render();
+                app.render(); // Ensure dashboard count/widgets refresh
                 if (app.sync && app.sync.push) app.sync.push();
             }
         },
 
         delete(id) {
             if (confirm("Aufgabe wirklich löschen?")) {
+                const todo = app.state.todos.find(t => t.id === id);
+                const text = todo ? todo.text : "";
+
                 app.state.todos = app.state.todos.filter(t => t.id !== id);
+                app.state.lastDeleteTime = Date.now(); // Mark time of local deletion
                 app.saveLocal();
-                this.render();
+                app.render(); // Refresh entire App/Dashboard
                 if (app.sync && app.sync.push) app.sync.push();
+
+                app.notify("Aufgabe gelöscht", text, "info");
             }
         },
 
@@ -5491,10 +5603,17 @@ width: calc((100 % - 60px) / ${totalCols} - 4px);
         },
 
         clearCompleted() {
-            app.state.todos = app.state.todos.filter(t => !t.completed);
-            app.saveLocal();
-            this.render();
-            if (app.sync && app.sync.push) app.sync.push();
+            const count = app.state.todos.filter(t => t.completed).length;
+            if (count === 0) return;
+
+            if (confirm(`${count} erledigte Aufgaben wirklich dauerhaft löschen?`)) {
+                app.state.todos = app.state.todos.filter(t => !t.completed);
+                app.state.lastDeleteTime = Date.now();
+                app.saveLocal();
+                app.render(); // Refresh entire App/Dashboard
+                if (app.sync && app.sync.push) app.sync.push();
+                app.notify("Aufgaben bereinigt", `${count} erledigte Aufgaben gelöscht`, "info");
+            }
         },
 
         addCategory() {

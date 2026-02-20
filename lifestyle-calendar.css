@@ -7,7 +7,7 @@
     flex-direction: column;
     gap: 30px;
     position: relative;
-    max-width: 800px;
+    max-width: 1100px;
     margin: 0 auto;
 }
 
@@ -176,6 +176,12 @@
     padding: 20px;
 }
 
+@media (min-width: 1500px) {
+    .lifestyle-week-grid {
+        grid-template-columns: repeat(7, 1fr);
+    }
+}
+
 .mosaic-day-card {
     background: var(--bg-card);
     border: 1px solid var(--glass-border);
@@ -260,22 +266,97 @@
 
 /* YEAR VIEW: Vertical Feed Redesign */
 .lifestyle-year-container {
-    display: flex;
-    flex-direction: column;
-    gap: 40px;
-    padding: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+    padding: 10px;
     background: transparent;
 }
 
+@media (min-width: 1200px) {
+    .lifestyle-year-container {
+        grid-template-columns: repeat(4, 1fr) !important;
+        grid-template-rows: repeat(3, 1fr) !important;
+        gap: 8px !important;
+        padding: 10px !important;
+        height: calc(100vh - 220px) !important;
+        /* Adjusted to fit PC screens */
+        max-height: calc(100vh - 220px) !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    .year-feed-month-section {
+        padding: 4px !important;
+        gap: 4px !important;
+        border-radius: 8px !important;
+        border: 1px solid var(--glass-border) !important;
+        background: rgba(var(--primary-rgb), 0.03) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 0 !important;
+        height: 100% !important;
+    }
+
+    .month-label-sticky {
+        padding-bottom: 2px !important;
+        margin-bottom: 2px !important;
+        border-bottom: 1px solid var(--primary) !important;
+    }
+
+    .month-label-sticky h2 {
+        font-size: 0.85rem !important;
+    }
+
+    .year-mini-grid-large {
+        gap: 2px !important;
+        display: grid !important;
+        grid-template-columns: repeat(7, 1fr) !important;
+        flex: 1 !important;
+    }
+
+    .year-mini-cell-large {
+        font-size: 0.72rem !important;
+        height: auto !important;
+        aspect-ratio: auto !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 4px !important;
+        color: var(--text-muted) !important;
+    }
+
+    .year-mini-weekday {
+        font-size: 0.55rem !important;
+        padding-bottom: 1px !important;
+        color: var(--primary) !important;
+        font-weight: 800 !important;
+        height: 12px !important;
+    }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+    .lifestyle-year-container {
+        grid-template-columns: repeat(3, 1fr) !important;
+        grid-template-rows: repeat(4, 1fr) !important;
+        height: auto !important;
+    }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+    .lifestyle-year-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 .year-feed-month-section {
-    display: grid;
-    grid-template-columns: 140px 1fr;
-    gap: 30px;
-    align-items: start;
-    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--glass-border);
-    border-radius: 40px;
+    border-radius: 12px;
     transition: all 0.4s ease;
 }
 
@@ -286,15 +367,14 @@
 }
 
 .month-label-sticky {
-    position: sticky;
-    top: 20px;
     display: flex;
-    flex-direction: column;
-    align-items: center;
+    justify-content: center;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 5px;
 }
 
 .month-label-sticky h2 {
-    font-size: 1.8rem;
+    font-size: 1rem;
     font-weight: 800;
     text-transform: uppercase;
     color: var(--primary);
@@ -308,7 +388,7 @@
 .year-mini-grid-large {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 8px;
+    gap: 4px;
 }
 
 .year-mini-cell-large {
@@ -318,7 +398,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 12px;
-    font-size: 1rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-muted);
     cursor: pointer;
@@ -328,8 +408,20 @@
 }
 
 .year-mini-cell-large:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--primary-rgb), 0.1);
     border-color: var(--primary);
+}
+
+.year-mini-weekday {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: var(--primary);
+    text-align: center;
+    padding-bottom: 2px;
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .year-mini-cell-large.has-event {
